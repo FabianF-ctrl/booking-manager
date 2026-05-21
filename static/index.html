@@ -795,6 +795,39 @@ body {
 }
 .chart-type-btn:hover { background: var(--surface2); }
 .chart-type-btn.active { background: var(--blue-light); color: var(--blue); border-color: var(--blue); font-weight: 700; }
+
+/* ─── PRINT REPORT (drukowalny raport finansowy) ───────────────────── */
+.print-report {
+  background: #fff; color: #000;
+  font-family: "DM Sans", sans-serif;
+  padding: 24px 28px; max-width: 800px; margin: 0 auto;
+  font-size: 13px; line-height: 1.5;
+}
+.print-report h1 { font-size: 20px; margin: 0 0 4px; font-weight: 700; }
+.print-report h2 { font-size: 14px; margin: 18px 0 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; border-bottom: 1px solid #999; padding-bottom: 4px; }
+.print-report .pr-hdr-sub { font-size: 11px; color: #555; margin-bottom: 14px; font-variant-numeric: tabular-nums; }
+.print-report .pr-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; font-variant-numeric: tabular-nums; margin: 8px 0 4px; }
+.print-report .pr-summary .k { color: #333; }
+.print-report .pr-summary .v { font-weight: 700; text-align: right; }
+.print-report .pr-loc { padding: 6px 0; border-bottom: 1px dashed #ccc; font-variant-numeric: tabular-nums; }
+.print-report .pr-loc-name { font-weight: 700; font-size: 13px; }
+.print-report .pr-loc-meta { font-size: 11px; color: #555; }
+.print-report table { width: 100%; border-collapse: collapse; font-size: 11px; font-variant-numeric: tabular-nums; margin-top: 6px; }
+.print-report th, .print-report td { padding: 4px 6px; border-bottom: 1px solid #ccc; text-align: left; }
+.print-report th { background: #f0f0f0; font-weight: 700; }
+.print-report td.num { text-align: right; }
+.print-report .pr-footer { margin-top: 18px; padding-top: 8px; border-top: 1px solid #999; font-size: 10px; color: #666; text-align: center; }
+.print-actions { position: fixed; top: 12px; right: 12px; display: flex; gap: 8px; z-index: 100; }
+.print-actions button { padding: 8px 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); cursor: pointer; font-family: inherit; font-size: 13px; font-weight: 600; }
+.print-actions button.primary { background: var(--blue); color: #fff; border-color: var(--blue); }
+
+@media print {
+  body * { visibility: hidden; }
+  .print-report, .print-report * { visibility: visible; }
+  .print-report { position: absolute; left: 0; top: 0; width: 100%; max-width: none; }
+  .print-actions { display: none !important; }
+  @page { margin: 12mm; }
+}
 </style>
 </head>
 <body>
@@ -1085,6 +1118,8 @@ let state = {
   customPrice: "",        // nadpisanie ceny finalnej, pusty = brak
   isPermanent: false,     // stały najemca (rezerwacja indywidualna open-ended)
   permanentMonthlyRate: "", // stawka miesięczna stałego najemcy (pusty = liczyć za dobę z cennika)
+  printReport: null,      // { from, to } — gdy ustawione, render pokazuje modal wyboru zakresu
+  printReportHtml: null,  // gdy ustawione, render pokazuje gotowy raport do druku (window.print())
   notesSearch: "",
   notesFilter: "all",     // "all" | "general" | "booking"
   mediaExpanded: {},      // { [locId]: true } — które sekcje Media są rozwinięte w raportach
@@ -1670,6 +1705,8 @@ function buildAppCore() {
     ${state.modal ? buildModal() : ""}
     ${state.editModal ? buildEditModal() : ""}
     ${state.roomDetailModal ? buildRoomDetailModal() : ""}
+    ${state.printReport ? buildPrintReportModal() : ""}
+    ${state.printReportHtml || ""}
   `;
 }
 
@@ -1730,7 +1767,7 @@ function buildTopbar() {
           <span class="topbar-greeting-date">${dateStr}</span>
         </div>`}
       <button class="icon-btn" id="themeToggle">${isDark ? ICONS.sun()+" Jasny" : ICONS.moon()+" Ciemny"}</button>
-      <button class="icon-btn" id="exportBtn">${ICONS.download()} CSV</button>
+      <button class="icon-btn" id="printReportBtn">${ICONS.fileText()} Drukuj raport</button>
     </div>`;
 }
 
@@ -4802,7 +4839,44 @@ function attachEvents() {
   }
 
   document.getElementById("themeToggle")?.addEventListener("click", toggleTheme);
-  document.getElementById("exportBtn")?.addEventListener("click", exportCSV);
+  document.getElementById("printReportBtn")?.addEventListener("click", () => {
+    state.printReport = { from: "", to: "" };
+    render();
+  });
+
+  // Print report modal handlers
+  document.getElementById("printReportCloseBtn")?.addEventListener("click", () => { state.printReport = null; render(); });
+  document.getElementById("printReportCancelBtn")?.addEventListener("click", () => { state.printReport = null; render(); });
+  document.getElementById("printReportGenerateBtn")?.addEventListener("click", () => {
+    const fromEl = document.getElementById("printReportFrom");
+    const toEl = document.getElementById("printReportTo");
+    const errEl = document.getElementById("printReportError");
+    const from = fromEl?.value, to = toEl?.value;
+    if (!from || !to) {
+      if (errEl) { errEl.textContent = "Uzupełnij obie daty."; errEl.style.display = "block"; }
+      return;
+    }
+    if (from > to) {
+      if (errEl) { errEl.textContent = "Data 'Od' musi być wcześniejsza lub równa dacie 'Do'."; errEl.style.display = "block"; }
+      return;
+    }
+    // Date "to" inclusive od user perspective → exclusive end = to + 1 day
+    const toExclusive = new Date(to); toExclusive.setDate(toExclusive.getDate() + 1);
+    const html = generatePrintReport(from, toStr(toExclusive));
+    if (!html) {
+      if (errEl) { errEl.textContent = "Brak rezerwacji w wybranym zakresie."; errEl.style.display = "block"; }
+      return;
+    }
+    state.printReport = null;
+    state.printReportHtml = html;
+    render();
+    // Trigger systemowy print dialog po krótkiej pauzie żeby DOM się wyrenderował
+    setTimeout(() => window.print(), 100);
+  });
+
+  // Print actions (na widoku raportu)
+  document.getElementById("printReportClose")?.addEventListener("click", () => { state.printReportHtml = null; render(); });
+  document.getElementById("printReportDo")?.addEventListener("click", () => window.print());
 
   // Loc cards
   document.querySelectorAll(".loc-card").forEach(card => {
@@ -5945,7 +6019,165 @@ function confirmBooking() {
 // ============================================================
 // EXPORT CSV
 // ============================================================
-function exportCSV() {
+// ─── PRINT REPORT (drukowalny raport finansowy z wyborem zakresu dat) ─────
+function buildPrintReportModal() {
+  if (!state.printReport) return "";
+  const today = todayStr();
+  const defaultFrom = state.printReport.from || (today.slice(0,8) + "01");
+  const defaultTo = state.printReport.to || today;
+  return `
+    <div class="edit-overlay" id="printReportOverlay">
+      <div class="edit-modal" style="max-width:480px">
+        <div class="edit-modal-hdr">
+          <h3 style="display:flex;align-items:center;gap:8px">${ICONS.fileText(18)} Drukuj raport finansowy</h3>
+          <button class="close-btn" id="printReportCloseBtn">${ICONS.x(16)}</button>
+        </div>
+        <div class="edit-modal-body">
+          <p style="font-size:13px;color:var(--text2);margin-bottom:14px">Wybierz zakres dat. Raport pokaże podsumowanie finansowe + listę rezerwacji per obiekt. Po kliknięciu "Drukuj" otworzy się systemowe okno wydruku (można też zapisać jako PDF).</p>
+          <div class="field-row" style="margin-bottom:12px">
+            <div class="edit-field"><label>Od</label><input type="date" id="printReportFrom" value="${defaultFrom}" /></div>
+            <div class="edit-field"><label>Do</label><input type="date" id="printReportTo" value="${defaultTo}" /></div>
+          </div>
+          <div id="printReportError" style="display:none;font-size:12px;color:var(--red);padding:8px 10px;background:var(--red-light);border-radius:var(--radius);margin-bottom:10px"></div>
+        </div>
+        <div class="edit-footer">
+          <button class="cal-nav-btn" id="printReportCancelBtn">Anuluj</button>
+          <button class="btn-save" id="printReportGenerateBtn" style="display:inline-flex;align-items:center;gap:6px">${ICONS.fileText(13)} Generuj i drukuj</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function generatePrintReport(fromDate, toDate) {
+  // Filtruj rezerwacje aktywne w zakresie
+  const overlaps = (b) => {
+    if (b.isPermanent || b.guests?.some(g => g.isPermanent)) {
+      const start = b.permanentStart || b.from;
+      const end = b.permanentEnd || endOfCurrentMonthExclusive();
+      return start <= toDate && end > fromDate;
+    }
+    return b.from <= toDate && b.to > fromDate;
+  };
+  const periodRange = { from: fromDate, to: toDate };
+  const bookings = savedBookings.filter(overlaps);
+  if (bookings.length === 0) return null;
+
+  let totRevenue = 0, totPaid = 0, totMedia = 0;
+  bookings.forEach(b => {
+    const loc = DATA.locations.find(l => l.id === b.locId);
+    const room = loc?.rooms.find(r => r.id === b.roomId);
+    const t = calcBookingTotal(b, room, getActualNights(b), periodRange);
+    totRevenue += t;
+    const p = parseFloat(b.payment?.amountPaid);
+    if (!isNaN(p)) totPaid += p;
+    else if (b.payment?.timing === "prepaid") totPaid += t;
+  });
+  // Media w okresie (uwzględniamy okresy YYYY-MM nakładające się z zakresem)
+  Object.entries(roomMedia).forEach(([key, m]) => {
+    const period = key.split("__")[1];
+    if (!period) return;
+    const pStart = period + "-01";
+    const [y, mn] = period.split("-").map(Number);
+    const pEnd = `${mn === 12 ? y+1 : y}-${String(mn === 12 ? 1 : mn+1).padStart(2,"0")}-01`;
+    if (pStart < toDate && pEnd > fromDate) totMedia += sumMediaObj(m);
+  });
+
+  const totProfit = totRevenue - totMedia;
+  const totRemaining = Math.max(0, totRevenue - totPaid);
+
+  const byLoc = {};
+  bookings.forEach(b => {
+    const loc = DATA.locations.find(l => l.id === b.locId);
+    if (!loc) return;
+    if (!byLoc[loc.id]) byLoc[loc.id] = { loc, bookings: [], revenue: 0, paid: 0 };
+    byLoc[loc.id].bookings.push(b);
+    const room = loc.rooms.find(r => r.id === b.roomId);
+    const t = calcBookingTotal(b, room, getActualNights(b), periodRange);
+    byLoc[loc.id].revenue += t;
+    const p = parseFloat(b.payment?.amountPaid);
+    if (!isNaN(p)) byLoc[loc.id].paid += p;
+    else if (b.payment?.timing === "prepaid") byLoc[loc.id].paid += t;
+  });
+
+  const fmtZl = (n) => `${Math.round(n).toLocaleString("pl-PL")} zł`;
+  const user = (typeof API_CREDS === "object" && API_CREDS?.username) ? API_CREDS.username : "—";
+  const now = new Date();
+  const generated = `${now.toLocaleDateString("pl-PL")} ${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
+
+  return `
+    <div class="print-report" id="printReportArea">
+      <h1>Raport finansowy — Booking Manager</h1>
+      <div class="pr-hdr-sub">
+        Okres: <strong>${fmtDate(fromDate)}</strong> → <strong>${fmtDate(toDate)}</strong> &nbsp;·&nbsp;
+        Wygenerowano: ${generated} &nbsp;·&nbsp; Użytkownik: ${esc(user)}
+      </div>
+
+      <h2>Podsumowanie</h2>
+      <div class="pr-summary">
+        <span class="k">Przychód brutto</span><span class="v">${fmtZl(totRevenue)}</span>
+        <span class="k">Koszty mediów</span><span class="v">${fmtZl(totMedia)}</span>
+        <span class="k">Wpłacono</span><span class="v">${fmtZl(totPaid)}</span>
+        <span class="k">Pozostało do zapłaty</span><span class="v">${fmtZl(totRemaining)}</span>
+        <span class="k" style="border-top:1px solid #999;padding-top:4px;margin-top:4px;font-weight:700">ZYSK NETTO</span><span class="v" style="border-top:1px solid #999;padding-top:4px;margin-top:4px;font-size:14px">${fmtZl(totProfit)}</span>
+        <span class="k">Liczba rezerwacji</span><span class="v">${bookings.length}</span>
+      </div>
+
+      <h2>Per obiekt</h2>
+      ${Object.values(byLoc).map(({ loc, bookings: locBookings, revenue, paid }) => `
+        <div class="pr-loc">
+          <div class="pr-loc-name">${esc(loc.name)} <span style="color:#888;font-weight:400">— ${esc(loc.city)}</span></div>
+          <div class="pr-loc-meta">${locBookings.length} ${nrez(locBookings.length)} · Przychód: ${fmtZl(revenue)} · Wpłacono: ${fmtZl(paid)} · Pozostało: ${fmtZl(Math.max(0, revenue - paid))}</div>
+        </div>
+      `).join("")}
+
+      <h2>Lista rezerwacji</h2>
+      <table>
+        <thead>
+          <tr>
+            <th style="width:24px">#</th>
+            <th>Obiekt · pokój</th>
+            <th>Gość / firma</th>
+            <th style="width:140px">Daty</th>
+            <th class="num" style="width:80px">Suma</th>
+            <th class="num" style="width:80px">Wpłac.</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${bookings.map((b, i) => {
+            const loc = DATA.locations.find(l => l.id === b.locId);
+            const room = loc?.rooms.find(r => r.id === b.roomId);
+            const t = calcBookingTotal(b, room, getActualNights(b), periodRange);
+            const p = parseFloat(b.payment?.amountPaid);
+            const paid = !isNaN(p) ? p : (b.payment?.timing === "prepaid" ? t : 0);
+            const who = b.bookingType === "company"
+              ? `${b.companyName || "—"} (${b.guests?.length || 0} os.)`
+              : (b.guests?.map(g => g.name).filter(Boolean).join(", ") || "—");
+            const dates = `${fmtDate(b.from)} → ${fmtDate(b.to)}`;
+            const isPerm = b.isPermanent || b.guests?.some(g => g.isPermanent);
+            return `
+              <tr>
+                <td>${i+1}</td>
+                <td>${esc(loc?.name || "")} · ${esc(room?.name || "")}</td>
+                <td>${esc(who)}${isPerm ? ' <span style="font-size:9px;background:#dfd;padding:1px 5px;border-radius:99px">stały</span>' : ''}</td>
+                <td>${dates}</td>
+                <td class="num">${fmtZl(t)}</td>
+                <td class="num">${fmtZl(paid)}</td>
+              </tr>`;
+          }).join("")}
+        </tbody>
+      </table>
+
+      <div class="pr-footer">
+        Booking Manager · raport wygenerowany automatycznie · stan na ${generated}
+      </div>
+    </div>
+    <div class="print-actions">
+      <button id="printReportClose">Zamknij</button>
+      <button class="primary" id="printReportDo">${ICONS.fileText(13)} Drukuj / Zapisz PDF</button>
+    </div>`;
+}
+
+function exportCSV_DEAD() {
   if (savedBookings.length===0) { showToast("Brak rezerwacji do eksportu."); return; }
   const rows = [["#","Typ","Firma","Miasto","Obiekt","Pokój","Zab.Od","Zab.Do","Zab.Nocy","Bufor","Fakt.Nocy","Goście","Dorośli","Dzieci","Metoda","Termin","Wpłacono zł","Łącznie zł"]];
   savedBookings.forEach((b,i) => {
