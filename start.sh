@@ -1,5 +1,5 @@
 #!/bin/bash
-# start.sh — uruchamia Booking Manager na Mac/Linux
+# start.sh — uruchamia HospesAI na Mac/Linux
 # Użycie: ./start.sh
 
 cd "$(dirname "$0")"
@@ -8,7 +8,7 @@ cd "$(dirname "$0")"
 source BM-Venv/bin/activate
 
 echo "============================================"
-echo "  Booking Manager"
+echo "  HospesAI"
 echo "  http://localhost:8000"
 echo "  Ctrl+C żeby zatrzymać"
 echo "============================================"

@@ -1,4 +1,4 @@
-# Booking Manager
+# HospesAI
 
 Aplikacja webowa do zarządzania rezerwacjami krótkoterminowymi — zbudowana dla biznesu obsługującego **9 obiektów / 126 pokoi** w polskich miastach. Obsługuje dostępność per łóżko, rozliczenie per pracownik, stałych najemców, faktury, wykresy i automatyczne nocne backupy.
 

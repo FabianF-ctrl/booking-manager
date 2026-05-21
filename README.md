@@ -1,4 +1,4 @@
-# Booking Manager
+# HospesAI
 
 A self-hosted booking management web app for short-term rental businesses — built for managing **9 properties / 126 rooms** across multiple Polish cities, with per-bed availability, per-employee billing, permanent tenant tracking, invoicing, charts and an automated nightly backup pipeline.
 

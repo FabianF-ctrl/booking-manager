@@ -23,7 +23,7 @@ start_backup_scheduler()   # startuje w tle, nie blokuje serwera
 # KONFIGURACJA
 # ============================================================
 
-app = FastAPI(title="Booking Manager API")
+app = FastAPI(title="HospesAI API")
 security = HTTPBasic()
 
 # Ścieżki

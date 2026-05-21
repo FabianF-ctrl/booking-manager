@@ -79,7 +79,7 @@ if [ -d "$REAL_DATA_BACKUP" ] || [ -f "$LOCATIONS_BACKUP" ]; then
 fi
 
 echo "========================================================"
-echo "  Booking Manager — TRYB DEMO"
+echo "  HospesAI — TRYB DEMO"
 echo "  http://localhost:$PORT"
 echo "  Login: admin / demo123"
 echo "  Ctrl+C zatrzymuje i przywraca prawdziwe dane"

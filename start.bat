@@ -1,5 +1,5 @@
 @echo off
-REM start.bat — uruchamia Booking Manager na Windows
+REM start.bat — uruchamia HospesAI na Windows
 REM Kliknij dwukrotnie lub uruchom z terminala
 
 cd /d "%~dp0"
@@ -7,7 +7,7 @@ cd /d "%~dp0"
 call BM-Venv\Scripts\activate
 
 echo ============================================
-echo   Booking Manager
+echo   HospesAI
 echo   http://localhost:8000
 echo   Ctrl+C zeby zatrzymac
 echo ============================================
