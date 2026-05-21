@@ -1139,22 +1139,13 @@ let state = {
 const ICONS = (() => {
   const wrap = (size, paths) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">${paths}</svg>`;
   return {
-    // Brain-circuit (Lucide) — mózg po lewej fioletowy (#7c3aed, AI vibe), obwody+kropki po prawej czerwone.
-    // Kolory stałe (nie adaptują do motywu) — brand mark powinien być rozpoznawalny niezależnie od tła.
-    brand:    (s=20) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;display:inline-block;vertical-align:middle">
-      <g stroke="#7c3aed">
-        <path d="M12 4.5a2.5 2.5 0 0 0-4.96-.46 2.5 2.5 0 0 0-1.98 3 2.5 2.5 0 0 0-1.32 4.24 3 3 0 0 0 .34 5.58 2.5 2.5 0 0 0 2.96 3.08 2.5 2.5 0 0 0 4.91.05L12 20V4.5Z"/>
-      </g>
-      <g stroke="var(--red, #e63946)">
-        <path d="M16 8V5c0-1.1.9-2 2-2"/>
-        <path d="M12 13h4"/>
-        <path d="M12 18h6a2 2 0 0 1 2 2v1"/>
-        <path d="M12 8h8"/>
-        <path d="M20.5 8a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0Z"/>
-        <path d="M16.5 13a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0Z"/>
-        <path d="M20.5 21a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0Z"/>
-        <path d="M18.5 3a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0Z"/>
-      </g>
+    // ai-solid (svgrepo 444899) — symbol AI z dwóch symetrycznych połówek.
+    // Lewa: czarna. Prawa: fioletowa (#7c3aed). Białe rounded-square background żeby ikona
+    // była widoczna na każdym tle (light i dark). Stałe kolory — brand mark.
+    brand:    (s=20) => `<svg width="${s}" height="${s}" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;display:inline-block;vertical-align:middle">
+      <rect width="48" height="48" rx="8" fill="#ffffff"/>
+      <path d="M17.9,2h-.4L7.6,6.6a1,1,0,0,0-.6.9v7.4l-.6.5-4,3.3a.8.8,0,0,0-.4.8v9a.9.9,0,0,0,.4.8l4,3.3.6.5v7.4a1,1,0,0,0,.6.9l9.9,4.5h.4l.6-.2,4-2.7V25.5H21a1.5,1.5,0,0,1,0-3h1.5V4.9l-4-2.7ZM9,13.5l2.8,1.9a1.5,1.5,0,0,1,.4,2.1,1.4,1.4,0,0,1-1.2.7,1.1,1.1,0,0,1-.8-.3L9,17.1Zm-5,9H7.5a1.5,1.5,0,0,1,0,3H4Zm5,8.4,1.2-.8a1.4,1.4,0,0,1,2,.4,1.5,1.5,0,0,1-.4,2.1L9,34.5ZM19.5,18.6l-4,4v2.8l4,4v5.2l-3.4,3.5a2.1,2.1,0,0,1-1.1.4,2.1,2.1,0,0,1-1.1-.4,1.6,1.6,0,0,1,0-2.2l2.6-2.5V30.6l-4-4V21.4l4-4V14.6l-2.6-2.5a1.6,1.6,0,1,1,2.2-2.2l3.4,3.5Z" fill="#000000"/>
+      <path d="M45.6,18.7l-4-3.3-.6-.5V7.5a1,1,0,0,0-.6-.9L30.5,2.1h-.4l-.6.2-4,2.7V22.5H27a1.5,1.5,0,0,1,0,3H25.5V43.1l4,2.7.6.2h.4l9.9-4.5a1,1,0,0,0,.6-.9V33.1l.6-.5,4-3.3a.9.9,0,0,0,.4-.8v-9A.8.8,0,0,0,45.6,18.7ZM39,17.1l-1.2.8a1.1,1.1,0,0,1-.8.3,1.4,1.4,0,0,1-1.2-.7,1.5,1.5,0,0,1,.4-2.1L39,13.5ZM28.5,29.4l4-4V22.6l-4-4V13.4l3.4-3.5a1.6,1.6,0,0,1,2.2,2.2l-2.6,2.5v2.8l4,4v5.2l-4,4v2.8l2.6,2.5a1.6,1.6,0,0,1,0,2.2,1.7,1.7,0,0,1-2.2,0l-3.4-3.5ZM39,34.5l-2.8-1.9a1.5,1.5,0,0,1-.4-2.1,1.4,1.4,0,0,1,2-.4l1.2.8Zm5-9H40.5a1.5,1.5,0,0,1,0-3H44Z" fill="#7c3aed"/>
     </svg>`,
     home:     (s=16) => wrap(s, '<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>'),
     building: (s=16) => wrap(s, '<rect width="16" height="20" x="4" y="2" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M12 6h.01"/><path d="M12 10h.01"/><path d="M12 14h.01"/><path d="M16 10h.01"/><path d="M16 14h.01"/><path d="M8 10h.01"/><path d="M8 14h.01"/>'),
@@ -6377,7 +6368,7 @@ function buildLoginScreen() {
     <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg, var(--bg) 0%, var(--surface2) 100%);padding:20px;position:relative">
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-xl);padding:36px 32px 28px;width:100%;max-width:380px;box-shadow:var(--shadow-lg)">
         <div style="text-align:center;margin-bottom:26px">
-          <div style="display:inline-flex;width:64px;height:64px;border-radius:16px;background:var(--blue-light);color:var(--blue);align-items:center;justify-content:center;margin-bottom:14px;box-shadow:0 4px 12px rgba(24,85,163,0.15)">${ICONS.brand(36)}</div>
+          <div style="display:inline-block;margin-bottom:14px;box-shadow:0 4px 12px rgba(0,0,0,0.12);border-radius:14px;line-height:0">${ICONS.brand(64)}</div>
           <h1 style="font-size:22px;font-weight:700;margin:0 0 4px;letter-spacing:-0.3px">HospesAI</h1>
           <div style="font-size:13px;color:var(--text2)">Zaloguj się aby kontynuować</div>
         </div>
