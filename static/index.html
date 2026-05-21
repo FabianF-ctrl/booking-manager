@@ -1120,6 +1120,7 @@ let state = {
   permanentMonthlyRate: "", // stawka miesięczna stałego najemcy (pusty = liczyć za dobę z cennika)
   printReport: null,      // { from, to } — gdy ustawione, render pokazuje modal wyboru zakresu
   printReportHtml: null,  // gdy ustawione, render pokazuje gotowy raport do druku (window.print())
+  imageCropModal: null,   // { locId, dataUrl, file } — preview zdjęcia przed uploadem (admin only)
   notesSearch: "",
   notesFilter: "all",     // "all" | "general" | "booking"
   mediaExpanded: {},      // { [locId]: true } — które sekcje Media są rozwinięte w raportach
@@ -1706,6 +1707,7 @@ function buildAppCore() {
     ${state.editModal ? buildEditModal() : ""}
     ${state.roomDetailModal ? buildRoomDetailModal() : ""}
     ${state.printReport ? buildPrintReportModal() : ""}
+    ${state.imageCropModal ? buildImageCropModal() : ""}
     ${state.printReportHtml || ""}
   `;
 }
@@ -3871,17 +3873,21 @@ function buildSettings() {
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;padding:14px">
         ${DATA.locations.map(loc => {
           const img = locImages[loc.id];
+          const isAdmin = API_CREDS?.role === "admin";
           return `
           <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden">
             <div style="height:100px;background:${img?`url('/loc_images/${esc(img)}?t=${Date.now()}') center/cover`:"var(--surface2)"};display:flex;align-items:center;justify-content:center;color:var(--text3)">${img?"":locIcon(loc, 36)}</div>
             <div style="padding:10px 12px">
               <div style="font-size:12px;font-weight:600;margin-bottom:2px">${esc(loc.name)}</div>
               <div style="font-size:11px;color:var(--text3);margin-bottom:8px">${ICONS.mapPin(11)} ${esc(loc.city)}</div>
+              ${isAdmin ? `
               <div style="display:flex;gap:6px">
                 <input type="file" id="locimg-${loc.id}" data-loc-image-upload="${loc.id}" accept="image/jpeg,image/png,image/webp" style="display:none" />
                 <label for="locimg-${loc.id}" class="cal-nav-btn" style="cursor:pointer;font-size:11px;padding:5px 10px;flex:1;text-align:center">${img?"Zmień":"Wgraj zdjęcie"}</label>
                 ${img ? `<button class="cal-nav-btn" data-loc-image-delete="${loc.id}" style="font-size:11px;padding:5px 10px;color:var(--red);border-color:var(--red)" title="Usuń zdjęcie">✕</button>` : ""}
-              </div>
+              </div>` : `
+              <div style="font-size:10px;color:var(--text3);font-style:italic;padding:4px 0">Zmiana zdjęć wymaga uprawnień admina.</div>
+              `}
             </div>
           </div>`;
         }).join("")}
@@ -4942,23 +4948,46 @@ function attachEvents() {
     });
   });
 
-  // Upload zdjęcia obiektu — change na input file
+  // Upload zdjęcia obiektu — change na input file → otwiera podgląd zamiast direct upload
   document.querySelectorAll("[data-loc-image-upload]").forEach(inp => {
-    inp.addEventListener("change", async (e) => {
+    inp.addEventListener("change", (e) => {
       const locId = inp.dataset.locImageUpload;
       const file = e.target.files?.[0];
       if (!file) return;
-      const fd = new FormData();
-      fd.append("file", file);
-      try {
-        const result = await apiUploadFile("/api/locations/" + locId + "/image", fd);
-        locImages[locId] = result.filename;
-        showToast("✅ Zdjęcie wgrane");
+      const reader = new FileReader();
+      reader.onload = () => {
+        state.imageCropModal = { locId, file, dataUrl: reader.result };
         render();
-      } catch(err) {
-        showToast("❌ Błąd uploadu: " + err.message);
-      }
+      };
+      reader.readAsDataURL(file);
+      // Reset input value żeby ten sam plik mógł być wybrany ponownie
+      e.target.value = "";
     });
+  });
+
+  // Image crop preview modal handlery
+  document.getElementById("imageCropCancelBtn")?.addEventListener("click", () => {
+    state.imageCropModal = null;
+    render();
+  });
+  document.getElementById("imageCropCloseBtn")?.addEventListener("click", () => {
+    state.imageCropModal = null;
+    render();
+  });
+  document.getElementById("imageCropConfirmBtn")?.addEventListener("click", async () => {
+    const m = state.imageCropModal;
+    if (!m) return;
+    const fd = new FormData();
+    fd.append("file", m.file);
+    try {
+      const result = await apiUploadFile("/api/locations/" + m.locId + "/image", fd);
+      locImages[m.locId] = result.filename;
+      state.imageCropModal = null;
+      showToast("✅ Zdjęcie wgrane");
+      render();
+    } catch(err) {
+      showToast("❌ Błąd uploadu: " + err.message);
+    }
   });
   // Usuń zdjęcie obiektu
   document.querySelectorAll("[data-loc-image-delete]").forEach(btn => {
@@ -6019,6 +6048,56 @@ function confirmBooking() {
 // ============================================================
 // EXPORT CSV
 // ============================================================
+// ─── IMAGE CROP PREVIEW (podgląd zdjęcia przed uploadem) ──────────────────
+// Karta obiektu pokazuje zdjęcie w aspekcie ~2.2:1 z `background-size: cover`.
+// Modal pokazuje DWA panele: cały obraz (contain) + jak będzie wyglądać na karcie (cover).
+// Bez crop w JS — server zapisuje raw plik, CSS cropuje przy render.
+function buildImageCropModal() {
+  const m = state.imageCropModal;
+  if (!m) return "";
+  const loc = DATA.locations.find(l => l.id === parseInt(m.locId));
+  return `
+    <div class="edit-overlay" id="imageCropOverlay">
+      <div class="edit-modal" style="max-width:680px">
+        <div class="edit-modal-hdr">
+          <h3 style="display:flex;align-items:center;gap:8px">${ICONS.image(18)} Podgląd zdjęcia${loc?` — ${esc(loc.name)}`:""}</h3>
+          <button class="close-btn" id="imageCropCloseBtn">${ICONS.x(16)}</button>
+        </div>
+        <div class="edit-modal-body">
+          <p style="font-size:12px;color:var(--text2);margin-bottom:12px">
+            Karta obiektu ma stały obszar zdjęcia w proporcji ~22:10 (220×100 px wizualnie, więcej na szerszych ekranach). Twoje zdjęcie zostanie automatycznie wycentrowane i przycięte. Sprawdź czy to co widzisz po prawej Ci pasuje.
+          </p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.3px;margin-bottom:6px">Cały obraz</div>
+              <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);height:200px;display:flex;align-items:center;justify-content:center;overflow:hidden">
+                <img src="${m.dataUrl}" style="max-width:100%;max-height:100%;object-fit:contain" alt="preview" />
+              </div>
+              <div style="font-size:10px;color:var(--text3);font-style:italic;margin-top:4px">Tak wygląda oryginalny plik</div>
+            </div>
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.3px;margin-bottom:6px">Jak będzie na karcie</div>
+              <div style="background:url('${m.dataUrl}') center/cover;height:100px;border-radius:var(--radius);border:1px solid var(--border)"></div>
+              <div style="font-size:10px;color:var(--text3);font-style:italic;margin-top:4px">Wycentrowany crop 22:10</div>
+              <div style="margin-top:8px">
+                <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.3px;margin-bottom:6px">Większy ekran</div>
+                <div style="background:url('${m.dataUrl}') center/cover;height:140px;border-radius:var(--radius);border:1px solid var(--border)"></div>
+              </div>
+            </div>
+          </div>
+          <div style="margin-top:12px;padding:8px 10px;background:var(--blue-light);border:1px solid var(--blue-mid);border-radius:var(--radius);font-size:11px;color:var(--blue);display:flex;gap:6px;align-items:flex-start">
+            <span style="flex-shrink:0;margin-top:1px">${ICONS.info(12)}</span>
+            <div>Jeśli ważny fragment jest poza widocznym obszarem (np. logo budynku ucięte) — anuluj, przytnij plik w edytorze (np. Podgląd na Macu, Paint na Windows) i wgraj ponownie. Najlepiej działają proporcje 2:1 do 3:1 (poziome).</div>
+          </div>
+        </div>
+        <div class="edit-footer">
+          <button class="cal-nav-btn" id="imageCropCancelBtn">Anuluj</button>
+          <button class="btn-save" id="imageCropConfirmBtn" style="display:inline-flex;align-items:center;gap:6px">${ICONS.checkCircle(13)} Użyj tego zdjęcia</button>
+        </div>
+      </div>
+    </div>`;
+}
+
 // ─── PRINT REPORT (drukowalny raport finansowy z wyborem zakresu dat) ─────
 function buildPrintReportModal() {
   if (!state.printReport) return "";

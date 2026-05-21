@@ -374,9 +374,10 @@ def list_location_images(user=Depends(get_current_user)):
 async def upload_location_image(
     loc_id: int,
     file: UploadFile = File(...),
-    user=Depends(get_current_user)
+    user=Depends(require_admin)
 ):
-    """Uploaduje zdjęcie obiektu. Plik zapisywany jako data/loc_images/{loc_id}.{ext}.
+    """Uploaduje zdjęcie obiektu — tylko admin.
+    Plik zapisywany jako data/loc_images/{loc_id}.{ext}.
     Stare zdjęcie tego obiektu jest nadpisywane (usuwane przed zapisem)."""
     if not file.filename:
         raise HTTPException(status_code=400, detail="Brak pliku")
