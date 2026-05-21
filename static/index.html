@@ -8,7 +8,7 @@
 <meta name="theme-color" content="#1855A3" media="(prefers-color-scheme: light)" />
 <meta name="theme-color" content="#111110" media="(prefers-color-scheme: dark)" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -136,7 +136,7 @@ body {
 }
 .topbar-greeting-main { font-weight: 600; color: var(--text); }
 .topbar-greeting-sep { color: var(--text3); }
-.topbar-greeting-date { color: var(--text2); font-family: "DM Mono", monospace; font-size: 12px; }
+.topbar-greeting-date { color: var(--text2); font-family: "IBM Plex Mono", monospace; font-size: 12px; }
 
 .search-wrap { flex: 1; max-width: 320px; position: relative; }
 .search-wrap input {
@@ -189,7 +189,7 @@ body {
 .loc-info { padding: 11px; }
 .loc-name { font-size: 13px; font-weight: 600; margin-bottom: 1px; }
 .loc-city { font-size: 11px; color: var(--text2); }
-.loc-rooms { font-size: 10px; color: var(--text3); margin-top: 4px; font-family: "DM Mono", monospace; }
+.loc-rooms { font-size: 10px; color: var(--text3); margin-top: 4px; font-family: "IBM Plex Mono", monospace; }
 
 /* ─── STATUS TAB ─── */
 .status-controls {
@@ -231,7 +231,7 @@ body {
 .status-loc-hdr .loc-icon { font-size: 20px; }
 .status-loc-hdr strong { font-size: 14px; font-weight: 700; }
 .status-loc-hdr em { font-size: 11px; color: var(--text2); font-style: normal; }
-.status-loc-hdr-meta { margin-left: auto; display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--text2); font-family: "DM Mono", monospace; }
+.status-loc-hdr-meta { margin-left: auto; display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--text2); font-family: "IBM Plex Mono", monospace; }
 .status-loc-toggle { color: var(--text3); font-size: 14px; transition: transform 0.15s; }
 
 .status-loc-body {
@@ -265,7 +265,7 @@ body {
 .status-room-who .who-name.who-company { color: #7B2FBE; }
 .status-room-who .who-name.who-individual { color: var(--blue); }
 [data-theme="dark"] .status-room-who .who-name.who-company { color: #B87FE8; }
-.status-room-who .who-dates { font-family: "DM Mono", monospace; font-size: 10px; color: var(--text3); }
+.status-room-who .who-dates { font-family: "IBM Plex Mono", monospace; font-size: 10px; color: var(--text3); }
 .status-badge-col { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
 
 /* Status detail view (single location) */
@@ -289,7 +289,7 @@ body {
 }
 .status-result-header .loc-icon { font-size: 20px; }
 .status-result-header strong { font-size: 14px; font-weight: 700; }
-.status-result-header span { font-size: 12px; color: var(--text2); margin-left: auto; font-family: "DM Mono", monospace; }
+.status-result-header span { font-size: 12px; color: var(--text2); margin-left: auto; font-family: "IBM Plex Mono", monospace; }
 
 .status-detail-row {
   display: grid; grid-template-columns: 180px 110px 1fr 140px;
@@ -315,7 +315,7 @@ body {
 .badge-blocked::before { background: var(--orange); }
 
 .status-who { font-size: 12px; color: var(--text2); }
-.status-dates { font-size: 11px; color: var(--text3); font-family: "DM Mono", monospace; }
+.status-dates { font-size: 11px; color: var(--text3); font-family: "IBM Plex Mono", monospace; }
 
 /* ─── STATUS TODAY GRID (fallback) ─── */
 .status-today-block { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; margin-bottom: 14px; }
@@ -335,7 +335,7 @@ body {
 .sum-card.hero:hover { border-color: var(--green); }
 .sum-card .lbl { font-size: 10px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 5px; }
 .sum-card.hero .lbl { color: var(--green); }
-.sum-card .val { font-size: 22px; font-weight: 700; font-family: "DM Mono", monospace; }
+.sum-card .val { font-size: 22px; font-weight: 700; font-family: "IBM Plex Mono", monospace; }
 .sum-card.hero .val { font-size: 28px; color: var(--green); }
 .sum-card .sub { font-size: 11px; color: var(--text3); margin-top: 2px; }
 
@@ -360,7 +360,7 @@ body {
 .loc-fin-stat.hero { background: linear-gradient(135deg, var(--green-light) 0%, var(--surface) 100%); }
 .loc-fin-stat .k { font-size: 10px; color: var(--text3); font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
 .loc-fin-stat.hero .k { color: var(--green); }
-.loc-fin-stat .v { font-size: 17px; font-weight: 700; font-family: "DM Mono", monospace; }
+.loc-fin-stat .v { font-size: 17px; font-weight: 700; font-family: "IBM Plex Mono", monospace; }
 .loc-fin-stat.hero .v { font-size: 22px; color: var(--green); }
 .loc-fin-stat .sub { font-size: 10px; color: var(--text3); margin-top: 2px; }
 .loc-fin-stat .v.green { color: var(--green); }
@@ -389,7 +389,7 @@ body {
   display: flex; align-items: center; justify-content: space-between;
 }
 .report-entity { font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 6px; }
-.report-total { background: var(--blue-light); color: var(--blue); padding: 3px 10px; border-radius: 99px; font-size: 12px; font-weight: 700; font-family: "DM Mono", monospace; }
+.report-total { background: var(--blue-light); color: var(--blue); padding: 3px 10px; border-radius: 99px; font-size: 12px; font-weight: 700; font-family: "IBM Plex Mono", monospace; }
 
 .report-row {
   padding: 10px 16px; border-bottom: 1px solid var(--border);
@@ -400,8 +400,8 @@ body {
 .report-row:last-child { border-bottom: none; }
 .report-guest { font-weight: 500; }
 .report-sub { font-size: 11px; color: var(--text3); }
-.report-dates-cell { font-size: 11px; color: var(--text2); font-family: "DM Mono", monospace; }
-.report-amount { font-weight: 700; font-family: "DM Mono", monospace; text-align: right; }
+.report-dates-cell { font-size: 11px; color: var(--text2); font-family: "IBM Plex Mono", monospace; }
+.report-amount { font-weight: 700; font-family: "IBM Plex Mono", monospace; text-align: right; }
 
 .pm-badge { font-size: 11px; padding: 2px 7px; border-radius: 99px; font-weight: 600; }
 .pm-invoice { background: var(--blue-light); color: var(--blue); }
@@ -412,7 +412,7 @@ body {
 .pay-strip { padding: 8px 16px; background: var(--surface2); font-size: 12px; display: flex; gap: 20px; flex-wrap: wrap; border-top: 1px solid var(--border); }
 .pay-strip-item { display: flex; flex-direction: column; gap: 1px; }
 .pay-strip-key { font-size: 10px; color: var(--text3); font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
-.pay-strip-val { font-weight: 600; font-family: "DM Mono", monospace; }
+.pay-strip-val { font-weight: 600; font-family: "IBM Plex Mono", monospace; }
 .pay-strip-val.ok { color: var(--green); }
 .pay-strip-val.warn { color: var(--orange); }
 
@@ -433,18 +433,18 @@ body {
   background: var(--surface2); cursor: pointer; gap: 10px;
 }
 .media-room-hdr-title { font-size: 12px; font-weight: 600; }
-.media-room-hdr-total { font-size: 11px; color: var(--orange); font-family: "DM Mono", monospace; font-weight: 600; }
+.media-room-hdr-total { font-size: 11px; color: var(--orange); font-family: "IBM Plex Mono", monospace; font-weight: 600; }
 .media-room-body { padding: 12px 14px; }
 .media-period-row {
   display: grid; grid-template-columns: 100px 1fr 1fr 1fr auto;
   gap: 8px; align-items: flex-end; margin-bottom: 8px;
 }
-.media-period-label { font-size: 11px; font-weight: 600; color: var(--text2); padding-top: 20px; font-family: "DM Mono", monospace; }
+.media-period-label { font-size: 11px; font-weight: 600; color: var(--text2); padding-top: 20px; font-family: "IBM Plex Mono", monospace; }
 .media-field { display: flex; flex-direction: column; gap: 3px; }
 .media-field label { font-size: 10px; color: var(--orange); font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
 .media-field input {
   padding: 6px 8px; border: 1px solid var(--orange-border); border-radius: var(--radius);
-  background: var(--surface); font-size: 13px; color: var(--text); font-family: "DM Mono", monospace; outline: none;
+  background: var(--surface); font-size: 13px; color: var(--text); font-family: "IBM Plex Mono", monospace; outline: none;
   width: 100%;
 }
 .media-field input:focus { border-color: var(--orange); }
@@ -460,7 +460,7 @@ body {
 .media-add-period-btn:hover { background: var(--orange-light); }
 .media-room-summary {
   margin-top: 8px; padding: 8px 10px; background: var(--orange-light); border-radius: var(--radius);
-  font-size: 11px; color: var(--orange); font-family: "DM Mono", monospace;
+  font-size: 11px; color: var(--orange); font-family: "IBM Plex Mono", monospace;
 }
 .media-price-breakdown {
   font-size: 11px; color: var(--text3); padding: 6px 14px 8px;
@@ -495,7 +495,7 @@ body {
 .s-inp-grp label { font-size: 9px; color: var(--text3); font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
 .s-inp-grp input {
   width: 72px; padding: 5px 7px; border: 1px solid var(--border); border-radius: var(--radius);
-  background: var(--surface2); font-size: 12px; color: var(--text); font-family: "DM Mono", monospace; outline: none;
+  background: var(--surface2); font-size: 12px; color: var(--text); font-family: "IBM Plex Mono", monospace; outline: none;
 }
 .s-inp-grp input:focus { border-color: var(--blue); }
 .save-btn {
@@ -579,7 +579,7 @@ body {
 .cal-legend { display: flex; gap: 12px; margin-bottom: 10px; font-size: 11px; color: var(--text2); flex-wrap: wrap; }
 .legend-dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; }
 
-.cal-hint { font-size: 12px; color: var(--text2); text-align: center; min-height: 16px; margin-bottom: 10px; font-family: "DM Mono", monospace; }
+.cal-hint { font-size: 12px; color: var(--text2); text-align: center; min-height: 16px; margin-bottom: 10px; font-family: "IBM Plex Mono", monospace; }
 
 .check-btn {
   width: 100%; padding: 9px; background: var(--blue); color: white; border: none; border-radius: var(--radius);
@@ -598,7 +598,7 @@ body {
 }
 .room-option:hover { background: var(--surface2); border-color: var(--border2); }
 .room-option.sel { border-color: var(--blue); background: var(--blue-light); }
-.room-meta { font-size: 11px; color: var(--text3); margin-top: 2px; font-family: "DM Mono", monospace; }
+.room-meta { font-size: 11px; color: var(--text3); margin-top: 2px; font-family: "IBM Plex Mono", monospace; }
 .continue-btn {
   width: 100%; padding: 9px; background: var(--green); color: white; border: none; border-radius: var(--radius);
   font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; transition: background 0.12s; margin-top: 2px;
@@ -615,8 +615,8 @@ body {
   padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;
 }
 .price-lbl { font-size: 12px; color: var(--text2); }
-.price-breakdown { font-size: 10px; color: var(--text3); margin-top: 2px; font-family: "DM Mono", monospace; }
-.price-val { font-size: 22px; font-weight: 700; font-family: "DM Mono", monospace; }
+.price-breakdown { font-size: 10px; color: var(--text3); margin-top: 2px; font-family: "IBM Plex Mono", monospace; }
+.price-val { font-size: 22px; font-weight: 700; font-family: "IBM Plex Mono", monospace; }
 
 .form-field { margin-bottom: 12px; }
 .form-field label { font-size: 11px; color: var(--text2); font-weight: 600; display: block; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.3px; }
@@ -642,7 +642,7 @@ body {
 .buffer-field label { font-size: 11px; color: var(--yellow); font-weight: 600; display: block; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.3px; }
 .buffer-field input {
   width: 100%; padding: 6px 9px; border: 1px solid var(--yellow-border); border-radius: var(--radius);
-  background: var(--surface); font-size: 13px; color: var(--text); font-family: "DM Mono", monospace; outline: none;
+  background: var(--surface); font-size: 13px; color: var(--text); font-family: "IBM Plex Mono", monospace; outline: none;
 }
 .buffer-hint { font-size: 11px; color: var(--yellow); margin-top: 4px; }
 
@@ -731,7 +731,7 @@ body {
 .edit-field label { font-size: 11px; color: var(--text2); font-weight: 600; display: block; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.3px; }
 .edit-field input:not([type="checkbox"]):not([type="radio"]), .edit-field select {
   width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius);
-  background: var(--surface2); font-size: 13px; color: var(--text); font-family: "DM Mono", monospace; outline: none; transition: border-color 0.12s;
+  background: var(--surface2); font-size: 13px; color: var(--text); font-family: "IBM Plex Mono", monospace; outline: none; transition: border-color 0.12s;
 }
 .edit-field input[type="checkbox"], .edit-field input[type="radio"] { width: auto; }
 .edit-field input:focus, .edit-field select:focus { border-color: var(--blue); background: var(--surface); }
@@ -769,7 +769,7 @@ body {
 .room-booking-row { display: flex; justify-content: space-between; font-size: 12px; padding: 3px 0; border-bottom: 1px solid var(--border); }
 .room-booking-row:last-child { border-bottom: none; }
 .room-booking-row span:first-child { color: var(--text2); }
-.room-booking-row span:last-child { font-family: "DM Mono", monospace; font-weight: 500; }
+.room-booking-row span:last-child { font-family: "IBM Plex Mono", monospace; font-weight: 500; }
 .toast {
   position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(70px);
   background: var(--text); color: var(--bg); padding: 9px 18px; border-radius: 99px;
@@ -1148,6 +1148,9 @@ const ICONS = (() => {
     sparkles: (s=14) => wrap(s, '<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>'),
     info:     (s=14) => wrap(s, '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>'),
     alertTriangle:(s=14) => wrap(s, '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>'),
+    messageSquare:(s=16) => wrap(s, '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>'),
+    bot:      (s=16) => wrap(s, '<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>'),
+    helpCircle:(s=16) => wrap(s, '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>'),
   };
 })();
 
@@ -1418,12 +1421,30 @@ function calcBookingTotal(b, room, nights, periodRange) {
   // Firmowa rezerwacja — sumujemy per pracownik w tym pokoju
   if (b?.bookingType === "company" && Array.isArray(b.guests) && b.guests.length > 0) {
     const hasAssignments = b.guests.some(g => g.assignedRoom);
+
+    // LEGACY multi-room bug detection: jeśli b nie ma assignedRoom na żadnym guest,
+    // ale istnieją bookingi-siblingi tej samej firmy/dat (= multi-room batch sprzed fixu),
+    // to każdy record z osobna naliczałby wszystkich 6 → over-count. Dzielimy przez
+    // liczbę siblings+1 żeby total batcha wyszedł poprawnie.
+    let legacyShareDivisor = 1;
+    if (!hasAssignments && Array.isArray(savedBookings)) {
+      const siblings = savedBookings.filter(x =>
+        x.id !== b.id &&
+        x.bookingType === "company" &&
+        x.companyName === b.companyName &&
+        x.from === b.from && x.to === b.to &&
+        Array.isArray(x.guests) && !x.guests.some(g => g.assignedRoom)
+      );
+      if (siblings.length > 0) legacyShareDivisor = siblings.length + 1;
+    }
+
     const inRoom = hasAssignments
       ? b.guests.filter(g => g.assignedRoom === b.roomId)
       : b.guests;
     const hasPerGuestMode = inRoom.some(g => g.billingMode || g.dailyRate || g.isPermanent);
     if (hasPerGuestMode) {
       // Nowy model — sumujemy stawkę × dni (lub miesiące dla stałego) per pracownik.
+      // Per-pracownik: jeśli g.actualNights ustawione (manual override w raportach), użyj go zamiast nights z bookingu.
       let total = 0;
       for (const g of inRoom) {
         const mode = g.billingMode || b.billingMode || "room";
@@ -1433,16 +1454,17 @@ function calcBookingTotal(b, room, nights, periodRange) {
         if (g.isPermanent) {
           total += getPermanentRevenue(g, rate, b.from, rFrom, rTo);
         } else {
-          total += rate * nights;
+          const gNights = (typeof g.actualNights === "number" && g.actualNights >= 0) ? g.actualNights : nights;
+          total += rate * gNights;
         }
       }
-      return total;
+      return total / legacyShareDivisor;
     }
     // Legacy: tryb na poziomie bookingu
     if (b.billingMode === "employee") {
-      return ppe * bedsUsedByBooking(b) * nights;
+      return (ppe * bedsUsedByBooking(b) * nights) / legacyShareDivisor;
     }
-    return calcTotal(room, nights, b.guests, prices);
+    return calcTotal(room, nights, b.guests, prices) / legacyShareDivisor;
   }
 
   // Indywidualna (nie-stały najemca)
@@ -1638,6 +1660,9 @@ function buildAppCore() {
           <div class="tab-pane ${state.activeTab==="charts"?"active":""}" id="pane-charts">${buildCharts()}</div>
           <div class="tab-pane ${state.activeTab==="invoices"?"active":""}" id="pane-invoices">${buildInvoices()}</div>
           <div class="tab-pane ${state.activeTab==="notes"?"active":""}" id="pane-notes">${buildNotes()}</div>
+          <div class="tab-pane ${state.activeTab==="sms"?"active":""}" id="pane-sms">${buildSms()}</div>
+          <div class="tab-pane ${state.activeTab==="ai"?"active":""}" id="pane-ai">${buildAiAgent()}</div>
+          <div class="tab-pane ${state.activeTab==="help"?"active":""}" id="pane-help">${buildHelp()}</div>
           <div class="tab-pane ${state.activeTab==="settings"?"active":""}" id="pane-settings">${buildSettings()}</div>
         </div>
       </div>
@@ -1658,6 +1683,9 @@ function buildSidebar() {
     { id:"charts",    icon: ICONS.barChart(), lbl:"Wykresy" },
     { id:"invoices",  icon: ICONS.receipt(),  lbl:"Faktury" },
     { id:"notes",     icon: ICONS.notebook(), lbl:"Notatki" },
+    { id:"sms",       icon: ICONS.messageSquare(), lbl:"SMS / powiadomienia" },
+    { id:"ai",        icon: ICONS.bot(),      lbl:"Agent SI" },
+    { id:"help",      icon: ICONS.helpCircle(), lbl:"Instrukcja / Pomoc" },
     { id:"settings",  icon: ICONS.settings(), lbl:"Ustawienia" },
   ];
   // User block (jeśli zalogowany przez API)
@@ -1765,7 +1793,7 @@ function buildDashboard() {
       <div style="margin-bottom:10px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
           <span style="font-size:12px;font-weight:600">${locIcon(loc, 16)} ${esc(loc.name)}</span>
-          <span style="font-size:11px;color:var(--text2);font-family:'DM Mono',monospace">${occ}/${total} · ${pct}%</span>
+          <span style="font-size:11px;color:var(--text2);font-family:'IBM Plex Mono',monospace">${occ}/${total} · ${pct}%</span>
         </div>
         <div style="height:6px;background:var(--surface2);border-radius:99px;overflow:hidden">
           <div style="height:100%;width:${pct}%;background:${color};border-radius:99px;transition:width 0.4s"></div>
@@ -1787,7 +1815,7 @@ function buildDashboard() {
               <div style="color:var(--text2);font-size:11px">${loc ? locIcon(loc, 14) : ""} ${esc(loc?.name||"")} · ${esc(room?.name||"")}</div>
             </div>
             <div style="text-align:right">
-              <div style="font-family:'DM Mono',monospace;color:var(--blue)">${fmtDate(b.from)}</div>
+              <div style="font-family:'IBM Plex Mono',monospace;color:var(--blue)">${fmtDate(b.from)}</div>
               <span class="ibadge ${b.bookingType==="company"?"ibadge-co":"ibadge-in"}">${b.bookingType==="company"?"Firma":"Indyw."}</span>
             </div>
           </div>`;
@@ -1807,7 +1835,7 @@ function buildDashboard() {
               <div style="color:var(--text2);font-size:11px">${loc ? locIcon(loc, 14) : ""} ${esc(loc?.name||"")} · ${esc(room?.name||"")}</div>
             </div>
             <div style="text-align:right">
-              <div style="font-family:'DM Mono',monospace;color:var(--orange)">${fmtDate(b.to)}</div>
+              <div style="font-family:'IBM Plex Mono',monospace;color:var(--orange)">${fmtDate(b.to)}</div>
             </div>
           </div>`;
       }).join("");
@@ -1827,23 +1855,23 @@ function buildDashboard() {
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:20px">
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px 18px">
           <div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;margin-bottom:6px">Zajęte dziś</div>
-          <div style="font-size:26px;font-weight:700;font-family:'DM Mono',monospace">${occupiedToday}<span style="font-size:14px;color:var(--text3);font-weight:400">/${totalRooms}</span></div>
+          <div style="font-size:26px;font-weight:700;font-family:'IBM Plex Mono',monospace">${occupiedToday}<span style="font-size:14px;color:var(--text3);font-weight:400">/${totalRooms}</span></div>
           <div style="margin-top:6px;height:4px;background:var(--surface2);border-radius:99px"><div style="height:100%;width:${occupancyPct}%;background:${occupancyPct>=80?"var(--red)":occupancyPct>=50?"var(--orange)":"var(--green)"};border-radius:99px"></div></div>
           <div style="font-size:11px;color:var(--text3);margin-top:4px">${occupancyPct}% obłożenia</div>
         </div>
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px 18px">
           <div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;margin-bottom:6px">Przychód — ten miesiąc</div>
-          <div style="font-size:26px;font-weight:700;font-family:'DM Mono',monospace">zł${thisMonthRevenue.toLocaleString()}</div>
+          <div style="font-size:26px;font-weight:700;font-family:'IBM Plex Mono',monospace">zł${thisMonthRevenue.toLocaleString()}</div>
           <div style="font-size:11px;color:var(--text3);margin-top:4px">${revDeltaHtml || "Brak danych poprzedniego miesiąca"}</div>
         </div>
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px 18px">
           <div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;margin-bottom:6px">Bez potwierdzenia płatności</div>
-          <div style="font-size:26px;font-weight:700;font-family:'DM Mono',monospace;color:${unpaid.length>0?"var(--orange)":"var(--green)"}">${unpaid.length}</div>
+          <div style="font-size:26px;font-weight:700;font-family:'IBM Plex Mono',monospace;color:${unpaid.length>0?"var(--orange)":"var(--green)"}">${unpaid.length}</div>
           <div style="font-size:11px;color:var(--text3);margin-top:4px">${unpaid.length > 0 ? `zł${unpaidTotal.toLocaleString()} do pobrania` : "Wszystkie płatności OK"}</div>
         </div>
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px 18px">
           <div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;margin-bottom:6px">Przychód poprzedni miesiąc</div>
-          <div style="font-size:26px;font-weight:700;font-family:'DM Mono',monospace">zł${prevMonthRevenue.toLocaleString()}</div>
+          <div style="font-size:26px;font-weight:700;font-family:'IBM Plex Mono',monospace">zł${prevMonthRevenue.toLocaleString()}</div>
           <div style="font-size:11px;color:var(--text3);margin-top:4px">${savedBookings.filter(b=>b.from>=prevMonthStart&&b.from<=prevMonthEnd).length} rezerwacji</div>
         </div>
       </div>
@@ -2203,7 +2231,7 @@ function buildRoomDetailModal() {
       const periodInvs = invoices.filter(inv => inv.roomId === b.roomId && inv.period === period);
       return `<div style="padding:5px 8px;border-radius:var(--radius);background:var(--surface2);margin-bottom:4px">
         <div style="display:flex;justify-content:space-between;align-items:center">
-          <span style="font-size:11px;font-weight:600;color:var(--text2);font-family:'DM Mono',monospace">${period}</span>
+          <span style="font-size:11px;font-weight:600;color:var(--text2);font-family:'IBM Plex Mono',monospace">${period}</span>
           ${s > 0 ? `<span style="font-size:11px;font-weight:700;color:var(--orange)">${s.toFixed(2)} zł</span>` : ""}
         </div>
         ${details.length > 0 ? `<div style="font-size:10px;color:var(--text3);margin-top:2px">${details.join(" &nbsp;·&nbsp; ")}</div>` : ""}
@@ -2671,7 +2699,7 @@ function buildReportGroupRow(groupBookings, loc, companyName, periodRange) {
   const roomChips = groupBookings.map(b => {
     const r = loc.rooms.find(x => x.id === b.roomId);
     const label = r ? (/^\d+$/.test(r.name||"") ? `Pokój ${r.name}` : r.name) : b.roomId;
-    return `<span style="font-family:'DM Mono',monospace;background:var(--surface);padding:2px 8px;border-radius:99px;border:1px solid var(--border);font-size:11px">${esc(label)}</span>`;
+    return `<span style="font-family:'IBM Plex Mono',monospace;background:var(--surface);padding:2px 8px;border-radius:99px;border:1px solid var(--border);font-size:11px">${esc(label)}</span>`;
   }).join("");
 
   // Unikalne osoby w grupie (po name) — bo guests są kopiowani do każdego bookingu
@@ -2819,7 +2847,7 @@ function buildMediaSectionForLoc(loc) {
     <div class="media-loc-section" style="margin-top:0;border-top:2px dashed var(--orange-border)">
       <div class="media-loc-title" data-media-loc-toggle="${loc.id}" style="border-radius:0;border-top:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px">
         <span>${isExpanded ? "▼" : "▶"} Media — ${locIcon(loc, 16)} ${esc(loc.name)}</span>
-        <span style="font-size:11px;font-weight:500;color:var(--text2);font-family:'DM Mono',monospace">${summary}</span>
+        <span style="font-size:11px;font-weight:500;color:var(--text2);font-family:'IBM Plex Mono',monospace">${summary}</span>
       </div>
       ${isExpanded ? `<div style="padding:0">` : ""}`;
 
@@ -2859,8 +2887,8 @@ function buildMediaSectionForLoc(loc) {
             return `
               <div style="border:1px solid var(--orange-border);border-radius:var(--radius);padding:10px 12px;margin-bottom:8px">
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-                  <span style="font-size:11px;font-weight:600;color:var(--text2);font-family:'DM Mono',monospace">${period}</span>
-                  <span style="font-size:11px;color:var(--orange);font-family:'DM Mono',monospace;font-weight:600">${periodSum>0?`Suma: zł${periodSum.toFixed(2)}`:""}</span>
+                  <span style="font-size:11px;font-weight:600;color:var(--text2);font-family:'IBM Plex Mono',monospace">${period}</span>
+                  <span style="font-size:11px;color:var(--orange);font-family:'IBM Plex Mono',monospace;font-weight:600">${periodSum>0?`Suma: zł${periodSum.toFixed(2)}`:""}</span>
                 </div>
                 <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
                   ${[{field:"electricity",label:"Prąd",icon:ICONS.zap,val:m.electricity},{field:"gas",label:"Gaz",icon:ICONS.flame,val:m.gas},{field:"water",label:"Woda",icon:ICONS.droplet,val:m.water}].map(ft => {
@@ -2908,7 +2936,7 @@ function buildMediaSectionForLoc(loc) {
           }).join("")}
           <div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap">
             <input type="month" id="media-period-picker-${room.id}" value="${currentPeriod()}"
-              style="padding:5px 8px;border:1px dashed var(--orange-border);border-radius:var(--radius);font-size:11px;color:var(--orange);background:var(--surface);font-family:'DM Mono',monospace;outline:none;cursor:pointer" />
+              style="padding:5px 8px;border:1px dashed var(--orange-border);border-radius:var(--radius);font-size:11px;color:var(--orange);background:var(--surface);font-family:'IBM Plex Mono',monospace;outline:none;cursor:pointer" />
             <button class="media-add-period-btn" data-add-period="${room.id}" style="margin-top:0">+ Dodaj wybrany okres</button>
           </div>
         </div>
@@ -3152,7 +3180,7 @@ function buildChartCanvas(locId, type, from, to) {
     </div>
     <div style="margin-top:12px;display:flex;gap:14px;flex-wrap:wrap">
       ${keys.map((k,i)=>`
-        <div style="font-size:11px;font-family:'DM Mono',monospace">
+        <div style="font-size:11px;font-family:'IBM Plex Mono',monospace">
           <span style="color:var(--text2)">${k}</span>
           <span style="color:var(--text);font-weight:600;margin-left:6px">${type==="revenue"?"zł":""}${vals[i]} ${type!=="revenue"?unit:""}</span>
         </div>`).join("")}
@@ -3262,7 +3290,7 @@ function buildPieChart(locId, from, to) {
     <div style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:6px;padding:5px 8px;border-radius:var(--radius);background:var(--surface2)">
       <span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${COLORS[i % COLORS.length]};flex-shrink:0"></span>
       <span style="font-weight:600;display:inline-flex;align-items:center;gap:5px">${(LOC_ICON_MAP[sl.icon] ? ICONS[LOC_ICON_MAP[sl.icon]](14) : ICONS.building(14))} ${esc(sl.label)}</span>
-      <span style="margin-left:auto;font-family:'DM Mono',monospace;font-weight:700;color:var(--blue)">zł${sl.value.toLocaleString()}</span>
+      <span style="margin-left:auto;font-family:'IBM Plex Mono',monospace;font-weight:700;color:var(--blue)">zł${sl.value.toLocaleString()}</span>
       <span style="background:var(--surface3);border-radius:99px;padding:1px 7px;font-size:11px;font-weight:700;color:var(--text)">${Math.round(sl.value/total*100)}%</span>
     </div>`).join("");
 
@@ -3337,12 +3365,12 @@ function buildInvoices() {
       <div class="ctrl-group">
         <label>Okres od</label>
         <input type="month" id="invDateFrom" value="${dfrom}"
-          style="padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-size:13px;color:var(--text);font-family:'DM Mono',monospace;outline:none" />
+          style="padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-size:13px;color:var(--text);font-family:'IBM Plex Mono',monospace;outline:none" />
       </div>
       <div class="ctrl-group">
         <label>Okres do</label>
         <input type="month" id="invDateTo" value="${dto}"
-          style="padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-size:13px;color:var(--text);font-family:'DM Mono',monospace;outline:none" />
+          style="padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-size:13px;color:var(--text);font-family:'IBM Plex Mono',monospace;outline:none" />
       </div>
       ${hasFilter ? `<div class="ctrl-group" style="align-self:flex-end">
         <button class="cal-nav-btn" id="invClearFilter" style="padding:7px 12px;white-space:nowrap;display:inline-flex;align-items:center;gap:5px">${ICONS.x(12)} Wyczyść</button>
@@ -3362,7 +3390,7 @@ function buildInvoices() {
                   <div class="settings-room-loc" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
                     ${loc ? `<span style="display:inline-flex;align-items:center;gap:4px">${locIcon(loc, 13)} ${esc(loc.name)}</span>` : "—"}
                     ${room ? ` · ${esc(room.name)}` : ""}
-                    ${inv.period ? ` · <span style="font-family:'DM Mono',monospace">${inv.period}</span>` : ""}
+                    ${inv.period ? ` · <span style="font-family:'IBM Plex Mono',monospace">${inv.period}</span>` : ""}
                     ${inv.amount ? ` · <strong>zł${parseFloat(inv.amount).toLocaleString()}</strong>` : ""}
                     ${inv.date ? ` · <span style="color:var(--text3);font-size:11px">dodano ${inv.date}</span>` : ""}
                   </div>
@@ -3400,11 +3428,11 @@ function buildAddInvoiceForm() {
         <div class="field-row" style="margin-bottom:10px">
           <div class="field-wrap">
             <label>Okres (np. 2025-01)</label>
-            <input type="text" id="invAddPeriod" placeholder="YYYY-MM" value="${currentPeriod()}" style="padding:7px 9px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-size:13px;color:var(--text);font-family:'DM Mono',monospace;outline:none;width:100%" />
+            <input type="text" id="invAddPeriod" placeholder="YYYY-MM" value="${currentPeriod()}" style="padding:7px 9px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-size:13px;color:var(--text);font-family:'IBM Plex Mono',monospace;outline:none;width:100%" />
           </div>
           <div class="field-wrap">
             <label>Kwota (zł)</label>
-            <input type="number" id="invAddAmount" placeholder="0.00" min="0" step="0.01" style="padding:7px 9px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-size:13px;color:var(--text);font-family:'DM Mono',monospace;outline:none;width:100%" />
+            <input type="number" id="invAddAmount" placeholder="0.00" min="0" step="0.01" style="padding:7px 9px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-size:13px;color:var(--text);font-family:'IBM Plex Mono',monospace;outline:none;width:100%" />
           </div>
         </div>
         <div class="form-field" style="margin-bottom:10px">
@@ -3471,7 +3499,7 @@ function buildNotes() {
         <div style="flex:1;min-width:0">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
             <span class="ibadge ${n.type==='general'?'ibadge-in':'ibadge-co'}" style="display:inline-flex;align-items:center;gap:4px">${n.type==='general'?`${ICONS.notebook(11)} Ogólna`:`${ICONS.pin(11)} Rezerwacja`}</span>
-            <span style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace">${dtStr} · ${esc(n.createdBy||"")}</span>
+            <span style="font-size:11px;color:var(--text3);font-family:'IBM Plex Mono',monospace">${dtStr} · ${esc(n.createdBy||"")}</span>
           </div>
           ${context}
           <div data-note-text="${n.id}" style="white-space:pre-wrap;font-size:13px;line-height:1.5">${esc(n.text||"")}</div>
@@ -3530,6 +3558,173 @@ function buildNotes() {
     </div>`;
 }
 
+// ─── SMS / POWIADOMIENIA ─────────────────────────────────────
+function buildSms() {
+  const wipBadge = `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;background:var(--orange-light);color:var(--orange);border:1px solid var(--orange-border);border-radius:99px;font-size:11px;font-weight:600">${ICONS.alertTriangle(12)} W przygotowaniu</span>`;
+  const card = (icon, title, desc) => `
+    <div style="padding:14px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);display:flex;gap:12px;align-items:flex-start">
+      <div style="flex-shrink:0;color:var(--blue);background:var(--blue-light);width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center">${icon}</div>
+      <div>
+        <div style="font-weight:600;margin-bottom:3px">${title}</div>
+        <div style="font-size:12px;color:var(--text2);line-height:1.5">${desc}</div>
+      </div>
+    </div>`;
+  return `
+    <div class="page-hdr" style="margin-bottom:18px">
+      <h2 style="font-size:17px;font-weight:700;display:flex;align-items:center;gap:8px">${ICONS.messageSquare(22)} SMS / powiadomienia ${wipBadge}</h2>
+      <p style="font-size:13px;color:var(--text2);margin-top:6px;max-width:680px">Moduł do automatycznych powiadomień SMS i email dla gości oraz pracowników. Pozwoli odciążyć recepcję i zmniejszyć liczbę nieudanych meldunków.</p>
+    </div>
+    <div style="display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));max-width:900px">
+      ${card(ICONS.checkCircle(18), "Potwierdzenia rezerwacji", "Automatyczny SMS do gościa po utworzeniu rezerwacji — z adresem obiektu, datami i kodem dostępu.")}
+      ${card(ICONS.calendar(18), "Przypomnienia", "SMS dzień przed przyjazdem (check-in instructions) i dzień przed wyjazdem (godzina meldowania).")}
+      ${card(ICONS.banknote(18), "Przypomnienia o płatności", "Automatyczny SMS po terminie płatności (cykl: 3 dni, 7 dni, 14 dni).")}
+      ${card(ICONS.pencil(18), "Szablony wiadomości", "Edytor szablonów per typ rezerwacji (firmowa/indywidualna), z placeholderami {gość}, {data}, {pokój}.")}
+      ${card(ICONS.fileText(18), "Historia wysyłki", "Log każdej wysłanej wiadomości — kto/kiedy/treść/status doręczenia.")}
+      ${card(ICONS.settings(18), "Integracja", "Plugin'owy backend SMS — wsparcie SMSAPI.pl, Twilio, Vonage. Konfiguracja per obiekt (różne nadawcy).")}
+    </div>
+    <div style="margin-top:18px;padding:12px 14px;background:var(--blue-light);border:1px solid var(--blue-mid);border-radius:var(--radius);font-size:12px;color:var(--blue);max-width:900px;display:flex;gap:8px;align-items:flex-start">
+      <span style="flex-shrink:0;margin-top:1px">${ICONS.info(14)}</span>
+      <div><strong>Status:</strong> w planowaniu. Priorytetowo dla rozliczeń firmowych (przypomnienia o płatnościach skracają cykl odzysku).</div>
+    </div>`;
+}
+
+// ─── AGENT SI ────────────────────────────────────────────────
+function buildAiAgent() {
+  const wipBadge = `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;background:var(--orange-light);color:var(--orange);border:1px solid var(--orange-border);border-radius:99px;font-size:11px;font-weight:600">${ICONS.alertTriangle(12)} W przygotowaniu</span>`;
+  const exampleQ = (q, a) => `
+    <div style="padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px">
+      <div style="font-size:12px;color:var(--text3);font-style:italic;margin-bottom:6px">Przykładowe pytanie:</div>
+      <div style="font-size:13px;font-weight:500;color:var(--text);margin-bottom:6px">"${q}"</div>
+      <div style="font-size:11px;color:var(--text2);padding-top:6px;border-top:1px dashed var(--border);display:flex;gap:6px;align-items:flex-start">
+        <span style="color:var(--blue);flex-shrink:0;margin-top:1px">${ICONS.bot(13)}</span>
+        <span>${a}</span>
+      </div>
+    </div>`;
+  return `
+    <div class="page-hdr" style="margin-bottom:18px">
+      <h2 style="font-size:17px;font-weight:700;display:flex;align-items:center;gap:8px">${ICONS.bot(22)} Agent SI ${wipBadge}</h2>
+      <p style="font-size:13px;color:var(--text2);margin-top:6px;max-width:680px">Asystent oparty o LLM (Claude / GPT) z dostępem do danych aplikacji. Cel: pytania w naturalnym języku zamiast klikania przez raporty.</p>
+    </div>
+    <div style="display:grid;gap:18px;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));max-width:1100px">
+      <div>
+        <h3 style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:var(--text2);margin-bottom:10px;display:flex;align-items:center;gap:6px">${ICONS.search(13)} Zapytania w naturalnym języku</h3>
+        ${exampleQ("Ile zarobił obiekt Apartamenty Centralne w maju?", "Apartamenty Centralne, maj 2026: przychód 18 240 zł, koszty mediów 1 850 zł, zysk netto 16 390 zł. To 12% więcej niż w kwietniu.")}
+        ${exampleQ("Pokaż mi rezerwacje firmy Demo Logistyka z ostatnich 3 miesięcy", "Znalazłem 7 rezerwacji firmy Demo Logistyka między 2026-02-15 a 2026-05-21. Suma 14 nocy w 4 pokojach, łącznie 8 960 zł. Szczegóły poniżej…")}
+      </div>
+      <div>
+        <h3 style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:var(--text2);margin-bottom:10px;display:flex;align-items:center;gap:6px">${ICONS.sparkles(13)} Akcje automatyczne</h3>
+        ${exampleQ("Wygeneruj raport miesięczny dla wszystkich obiektów w PDF", "Generuję raporty… Gotowe. Wysłałem na maila admin@booking.local: 9 PDFów z KPI, listą rezerwacji i rozliczeniem mediów.")}
+        ${exampleQ("Zasugeruj cennik na czerwiec na podstawie obłożenia", "Bazując na obłożeniu maja (78%): pokoje 101–113 podnieś o 5%, 207-208 zostaw, 401-433 obniż o 8%. Zastosować zmiany?")}
+      </div>
+    </div>
+    <div style="margin-top:24px;padding:14px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);max-width:1100px">
+      <h3 style="font-size:13px;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:6px">${ICONS.zap(14)} Planowane integracje</h3>
+      <ul style="font-size:12px;color:var(--text2);line-height:1.7;margin:0;padding-left:18px">
+        <li><strong>Tool use</strong> — agent czyta/zapisuje przez istniejące endpointy API</li>
+        <li><strong>Voice input</strong> — Whisper API dla dyktowania zapytań na telefonie</li>
+        <li><strong>Anomaly detection</strong> — proaktywne alerty (np. "rezerwacja zmieniana 5 razy w ciągu godziny — czy to OK?")</li>
+        <li><strong>Bezpieczeństwo</strong> — agent działa w sandboxie, write actions wymagają potwierdzenia użytkownika</li>
+      </ul>
+    </div>`;
+}
+
+// ─── INSTRUKCJA / POMOC ──────────────────────────────────────
+function buildHelp() {
+  const section = (icon, title, content) => `
+    <div style="padding:14px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:12px">
+      <h3 style="font-size:14px;font-weight:700;margin:0 0 10px 0;display:flex;align-items:center;gap:8px;color:var(--text)">
+        <span style="color:var(--blue)">${icon}</span> ${title}
+      </h3>
+      <div style="font-size:13px;color:var(--text2);line-height:1.6">${content}</div>
+    </div>`;
+  const kbd = (key) => `<kbd style="display:inline-block;padding:1px 6px;background:var(--surface);border:1px solid var(--border);border-radius:4px;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;color:var(--text)">${key}</kbd>`;
+  return `
+    <div class="page-hdr" style="margin-bottom:18px">
+      <h2 style="font-size:17px;font-weight:700;display:flex;align-items:center;gap:8px">${ICONS.helpCircle(22)} Instrukcja / Pomoc</h2>
+      <p style="font-size:13px;color:var(--text2);margin-top:6px;max-width:680px">Krótki przewodnik po aplikacji — jak wykonywać najczęstsze zadania.</p>
+    </div>
+    <div style="max-width:780px">
+      ${section(ICONS.plus(16), "Jak utworzyć nową rezerwację", `
+        <ol style="margin:0;padding-left:20px">
+          <li>Z menu po lewej wybierz <strong>Obiekty</strong></li>
+          <li>Kliknij wybrany obiekt → wybierz pokój z listy</li>
+          <li>Uzupełnij formularz: daty, gość/firma, dane płatności</li>
+          <li>Kliknij <strong>Zapisz rezerwację</strong></li>
+        </ol>
+        <div style="margin-top:8px;padding:8px 10px;background:var(--blue-light);border-radius:6px;font-size:12px;color:var(--blue)">
+          ${ICONS.info(12)} Rezerwacja firmowa pozwala dodać wielu pracowników z indywidualnymi stawkami "za osobę".
+        </div>
+      `)}
+      ${section(ICONS.house(16), "Jak rozliczyć stałego najemcę", `
+        <p>Stały najemca to rezerwacja otwarta na czas nieokreślony.</p>
+        <ol style="margin:8px 0 0;padding-left:20px">
+          <li>Przy tworzeniu zaznacz checkbox <strong>"Stały najemca"</strong> (już w kalendarzu — bez wyboru daty końca)</li>
+          <li>Opcjonalnie wpisz <strong>Cenę miesięczną</strong> — stała stawka per miesiąc (28/29/30/31 dni bez różnicy). Bez tego liczy się za dobę z cennika.</li>
+          <li>Gdy najemca się wyprowadza — edytuj rezerwację i ustaw datę zakończenia</li>
+          <li>Raport przypisuje przychód do każdego miesiąca aktywności (nie tylko start)</li>
+        </ol>
+      `)}
+      ${section(ICONS.bed(16), "Per-bed availability — jak to działa", `
+        <p>Pokój wielołóżkowy może być zajęty częściowo — różni goście, niezależne rezerwacje.</p>
+        <ul style="margin:8px 0 0;padding-left:20px">
+          <li>Status pokoju "Wolny" / "Częściowo zajęty" / "Pełny" wynika z liczby zajętych łóżek</li>
+          <li>Przy nowej rezerwacji widzisz liczbę wolnych łóżek (<em>X / Y wolnych</em>) i lista zajmujących</li>
+          <li>System nie pozwoli zarezerwować więcej łóżek niż jest wolnych w danym terminie</li>
+          <li>W formularzu multi-room firmowym dropdown pokoju pokazuje obłożenie i wyłącza pełne pokoje</li>
+        </ul>
+      `)}
+      ${section(ICONS.user(16), "Rozliczenia firmowe \"za osobę\"", `
+        <p>Każdy pracownik ma swoje pole <strong>"Cena / osobę / doba"</strong>. Domyślnie wartość z cennika (pricePerEmployee). Można nadpisać per pracownik.</p>
+        <ul style="margin:8px 0 0;padding-left:20px">
+          <li>Multi-room: pracownicy bez przypisania są rozdzielani automatycznie po pojemnościach pokoi</li>
+          <li>Faktyczne dni per pracownik można edytować w Raportach (pole "Faktyczne dni")</li>
+          <li>Każdy pracownik osobno może być stałym najemcą z własną stawką miesięczną</li>
+        </ul>
+      `)}
+      ${section(ICONS.receipt(16), "Wgrywanie faktur i mediów", `
+        <p>Każdej rezerwacji można dołączyć pliki (faktura PDF, paragon JPG):</p>
+        <ol style="margin:8px 0 0;padding-left:20px">
+          <li>Otwórz rezerwację → sekcja <strong>Faktury i dokumenty</strong></li>
+          <li>Kliknij <strong>Dodaj plik</strong> → wybierz PDF / JPG / PNG</li>
+        </ol>
+        <p style="margin-top:10px">Media (prąd/gaz/woda/internet) wpisujesz <strong>per pokój per miesiąc</strong>. Pomniejszają zysk netto w raportach.</p>
+      `)}
+      ${section(ICONS.fileText(16), "Czytanie raportów", `
+        <ul style="margin:0;padding-left:20px">
+          <li><strong>Zysk netto</strong> (hero KPI) — przychód minus koszty (media + sprzątanie)</li>
+          <li><strong>Δ MoM</strong> — zmiana miesiąc-do-miesiąca w procentach</li>
+          <li><strong>Obłożenie</strong> — średni procent zajętych łóżkonocy w okresie</li>
+          <li><strong>Grupy firmowe</strong> — rezerwacja na wiele pokoi tej samej firmy widoczna jako rozwijalna grupa</li>
+          <li>Eksport CSV — przycisk u góry zakładki Raporty</li>
+        </ul>
+      `)}
+      ${section(ICONS.settings(16), "Hasła i użytkownicy", `
+        <p>Zarządzanie z linii komend (na serwerze lub lokalnie):</p>
+        <pre style="background:var(--surface);padding:8px 10px;border-radius:6px;font-family:'IBM Plex Mono',monospace;font-size:11px;margin:8px 0;overflow-x:auto"><code>./users list                                  # lista
+./users add nowy "haslo" --role worker        # dodaj
+./users passwd admin "nowe-haslo"             # zmiana hasła
+./users role nowy admin                        # promocja
+./users delete user2                           # usuń</code></pre>
+        <p>Role: <strong>admin</strong> (pełny dostęp) lub <strong>worker</strong> (rezerwacje + edycja, bez kasowania).</p>
+      `)}
+      ${section(ICONS.rotateCw(16), "Backupy", `
+        <p>Trzy poziomy backupów:</p>
+        <ol style="margin:8px 0 0;padding-left:20px">
+          <li><strong>Zmianowe</strong> — przy każdym zapisie rezerwacji (ostatnich 90 kopii)</li>
+          <li><strong>Dzienne</strong> — codziennie o 3:00 (90-dniowa rotacja, snapshot data/)</li>
+          <li><strong>Off-site na Macu</strong> — launchd pobiera prod + staging dwa razy dziennie</li>
+        </ol>
+      `)}
+      ${section(ICONS.info(16), "Skróty klawiszowe", `
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <tr><td style="padding:4px 8px">${kbd("Esc")}</td><td style="padding:4px 8px;color:var(--text2)">Zamknij modal / anuluj edycję</td></tr>
+          <tr><td style="padding:4px 8px">${kbd("Enter")}</td><td style="padding:4px 8px;color:var(--text2)">Zapisz (w formularzach)</td></tr>
+          <tr><td style="padding:4px 8px">${kbd("Cmd")}+${kbd("Shift")}+${kbd("R")}</td><td style="padding:4px 8px;color:var(--text2)">Hard reload (po wgraniu nowej wersji)</td></tr>
+        </table>
+      `)}
+    </div>`;
+}
+
 function buildSettings() {
   const sq = (state.settingsSearch||"").toLowerCase();
   const onlyMissing = !!state.settingsOnlyMissing;
@@ -3569,13 +3764,13 @@ function buildSettings() {
         <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1.2fr;gap:8px;padding:6px 14px;border-bottom:1px solid var(--border);align-items:center;font-size:12px">
           <div>${esc(room.name)} <span style="color:var(--text3);font-size:10px">· ${esc(room.beds)}</span></div>
           <input type="number" class="price-inp" data-room="${room.id}" data-field="basePrice" value="${room.basePrice||0}" min="0"
-            style="padding:5px 8px;border:1px solid ${noBase?"var(--orange-border)":"var(--border)"};border-radius:var(--radius);background:${noBase?"var(--orange-light)":"var(--surface2)"};font-family:'DM Mono',monospace;text-align:right;outline:none;font-size:12px;color:var(--text)" />
+            style="padding:5px 8px;border:1px solid ${noBase?"var(--orange-border)":"var(--border)"};border-radius:var(--radius);background:${noBase?"var(--orange-light)":"var(--surface2)"};font-family:'IBM Plex Mono',monospace;text-align:right;outline:none;font-size:12px;color:var(--text)" />
           <input type="number" class="price-inp" data-room="${room.id}" data-field="extraPerAdult" value="${room.extraPerAdult||0}" min="0"
-            style="padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-family:'DM Mono',monospace;text-align:right;outline:none;font-size:12px;color:var(--text)" />
+            style="padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-family:'IBM Plex Mono',monospace;text-align:right;outline:none;font-size:12px;color:var(--text)" />
           <input type="number" class="price-inp" data-room="${room.id}" data-field="extraPerChild" value="${room.extraPerChild||0}" min="0"
-            style="padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-family:'DM Mono',monospace;text-align:right;outline:none;font-size:12px;color:var(--text)" />
+            style="padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-family:'IBM Plex Mono',monospace;text-align:right;outline:none;font-size:12px;color:var(--text)" />
           <input type="number" class="price-inp" data-room="${room.id}" data-field="pricePerEmployee" value="${room.pricePerEmployee||0}" min="0"
-            style="padding:5px 8px;border:1px solid ${noPpe?"var(--orange-border)":"var(--border)"};border-radius:var(--radius);background:${noPpe?"var(--orange-light)":"var(--surface2)"};font-family:'DM Mono',monospace;text-align:right;outline:none;font-size:12px;color:var(--text)" />
+            style="padding:5px 8px;border:1px solid ${noPpe?"var(--orange-border)":"var(--border)"};border-radius:var(--radius);background:${noPpe?"var(--orange-light)":"var(--surface2)"};font-family:'IBM Plex Mono',monospace;text-align:right;outline:none;font-size:12px;color:var(--text)" />
         </div>`;
     }).join("");
 
@@ -3584,13 +3779,13 @@ function buildSettings() {
       <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1.2fr auto;gap:8px;padding:10px 14px;background:var(--blue-light);border-top:1px dashed var(--border);align-items:center;font-size:11px">
         <div style="font-size:11px;color:var(--blue);font-weight:600;display:flex;align-items:center;gap:5px">${ICONS.clipboardList(13)} Ustaw dla wszystkich pokoi tego obiektu →</div>
         <input type="number" data-bulk-loc="${loc.id}" data-bulk-field="basePrice" placeholder="—" min="0"
-          style="padding:5px 8px;border:1px solid var(--blue-mid);border-radius:var(--radius);background:var(--surface);font-family:'DM Mono',monospace;text-align:right;outline:none;font-size:12px;color:var(--text)" />
+          style="padding:5px 8px;border:1px solid var(--blue-mid);border-radius:var(--radius);background:var(--surface);font-family:'IBM Plex Mono',monospace;text-align:right;outline:none;font-size:12px;color:var(--text)" />
         <input type="number" data-bulk-loc="${loc.id}" data-bulk-field="extraPerAdult" placeholder="—" min="0"
-          style="padding:5px 8px;border:1px solid var(--blue-mid);border-radius:var(--radius);background:var(--surface);font-family:'DM Mono',monospace;text-align:right;outline:none;font-size:12px;color:var(--text)" />
+          style="padding:5px 8px;border:1px solid var(--blue-mid);border-radius:var(--radius);background:var(--surface);font-family:'IBM Plex Mono',monospace;text-align:right;outline:none;font-size:12px;color:var(--text)" />
         <input type="number" data-bulk-loc="${loc.id}" data-bulk-field="extraPerChild" placeholder="—" min="0"
-          style="padding:5px 8px;border:1px solid var(--blue-mid);border-radius:var(--radius);background:var(--surface);font-family:'DM Mono',monospace;text-align:right;outline:none;font-size:12px;color:var(--text)" />
+          style="padding:5px 8px;border:1px solid var(--blue-mid);border-radius:var(--radius);background:var(--surface);font-family:'IBM Plex Mono',monospace;text-align:right;outline:none;font-size:12px;color:var(--text)" />
         <input type="number" data-bulk-loc="${loc.id}" data-bulk-field="pricePerEmployee" placeholder="—" min="0"
-          style="padding:5px 8px;border:1px solid var(--blue-mid);border-radius:var(--radius);background:var(--surface);font-family:'DM Mono',monospace;text-align:right;outline:none;font-size:12px;color:var(--text)" />
+          style="padding:5px 8px;border:1px solid var(--blue-mid);border-radius:var(--radius);background:var(--surface);font-family:'IBM Plex Mono',monospace;text-align:right;outline:none;font-size:12px;color:var(--text)" />
         <button class="cal-nav-btn" data-bulk-apply="${loc.id}" style="padding:5px 12px;font-size:11px;background:var(--blue);color:#fff;border-color:var(--blue);font-weight:600">Zastosuj</button>
       </div>`;
 
@@ -3598,7 +3793,7 @@ function buildSettings() {
       <div class="settings-block" style="margin-bottom:14px;overflow:hidden">
         <div class="settings-hdr" data-settings-toggle="${loc.id}" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px">
           <span>${collapsed ? "▶" : "▼"} ${locIcon(loc, 16)} ${esc(loc.name)} <span style="color:var(--text3);font-weight:500;font-size:11px">· ${esc(loc.city)}</span></span>
-          <span style="font-size:11px;font-weight:500;color:var(--text2);font-family:'DM Mono',monospace">
+          <span style="font-size:11px;font-weight:500;color:var(--text2);font-family:'IBM Plex Mono',monospace">
             ${rooms.length} ${rooms.length===1?"pokój":rooms.length<5?"pokoje":"pokoi"}${missingCount > 0 ? ` · <span style="color:var(--orange)">${missingCount} bez ceny</span>` : ""}
           </span>
         </div>
@@ -3699,7 +3894,7 @@ function buildTypeSelector() {
     <p style="font-size:13px;color:var(--text2);margin-bottom:10px;">Wybierz rodzaj rezerwacji:</p>
     <div class="type-grid">
       <button class="type-btn ${state.bookingType==="individual"?"sel":""}" data-type="individual">
-        <span class="type-icon">👤</span>
+        <span class="type-icon">${ICONS.user(20)}</span>
         <span class="type-lbl">Indywidualna</span>
         <span class="type-desc">Na nazwisko</span>
       </button>
@@ -3824,24 +4019,46 @@ function buildCalendar(loc) {
     }
   }
 
+  // Indywidualna rezerwacja może być od razu stała — wtedy nie ma sensu wybierać
+  // daty wyjazdu, kalendarz to overkill. Pokazujemy prosty wybór startu zamiast siatki.
+  const isIndividual = state.bookingType === "individual";
+  const permPickerActive = isIndividual && !!state.isPermanent;
+
   return `
     <div style="font-size:12px;margin-bottom:10px;padding:8px 10px;background:var(--yellow-light);border:1px solid var(--yellow-border);border-radius:var(--radius);color:var(--yellow)">
       <span style="display:inline-flex;align-items:center;gap:5px;vertical-align:-2px">${ICONS.bed(13)}</span> Wybierasz <strong>termin blokady pokoju</strong>. Faktyczny pobyt wpiszesz osobno w Raportach.
     </div>
-    <div class="cal-nav">
-      <button class="cal-nav-btn" id="prevMonth">‹</button>
-      <span class="cal-month">${MONTHS[month]} ${year}</span>
-      <button class="cal-nav-btn" id="nextMonth">›</button>
-    </div>
-    <div class="cal-legend">
-      <span><span class="legend-dot" style="background:var(--red-light);border:1px solid var(--red-border)"></span>Zajęty</span>
-    </div>
-    <div class="cal-grid">
-      ${DAYS_S.map(d=>`<div class="cal-dow">${d}</div>`).join("")}
-      ${cells}
-    </div>
-    <p class="cal-hint">${hint}</p>
-    <button class="check-btn" id="checkAvailBtn" ${!(state.calStart&&state.calEnd)?"disabled":""}>Sprawdź dostępność</button>
+
+    ${isIndividual ? `
+      <label class="checkbox-row" style="margin-bottom:12px;padding:10px 12px;background:${permPickerActive?"var(--green-light)":"var(--surface2)"};border:1px solid ${permPickerActive?"var(--green-mid)":"var(--border)"};border-radius:var(--radius);cursor:pointer">
+        <input type="checkbox" id="calIsPermanent" ${permPickerActive?"checked":""} />
+        <span style="display:inline-flex;align-items:center;gap:5px;vertical-align:-2px">${ICONS.house(14)}</span> Stały najemca — rezerwacja otwarta (bez daty końca, ustawisz tylko start)
+      </label>
+    ` : ""}
+
+    ${permPickerActive ? `
+      <div style="padding:14px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius)">
+        <label style="display:block;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.3px;margin-bottom:6px">Data rozpoczęcia (od kiedy najemca mieszka)</label>
+        <input type="date" id="permStartInput" value="${esc(state.calStart || todayStr())}" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:14px;color:var(--text);font-family:'IBM Plex Mono',monospace;outline:none" />
+        <div style="font-size:11px;color:var(--text3);margin-top:6px;font-style:italic">Rezerwacja jest otwarta — kończysz ją ręcznie w Raportach. Termin "do" nie jest tu potrzebny.</div>
+      </div>
+      <button class="check-btn" id="checkAvailBtn" style="margin-top:12px" ${!state.calStart?"disabled":""}>Sprawdź dostępność</button>
+    ` : `
+      <div class="cal-nav">
+        <button class="cal-nav-btn" id="prevMonth">‹</button>
+        <span class="cal-month">${MONTHS[month]} ${year}</span>
+        <button class="cal-nav-btn" id="nextMonth">›</button>
+      </div>
+      <div class="cal-legend">
+        <span><span class="legend-dot" style="background:var(--red-light);border:1px solid var(--red-border)"></span>Zajęty</span>
+      </div>
+      <div class="cal-grid">
+        ${DAYS_S.map(d=>`<div class="cal-dow">${d}</div>`).join("")}
+        ${cells}
+      </div>
+      <p class="cal-hint">${hint}</p>
+      <button class="check-btn" id="checkAvailBtn" ${!(state.calStart&&state.calEnd)?"disabled":""}>Sprawdź dostępność</button>
+    `}
     ${availHtml}`;
 }
 
@@ -3860,17 +4077,20 @@ function buildBookingForm(loc) {
   if (hasCustom) {
     total = customPriceNum * Math.max(1, selectedRooms.length);
   } else if (isCompany) {
-    // Per-pracownik: każdy guest ma swój billingMode i przypisany pokój
+    // Per-pracownik "Za osobę": rate = g.dailyRate (jeśli ustawiona) albo pricePerEmployee z cennika pokoju.
+    // billingMode="room" zostawiamy jako legacy fallback do basePrice dla starych rezerwacji.
     total = selectedRooms.reduce((sum, rid) => {
       const r = loc.rooms.find(x=>x.id===rid);
       if (!r) return sum;
       const assigned = state.guests.filter(g => g.assignedRoom === rid);
-      // Pracownicy bez assignedRoom traktujemy jakby byli w pierwszym pokoju
       const orphans = (rid === selectedRooms[0]) ? state.guests.filter(g => !g.assignedRoom) : [];
       const inRoom = [...assigned, ...orphans];
       let perDay = 0;
       for (const g of inRoom) {
-        perDay += (g.billingMode === "employee") ? (r.pricePerEmployee || 0) : (r.basePrice || 0);
+        const custom = parseFloat(g.dailyRate);
+        if (!isNaN(custom) && custom >= 0) { perDay += custom; continue; }
+        const defaultRate = (g.billingMode === "room") ? (r.basePrice || 0) : (r.pricePerEmployee || 0);
+        perDay += defaultRate;
       }
       return sum + perDay * nights;
     }, 0);
@@ -3935,7 +4155,7 @@ function buildBookingForm(loc) {
             <input type="number" id="permanentMonthlyRateInput" min="0" step="0.01"
               value="${esc(state.permanentMonthlyRate)}"
               placeholder="np. 2500"
-              style="width:130px;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:13px;color:var(--text);font-family:'DM Mono',monospace;outline:none" />
+              style="width:130px;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:13px;color:var(--text);font-family:'IBM Plex Mono',monospace;outline:none" />
           </div>
           <div style="font-size:10px;color:var(--text3);font-style:italic">
             ${parseFloat(state.permanentMonthlyRate) > 0
@@ -3967,7 +4187,7 @@ function buildBookingForm(loc) {
       <strong>Wybrane pokoje:</strong>
       ${selectedRooms.map(rid => {
         const r = loc.rooms.find(r=>r.id===rid);
-        return r ? `<span style="font-family:'DM Mono',monospace;background:var(--surface);padding:2px 7px;border-radius:99px;border:1px solid var(--blue-mid)">${esc(r.name)} (${r.beds})</span>` : '';
+        return r ? `<span style="font-family:'IBM Plex Mono',monospace;background:var(--surface);padding:2px 7px;border-radius:99px;border:1px solid var(--blue-mid)">${esc(r.name)} (${r.beds})</span>` : '';
       }).join('')}
     </div>` : ""}
 
@@ -3989,50 +4209,46 @@ function buildBookingForm(loc) {
       </div>
       ${(() => {
         const assignedR = loc.rooms.find(r => r.id === g.assignedRoom);
-        const bp  = assignedR?.basePrice || 0;
         const ppe = assignedR?.pricePerEmployee || 0;
-        const defaultRate = g.billingMode === "employee" ? ppe : bp;
+        // "Za osobę": rozliczenie zawsze per pracownik. Default rate = pricePerEmployee z cennika.
+        const defaultRate = ppe;
         const noPriceWarning = assignedR && defaultRate === 0 && (g.dailyRate == null || g.dailyRate === "");
         return `
-        <div style="display:grid;grid-template-columns:1.3fr 1.6fr 1fr;gap:6px;margin-top:8px;align-items:end">
+        <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:6px;margin-top:8px;align-items:end">
           <div class="field-wrap">
             <label>Pokój</label>
-            <select data-guest="${i}" data-field="assignedRoom" style="padding:7px 9px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-size:12px;color:var(--text);font-family:inherit;outline:none;width:100%">
+            <select data-guest="${i}" data-field="assignedRoom" style="padding:7px 9px;border:1px solid ${!g.assignedRoom ? "var(--orange-border)" : "var(--border)"};border-radius:var(--radius);background:${!g.assignedRoom ? "var(--orange-light)" : "var(--surface2)"};font-size:12px;color:var(--text);font-family:inherit;outline:none;width:100%">
               <option value="">— wybierz —</option>
               ${(state.selectedRooms||[]).map(rid => {
                 const r = loc.rooms.find(r=>r.id===rid);
-                return r ? `<option value="${rid}" ${g.assignedRoom===rid?"selected":""}>${esc(r.name)} · ${r.beds}</option>` : '';
+                if (!r) return '';
+                // Ile pracowników jest już przypisanych do tego pokoju (BEZ obecnego)
+                const assignedToThis = state.guests.filter((og, oi) => oi !== i && og.assignedRoom === rid).length;
+                const isFull = assignedToThis >= r.capacity;
+                const isCurrent = g.assignedRoom === rid;
+                // Disable opcji gdy pokój pełny i nie jest to aktualnie wybrana opcja
+                const dis = isFull && !isCurrent ? 'disabled' : '';
+                const occ = `${assignedToThis + (isCurrent ? 1 : 0)}/${r.capacity}`;
+                const label = `${esc(r.name)} · ${r.beds} · ${occ}${isFull && !isCurrent ? ' (pełny)' : ''}`;
+                return `<option value="${rid}" ${isCurrent?"selected":""} ${dis}>${label}</option>`;
               }).join('')}
             </select>
           </div>
           <div class="field-wrap">
-            <label>Tryb rozliczenia</label>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
-              <label style="cursor:pointer;display:flex;align-items:center;gap:4px;justify-content:center;padding:6px 6px;border:1px solid ${g.billingMode!=="employee"?"var(--blue)":"var(--border)"};border-radius:var(--radius);background:${g.billingMode!=="employee"?"var(--blue-light)":"var(--surface2)"};font-size:11px;color:${g.billingMode!=="employee"?"var(--blue)":"var(--text)"};font-weight:${g.billingMode!=="employee"?"600":"500"}">
-                <input type="radio" name="guestBilling-${i}" data-guest-mode="${i}" value="room" ${g.billingMode!=="employee"?"checked":""} style="margin:0;accent-color:var(--blue)" />
-                Za pokój
-              </label>
-              <label style="cursor:pointer;display:flex;align-items:center;gap:4px;justify-content:center;padding:6px 6px;border:1px solid ${g.billingMode==="employee"?"var(--blue)":"var(--border)"};border-radius:var(--radius);background:${g.billingMode==="employee"?"var(--blue-light)":"var(--surface2)"};font-size:11px;color:${g.billingMode==="employee"?"var(--blue)":"var(--text)"};font-weight:${g.billingMode==="employee"?"600":"500"}">
-                <input type="radio" name="guestBilling-${i}" data-guest-mode="${i}" value="employee" ${g.billingMode==="employee"?"checked":""} style="margin:0;accent-color:var(--blue)" />
-                Za prac.
-              </label>
-            </div>
-          </div>
-          <div class="field-wrap">
-            <label>Cena / doba (zł)</label>
+            <label>Cena / osobę / doba (zł)</label>
             <input type="number" data-guest="${i}" data-field="dailyRate" min="0" step="0.01"
               value="${g.dailyRate != null && g.dailyRate !== "" ? esc(g.dailyRate) : ""}"
               placeholder="${defaultRate || "0"}"
-              style="padding:7px 9px;border:1px solid ${noPriceWarning?"var(--orange-border)":"var(--border)"};border-radius:var(--radius);background:${noPriceWarning?"var(--orange-light)":"var(--surface2)"};font-size:12px;color:var(--text);font-family:'DM Mono',monospace;outline:none;width:100%" />
+              style="padding:7px 9px;border:1px solid ${noPriceWarning?"var(--orange-border)":"var(--border)"};border-radius:var(--radius);background:${noPriceWarning?"var(--orange-light)":"var(--surface2)"};font-size:12px;color:var(--text);font-family:'IBM Plex Mono',monospace;outline:none;width:100%" />
           </div>
         </div>
         <div style="font-size:10px;color:${noPriceWarning?"var(--orange)":"var(--text3)"};font-style:italic;margin-top:4px">
           ${g.dailyRate != null && g.dailyRate !== ""
-            ? `Stawka nadpisana indywidualnie.`
+            ? `Stawka nadpisana indywidualnie: zł${esc(g.dailyRate)} × dni za tego pracownika.`
             : noPriceWarning
-              ? `⚠️ Brak ceny w cenniku pokoju — uzupełnij w Ustawieniach albo wpisz stawkę ręcznie.`
+              ? `⚠️ Brak ceny "za osobę" w cenniku pokoju — uzupełnij w Ustawieniach albo wpisz stawkę ręcznie.`
               : assignedR
-                ? `Domyślna stawka zł${defaultRate}/doba (z cennika pokoju)`
+                ? `Domyślnie zł${defaultRate}/osobę/dobę (z cennika pokoju). Wpisz inną kwotę żeby nadpisać per pracownik.`
                 : `Wybierz pokój żeby zobaczyć cennik`}
         </div>`;
       })()}
@@ -4323,7 +4539,7 @@ function buildEditModal() {
                 <button class="cal-nav-btn" id="actualClearAll" style="font-size:11px;padding:3px 10px;color:var(--red)">Wyczyść</button>
               </div>
               ${actualNights > 0
-                ? `<div style="font-size:12px;color:var(--text2);margin-bottom:10px;font-family:'DM Mono',monospace">Faktyczne: ${actualNights} ${nw(actualNights)}${hasExtended?` <span style="color:var(--orange);font-weight:700">(zawiera dni poza rezerwacją)</span>`:""}${room?` · zł${calcBookingTotal(b, room, actualNights).toLocaleString()}`:""}</div>`
+                ? `<div style="font-size:12px;color:var(--text2);margin-bottom:10px;font-family:'IBM Plex Mono',monospace">Faktyczne: ${actualNights} ${nw(actualNights)}${hasExtended?` <span style="color:var(--orange);font-weight:700">(zawiera dni poza rezerwacją)</span>`:""}${room?` · zł${calcBookingTotal(b, room, actualNights).toLocaleString()}`:""}</div>`
                 : `<div style="font-size:12px;color:var(--text3);margin-bottom:10px">Brak zaznaczonych — rozliczenie wg rezerwacji (${reservedNights} ${nw(reservedNights)})</div>`
               }
               ${hasExtended ? `<div class="edit-extend-warn" style="display:flex;align-items:center;gap:6px">${ICONS.alertTriangle(13)} Pobyt zawiera dni poza terminem rezerwacji.</div>` : ""}
@@ -4347,17 +4563,28 @@ function buildEditModal() {
               <div style="display:flex;flex-direction:column;gap:4px;padding:8px;border:1px solid ${isPerm?"var(--green-mid)":"var(--border)"};border-radius:var(--radius);margin-bottom:6px;background:${isPerm?"var(--green-light)":"var(--surface2)"}">
                 <div style="font-size:12px;font-weight:600">${esc(g.name || `Pracownik ${idx+1}`)}${isPerm?' <span style="font-size:10px;color:var(--green);background:var(--surface);padding:1px 6px;border-radius:99px;margin-left:4px;display:inline-flex;align-items:center;gap:3px;vertical-align:middle">${ICONS.house(12)} Stały najemca</span>':""}</div>
                 <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-                  <select data-edit-guest-mode="${idx}" style="flex:1;min-width:160px;padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:12px;color:var(--text);font-family:inherit;outline:none">
-                    <option value="room"     ${mode==="room"    ?"selected":""}>Za pokój (zł${bp}/doba)</option>
-                    <option value="employee" ${mode==="employee"?"selected":""}>Za pracownika (zł${ppe}/doba)</option>
-                  </select>
-                  <label style="font-size:11px;color:var(--text2);white-space:nowrap">zł/doba:</label>
+                  <label style="font-size:11px;color:var(--text2);white-space:nowrap">Cena / osobę / doba (zł):</label>
                   <input type="number" data-edit-guest-rate="${idx}" min="0" step="0.01"
                     value="${g.dailyRate != null && g.dailyRate !== "" ? esc(g.dailyRate) : ""}"
-                    placeholder="${defaultRate}"
-                    style="width:90px;padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:12px;color:var(--text);font-family:'DM Mono',monospace;outline:none" />
+                    placeholder="${ppe}"
+                    style="flex:1;min-width:100px;padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:12px;color:var(--text);font-family:'IBM Plex Mono',monospace;outline:none" />
                 </div>
-                <div style="font-size:10px;color:var(--text3);font-style:italic">${g.dailyRate != null && g.dailyRate !== "" ? "stawka nadpisana indywidualnie" : `domyślnie zł${defaultRate}/doba (z cennika pokoju)`}</div>
+                <div style="font-size:10px;color:var(--text3);font-style:italic">${g.dailyRate != null && g.dailyRate !== "" ? "stawka nadpisana indywidualnie" : `domyślnie zł${ppe}/osobę/dobę (z cennika pokoju)`}</div>
+                ${!isPerm ? (() => {
+                  // Per-pracownik liczba faktycznych dni (overrides booking-level actualDays/nights dla tego workera)
+                  const bookingNights = diffDays(em.from, em.to);
+                  const actualN = (g.actualNights !== undefined && g.actualNights !== "" && g.actualNights !== null) ? g.actualNights : "";
+                  const hasOverride = actualN !== "" && !isNaN(parseInt(actualN));
+                  const finalN = hasOverride ? parseInt(actualN) : bookingNights;
+                  return `
+                <div style="display:flex;gap:6px;align-items:center;margin-top:4px">
+                  <label style="font-size:11px;color:var(--text2);white-space:nowrap">Faktyczne dni:</label>
+                  <input type="number" data-edit-guest-actualnights="${idx}" min="0" max="999" value="${esc(actualN)}"
+                    placeholder="${bookingNights}"
+                    style="width:80px;padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:12px;color:var(--text);font-family:'IBM Plex Mono',monospace;outline:none" />
+                  <span style="font-size:10px;color:var(--text3);font-style:italic">${hasOverride ? `liczone: ${finalN} ${nw(finalN)}` : `wg rezerwacji: ${bookingNights} ${nw(bookingNights)}`}</span>
+                </div>`;
+                })() : ""}
                 <label style="display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer;padding:4px 0">
                   <input type="checkbox" data-edit-guest-perm="${idx}" ${isPerm?"checked":""} />
                   <span style="display:inline-flex;align-items:center;gap:5px;vertical-align:-2px">${ICONS.house(14)}</span> Stały najemca (otwarta rezerwacja)
@@ -4378,7 +4605,7 @@ function buildEditModal() {
                   <input type="number" data-edit-guest-permmonthly="${idx}" min="0" step="0.01"
                     value="${esc(gMonthly)}"
                     placeholder="pusto = za dobę"
-                    style="width:120px;padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:11px;color:var(--text);font-family:'DM Mono',monospace;outline:none" />
+                    style="width:120px;padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:11px;color:var(--text);font-family:'IBM Plex Mono',monospace;outline:none" />
                 </div>
                 <div style="font-size:10px;color:var(--text3);font-style:italic">${hasGMonthly ? `Każdy miesiąc = zł${gMonthlyNum} (niezależnie od liczby dni).` : `Liczone za dobę. Wpisz miesięczną żeby przejść na stałą stawkę.`}</div>`;
                 })() : ""}
@@ -4417,7 +4644,7 @@ function buildEditModal() {
                 <input type="number" id="editPermanentMonthlyRate" min="0" step="0.01"
                   value="${esc(currentMonthly)}"
                   placeholder="np. 2500 — pusto: liczyć za dobę z cennika"
-                  style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:13px;color:var(--text);font-family:'DM Mono',monospace;outline:none" />
+                  style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:13px;color:var(--text);font-family:'IBM Plex Mono',monospace;outline:none" />
                 <div style="font-size:10px;color:var(--text3);font-style:italic;margin-top:4px">
                   ${hasMonthly
                     ? `Każdy miesiąc liczy się jako zł${monthlyNum} (28/29/30/31 dni — bez różnicy). Stawka dodaje się do raportu na koniec każdego miesiąca.`
@@ -4461,7 +4688,7 @@ function buildEditModal() {
               const dtStr = dt ? `${dt.toLocaleDateString("pl-PL")} ${dt.toTimeString().slice(0,5)}` : "";
               return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;margin-bottom:6px;font-size:12px">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-                  <span style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace">${dtStr} · ${esc(n.createdBy||"")}</span>
+                  <span style="font-size:10px;color:var(--text3);font-family:'IBM Plex Mono',monospace">${dtStr} · ${esc(n.createdBy||"")}</span>
                   <div style="display:flex;gap:4px">
                     <button class="cal-nav-btn" data-edit-note="${n.id}" style="font-size:10px;padding:2px 6px;display:inline-flex;align-items:center" title="Edytuj">${ICONS.pencil(11)}</button>
                     <button class="cal-nav-btn" data-delete-note="${n.id}" style="font-size:10px;padding:2px 6px;color:var(--red);border-color:var(--red);display:inline-flex;align-items:center" title="Usuń">${ICONS.trash(11)}</button>
@@ -5110,6 +5337,36 @@ function attachEvents() {
   }
 
   if (state.step==="calendar") {
+    // Checkbox "stały najemca" w widoku kalendarza (tylko indywidualne)
+    document.getElementById("calIsPermanent")?.addEventListener("change", e => {
+      state.isPermanent = e.target.checked;
+      if (e.target.checked) {
+        // Auto-set start na dziś jeśli nie ma, end na placeholder (+1 dzień) — "to" i tak jest
+        // bez znaczenia gdy isPermanent. Flagi placeholder pozwala wykryć "fake end" gdy user
+        // później odhaczy stałego najemcę w booking-form.
+        if (!state.calStart) state.calStart = todayStr();
+        const d = new Date(state.calStart); d.setDate(d.getDate() + 1);
+        state.calEnd = toStr(d);
+        state.calEndWasPlaceholder = true;
+      } else {
+        // Wyłączamy stały najemca → reset placeholdera end, niech user wybierze normalnie
+        state.calEnd = null;
+        state.calEndWasPlaceholder = false;
+        state.permanentMonthlyRate = "";
+      }
+      state.availResult = null;
+      state.selectedRoom = null;
+      render();
+    });
+    document.getElementById("permStartInput")?.addEventListener("change", e => {
+      state.calStart = e.target.value;
+      // Placeholder end = start + 1 dzień (i tak ignorowany dla isPermanent)
+      const d = new Date(state.calStart); d.setDate(d.getDate() + 1);
+      state.calEnd = toStr(d);
+      state.calEndWasPlaceholder = true;
+      state.availResult = null;
+      render();
+    });
     document.getElementById("prevMonth")?.addEventListener("click", () => {
       state.viewMonth = new Date(state.viewMonth.getFullYear(), state.viewMonth.getMonth()-1, 1); render();
     });
@@ -5119,6 +5376,8 @@ function attachEvents() {
     document.querySelectorAll(".cal-day[data-date]").forEach(btn => {
       btn.addEventListener("click", () => {
         const ds = btn.dataset.date;
+        // Click w kalendarzu = user wybiera prawdziwe daty, reset flagi placeholder
+        state.calEndWasPlaceholder = false;
         if (!state.calStart || (state.calStart && state.calEnd)) {
           state.calStart = ds; state.calEnd = null; state.availResult = null; state.selectedRoom = null;
         } else {
@@ -5243,6 +5502,22 @@ function attachEvents() {
     });
 
     document.getElementById("isPermanentInput")?.addEventListener("change", e => {
+      // Jeśli user przyszedł z calendar step wybierając "Stały najemca" (calEnd to placeholder
+      // start+1 dzień), to odhaczenie tutaj zostawia booking z 1-nocną rezerwacją → cofamy do
+      // kalendarza żeby wybrał prawdziwą datę wyjazdu.
+      if (!e.target.checked && state.calEndWasPlaceholder) {
+        e.target.checked = true; // wizualnie cofnij — render i tak nadpisze
+        state.isPermanent = false;
+        state.calEnd = null;
+        state.calEndWasPlaceholder = false;
+        state.permanentMonthlyRate = "";
+        state.availResult = null;
+        state.selectedRoom = null;
+        state.step = "calendar";
+        showToast("Wróć do kalendarza i wybierz datę wyjazdu.");
+        render();
+        return;
+      }
       state.isPermanent = e.target.checked;
       if (!e.target.checked) state.permanentMonthlyRate = "";
       render();
@@ -5391,6 +5666,15 @@ function attachEditEvents() {
     });
     inp.addEventListener("change", () => render());
   });
+  document.querySelectorAll("[data-edit-guest-actualnights]").forEach(inp => {
+    inp.addEventListener("input", e => {
+      const idx = parseInt(e.target.dataset.editGuestActualnights);
+      if (!state.editModal.guests) state.editModal.guests = [];
+      if (!state.editModal.guests[idx]) state.editModal.guests[idx] = {};
+      state.editModal.guests[idx].actualNights = e.target.value;
+    });
+    inp.addEventListener("change", () => render());
+  });
   document.getElementById("editIsPermanent")?.addEventListener("change", e => {
     state.editModal.isPermanent = e.target.checked;
     if (!e.target.checked) {
@@ -5460,6 +5744,11 @@ function attachEditEvents() {
           if (!isNaN(m) && m > 0) b.guests[idx].permanentMonthlyRate = m;
           else delete b.guests[idx].permanentMonthlyRate;
         }
+        if (eg.actualNights !== undefined) {
+          const n = eg.actualNights === "" ? NaN : parseInt(eg.actualNights);
+          if (!isNaN(n) && n >= 0) b.guests[idx].actualNights = n;
+          else delete b.guests[idx].actualNights;
+        }
       });
       // Booking-level isPermanent dla rezerwacji indywidualnej
       if (b.bookingType !== "company" && em.isPermanent !== undefined) {
@@ -5506,7 +5795,40 @@ function attachEditEvents() {
 // ============================================================
 // ACTIONS
 // ============================================================
-function newGuest() { return { name:"", phone:"", isAdult: true, billingMode: "room", assignedRoom: "" }; }
+// billingMode "employee" = "Za osobę" — domyślnie używamy pricePerEmployee z cennika.
+// Pole jest zachowane w modelu dla backward compat z istniejącymi rezerwacjami,
+// ale UI nie pokazuje już toggla (jest tylko "Cena / osobę / doba").
+function newGuest() { return { name:"", phone:"", isAdult: true, billingMode: "employee", assignedRoom: "" }; }
+
+// Multi-room company: rozdziel orphany (workers bez assignedRoom) między pokoje uwzględniając
+// pojemność. Jeśli wszystkie pokoje pełne — orphany lądują w pierwszym (over-cap).
+// Zwraca nowy array gości z wypełnionym assignedRoom.
+function distributeOrphans(guests, selectedRooms, loc) {
+  if (!Array.isArray(selectedRooms) || selectedRooms.length === 0) return guests;
+  const counts = {};
+  selectedRooms.forEach(rid => { counts[rid] = 0; });
+  // Najpierw policz tych już przypisanych
+  guests.forEach(g => {
+    if (g.assignedRoom && counts[g.assignedRoom] !== undefined) counts[g.assignedRoom]++;
+  });
+  const roomCapacity = rid => {
+    const r = loc?.rooms?.find(x => x.id === rid);
+    return r?.capacity || 0;
+  };
+  // Round-robin orphans do pokoi które mają jeszcze miejsce
+  return guests.map(g => {
+    if (g.assignedRoom) return g;
+    // Znajdź pokój z największą wolną pojemnością
+    let bestRid = selectedRooms[0];
+    let bestFree = -Infinity;
+    for (const rid of selectedRooms) {
+      const free = roomCapacity(rid) - counts[rid];
+      if (free > bestFree) { bestFree = free; bestRid = rid; }
+    }
+    counts[bestRid]++;
+    return { ...g, assignedRoom: bestRid };
+  });
+}
 
 function openModal(locId) {
   state.modal = locId;
@@ -5523,6 +5845,7 @@ function openModal(locId) {
   state.customPrice = "";
   state.isPermanent = false;
   state.permanentMonthlyRate = "";
+  state.calEndWasPlaceholder = false;
   render();
 }
 
@@ -5554,13 +5877,18 @@ function confirmBooking() {
       pricePerEmployee: room.pricePerEmployee || 0,
     } : null;
     bookingCounter++;
-    const guestsCopy = state.guests.map(g=>({...g})).filter(g => isCompany || g.name.trim())
-      .map(g => {
-        if (isCompany && g.isPermanent) {
-          return { ...g, permanentStart: g.permanentStart || state.calStart, permanentEnd: null };
-        }
-        return g;
-      });
+    // Multi-room company: rozdziel orphans (workers bez assignedRoom) round-robin po pojemnościach.
+    // Bez tego każdy z N booking-records liczyłby WSZYSTKICH workerów → N× over-count w raportach.
+    let baseCopy = state.guests.map(g=>({...g})).filter(g => isCompany || g.name.trim());
+    if (isCompany && selectedRooms.length > 1) {
+      baseCopy = distributeOrphans(baseCopy, selectedRooms, loc);
+    }
+    const guestsCopy = baseCopy.map(g => {
+      if (isCompany && g.isPermanent) {
+        return { ...g, permanentStart: g.permanentStart || state.calStart, permanentEnd: null };
+      }
+      return g;
+    });
     let bedsUsed;
     if (isCompany) {
       const assigned = guestsCopy.filter(g => g.assignedRoom === roomId).length;
@@ -5797,13 +6125,17 @@ async function confirmBookingAPI() {
       extraPerChild: room.extraPerChild,
       pricePerEmployee: room.pricePerEmployee || 0,
     } : null;
-    const guestsCopy = state.guests.map(g=>({...g})).filter(g => isCompany || g.name.trim())
-      .map(g => {
-        if (isCompany && g.isPermanent) {
-          return { ...g, permanentStart: g.permanentStart || state.calStart, permanentEnd: null };
-        }
-        return g;
-      });
+    // Multi-room company: rozdziel orphans round-robin po pojemnościach.
+    let baseCopy = state.guests.map(g=>({...g})).filter(g => isCompany || g.name.trim());
+    if (isCompany && selectedRooms.length > 1) {
+      baseCopy = distributeOrphans(baseCopy, selectedRooms, loc);
+    }
+    const guestsCopy = baseCopy.map(g => {
+      if (isCompany && g.isPermanent) {
+        return { ...g, permanentStart: g.permanentStart || state.calStart, permanentEnd: null };
+      }
+      return g;
+    });
     let bedsUsed;
     if (isCompany) {
       const assigned = guestsCopy.filter(g => g.assignedRoom === roomId).length;
