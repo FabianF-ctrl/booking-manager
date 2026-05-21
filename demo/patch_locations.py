@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """
-patch_locations.py — podmienia nazwy obiektów/miast w static/index.html
-na fikcyjne, do screenshotów portfolio.
+patch_locations.py — sanity check / leak detector.
 
-Nie hardkoduje prawdziwych nazw — wyciąga je z istniejącego pliku runtime
-i podmienia w kolejności na fikcyjne (DEMO_NAMES poniżej).
+Od refactoru (2026-05-21) prawdziwe nazwy obiektów żyją tylko w
+`static/locations.local.js` (gitignored). Ten skrypt:
 
-Użycie:
-    python3 demo/patch_locations.py patch    # prawdziwe → demo
-    python3 demo/patch_locations.py restore  # przywróć
+  python3 demo/patch_locations.py check
 
-Backup oryginału trzymany w demo/.index.html.real podczas trybu demo.
+…wyciąga listę prawdziwych nazw z `static/locations.local.js` i sprawdza
+czy któraś z nich nie wyciekła do plików które będą commitowane.
+
+Jeśli nie masz `static/locations.local.js` (np. świeży clone z GitHuba),
+check zwraca OK z informacją, że nie ma czego sprawdzać.
 """
 
 import sys
@@ -18,64 +19,74 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-INDEX = ROOT / "static" / "index.html"
-BACKUP = ROOT / "demo" / ".index.html.real"
+LOCAL = ROOT / "static" / "locations.local.js"
 
-# Fikcyjne nazwy w kolejności pojawiania się lokalizacji w index.html.
-# Każda para nadpisuje (name, city) i-tej lokalizacji.
-DEMO_NAMES = [
-    ("Apartamenty Centralne",  "Warszawa"),
-    ("Hostel Stary Browar",    "Kraków"),
-    ("Kwatery Polna",          "Wrocław"),
-    ("Apartamenty Słoneczne",  "Wrocław"),
-    ("Hostel Brama Miejska",   "Gdańsk"),
-    ("Hostel Park",            "Kraków"),
-    ("Apartamenty Riverside",  "Kraków"),
-    ("Mini-Apartamenty Centrum", "Kraków"),
-    ("Pensjonat Górski",       "Zakopane"),
-]
+EXCLUDE_PREFIXES = (
+    ".git",
+    "data",
+    ".venv-preview",
+    "BM-Venv",
+    "venv",
+    "__pycache__",
+    "static/locations.local.js",
+    "data.real-backup",
+)
 
-# Wyłapuje: name: "...", city: "..."  (z opcjonalnym whitespace)
-LOC_RE = re.compile(r'name:\s*"([^"]*)",\s*city:\s*"([^"]*)"')
+SCAN_SUFFIXES = {".html", ".py", ".js", ".md", ".sh", ".txt", ".json"}
 
 
-def patch():
-    if BACKUP.exists():
-        print(f"⚠️  Backup już istnieje ({BACKUP}). Najpierw zrób `restore`.")
+def extract_real_names():
+    """Wyciągnij listę prawdziwych nazw obiektów + miast z locations.local.js."""
+    if not LOCAL.exists():
+        return None
+    text = LOCAL.read_text(encoding="utf-8")
+    # Pattern: name: "...", city: "..."
+    pairs = re.findall(r'name:\s*"([^"]+)",\s*city:\s*"([^"]+)"', text)
+    names = set()
+    for name, city in pairs:
+        names.add(name)
+        names.add(city)
+    return names
+
+
+def check():
+    real_names = extract_real_names()
+    if real_names is None:
+        print(f"ℹ️  Brak {LOCAL.relative_to(ROOT)} — nie ma czego sprawdzać.")
+        print("    (To OK jeśli pracujesz na świeżym clone z GitHuba.)")
+        return
+
+    print(f"Skanuję {len(real_names)} prawdziwych nazw w plikach committed-friendly…")
+
+    leaks = []
+    for path in ROOT.rglob("*"):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(ROOT)
+        rel_str = str(rel)
+        if any(rel_str == ex or rel_str.startswith(ex + "/") for ex in EXCLUDE_PREFIXES):
+            continue
+        if path.suffix not in SCAN_SUFFIXES:
+            continue
+        try:
+            content = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        for name in real_names:
+            if name in content:
+                leaks.append((str(rel), name))
+
+    if leaks:
+        print(f"❌ Znaleziono {len(leaks)} wyciek(ów):")
+        for path, name in sorted(set(leaks)):
+            print(f"   {path}  →  '{name}'")
         sys.exit(1)
-    text = INDEX.read_text(encoding="utf-8")
-    BACKUP.write_text(text, encoding="utf-8")
-
-    matches = LOC_RE.findall(text)
-    if len(matches) > len(DEMO_NAMES):
-        print(f"⚠️  Znaleziono {len(matches)} lokalizacji, mam {len(DEMO_NAMES)} fikcyjnych nazw. Dodaj więcej do DEMO_NAMES.")
-        sys.exit(1)
-
-    counter = [0]
-    def sub(_match):
-        idx = counter[0]
-        counter[0] += 1
-        if idx < len(DEMO_NAMES):
-            demo_name, demo_city = DEMO_NAMES[idx]
-            return f'name: "{demo_name}", city: "{demo_city}"'
-        return _match.group(0)
-
-    new_text = LOC_RE.sub(sub, text)
-    INDEX.write_text(new_text, encoding="utf-8")
-    print(f"✅ Podmieniono {counter[0]} lokalizacji na fikcyjne. Backup: {BACKUP}")
-
-
-def restore():
-    if not BACKUP.exists():
-        print(f"❌ Brak backupu ({BACKUP}). Nie ma co przywracać.")
-        sys.exit(1)
-    INDEX.write_text(BACKUP.read_text(encoding="utf-8"), encoding="utf-8")
-    BACKUP.unlink()
-    print(f"✅ Przywrócono oryginalne nazwy w {INDEX} (backup usunięty)")
+    else:
+        print("✅ Brak wycieków — pliki committed są czyste.")
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2 or sys.argv[1] not in ("patch", "restore"):
+    if len(sys.argv) != 2 or sys.argv[1] != "check":
         print(__doc__)
         sys.exit(1)
-    {"patch": patch, "restore": restore}[sys.argv[1]]()
+    check()

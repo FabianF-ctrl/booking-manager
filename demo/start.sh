@@ -2,13 +2,14 @@
 # demo/start.sh — uruchamia booking-manager w trybie demo (do screenshotów)
 #
 # Co robi:
-#   1. Robi backup prawdziwego data/ → data.real-backup/
+#   1. Backup prawdziwego data/ → data.real-backup/
 #   2. Kopiuje demo/data/* → data/
-#   3. Patchuje nazwy obiektów w static/index.html (backup w demo/.index.html.real)
+#   3. Chowa static/locations.local.js → .demo-backup (żeby fallback fictional names zadziałał)
 #   4. Odpala serwer na http://localhost:8003
-#   5. Na Ctrl+C — przywraca prawdziwe data/ i prawdziwy index.html
+#   5. Na Ctrl+C — przywraca prawdziwe data/ + locations.local.js
 #
-# Po zatrzymaniu masz pewność że nic nie zostało zmienione w produkcyjnych danych.
+# Po zatrzymaniu masz pewność że nic nie zostało zmienione w produkcyjnych danych
+# ani w static/.
 
 set -e
 
@@ -17,6 +18,8 @@ cd "$ROOT"
 
 REAL_DATA_BACKUP="data.real-backup"
 DEMO_DATA="demo/data"
+LOCATIONS_OVERRIDE_FILE="static/locations.local.js"
+LOCATIONS_BACKUP="static/locations.local.js.demo-backup"
 PORT="${DEMO_PORT:-8003}"
 
 # Wybierz venv
@@ -47,8 +50,11 @@ cleanup() {
     echo ""
     echo "[DEMO] Sprzątam — przywracam prawdziwe dane…"
 
-    # Restore index.html
-    $PYTHON demo/patch_locations.py restore 2>/dev/null || true
+    # Restore locations.local.js
+    if [ -f "$LOCATIONS_BACKUP" ]; then
+        mv "$LOCATIONS_BACKUP" "$LOCATIONS_OVERRIDE_FILE"
+        echo "[DEMO] ✅ Przywrócono $LOCATIONS_OVERRIDE_FILE"
+    fi
 
     # Restore data/
     if [ -d "$REAL_DATA_BACKUP" ]; then
@@ -64,9 +70,11 @@ trap 'cleanup; exit 130' INT TERM
 trap cleanup EXIT
 
 # Sanity check: czy nie jesteśmy już w trybie demo?
-if [ -d "$REAL_DATA_BACKUP" ]; then
-    echo "❌ Folder $REAL_DATA_BACKUP już istnieje — być może coś poszło źle wcześniej."
-    echo "   Sprawdź ręcznie czy data/ to prawdziwe dane, czy demo, i usuń backup."
+if [ -d "$REAL_DATA_BACKUP" ] || [ -f "$LOCATIONS_BACKUP" ]; then
+    echo "❌ Backup z poprzedniej sesji demo istnieje — być może coś poszło źle wcześniej."
+    [ -d "$REAL_DATA_BACKUP" ] && echo "   $REAL_DATA_BACKUP/ istnieje"
+    [ -f "$LOCATIONS_BACKUP" ] && echo "   $LOCATIONS_BACKUP istnieje"
+    echo "   Sprawdź ręcznie i przywróć właściwe pliki, potem usuń backupy."
     exit 1
 fi
 
@@ -89,9 +97,11 @@ cp -r "$DEMO_DATA"/* data/
 chmod 600 data/users.json 2>/dev/null || true
 echo "[DEMO] Skopiowano demo/data/ → data/"
 
-# 3. Patch index.html
-$PYTHON demo/patch_locations.py patch
-echo "[DEMO] Spatchowano nazwy obiektów w static/index.html"
+# 3. Schowaj locations.local.js — bez niego app fallback'uje do fictional names z index.html
+if [ -f "$LOCATIONS_OVERRIDE_FILE" ]; then
+    mv "$LOCATIONS_OVERRIDE_FILE" "$LOCATIONS_BACKUP"
+    echo "[DEMO] Schowano $LOCATIONS_OVERRIDE_FILE → $LOCATIONS_BACKUP"
+fi
 
 # 4. Start serwer w tle, `wait` w foreground — kluczowe dla działania trapów.
 # Gdy bash dostaje SIGINT/SIGTERM, `wait` jest przerywany i odpala się trap.

@@ -2,8 +2,14 @@
 # Only the root-level data/ folder is ignored — demo/data/ stays tracked.
 /data/
 
-# Backup created by demo/start.sh during a demo session
+# Real location names override — keeps real building addresses out of public repo.
+# Locally and on the production server this file holds DATA.locations with real names;
+# without it the app falls back to the fictional baseline in static/index.html.
+/static/locations.local.js
+
+# Backups created by demo/start.sh during a demo session
 /data.real-backup/
+/static/locations.local.js.demo-backup
 demo/.index.html.real
 
 *.db

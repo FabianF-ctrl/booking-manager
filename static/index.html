@@ -801,6 +801,7 @@ body {
 <div id="app"></div>
 <div class="toast" id="toast"></div>
 
+<script src="/static/locations.local.js"></script>
 <script>
 // ============================================================
 // DATA LAYER
@@ -1003,6 +1004,14 @@ const DATA = {
 
   ]
 };
+
+// Optional runtime override: if static/locations.local.js exists and defines
+// LOCATIONS_OVERRIDE, it replaces the fictional placeholders above. The override
+// file is gitignored — production has it with real building names; portfolio
+// installs see the fictional set by default.
+if (typeof LOCATIONS_OVERRIDE !== 'undefined') {
+  DATA.locations = LOCATIONS_OVERRIDE;
+}
 
 // ============================================================
 // STATE
