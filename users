@@ -1,0 +1,26 @@
+#!/bin/bash
+# Wrapper dla manage_users.py — wybiera odpowiednie środowisko Python automatycznie.
+#
+# Użycie:
+#   ./users list
+#   ./users add nowyuser "haslo123" --role worker
+#   ./users passwd admin "nowehaslo"
+#   ./users role pracownik1 admin
+#   ./users delete user2
+
+DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$DIR" || exit 1
+
+# Wybierz venv: na serwerze 'venv/', lokalnie '.venv-preview/' (lub 'BM-Venv/' jako fallback)
+if [ -x ".venv-preview/bin/python" ]; then
+    PYTHON=".venv-preview/bin/python"
+elif [ -x "venv/bin/python" ]; then
+    PYTHON="venv/bin/python"
+elif [ -x "BM-Venv/bin/python" ]; then
+    PYTHON="BM-Venv/bin/python"
+else
+    echo "❌ Brak venv. Stwórz: python3 -m venv .venv-preview && .venv-preview/bin/pip install -r requirements.txt"
+    exit 1
+fi
+
+exec "$PYTHON" "$DIR/manage_users.py" "$@"

@@ -1,0 +1,48 @@
+# ===== App data — NEVER commit (contains bookings, invoices, hashed passwords) =====
+data/
+*.db
+*.sqlite
+
+# ===== Python venvs =====
+BM-Venv/
+.venv-preview/
+venv/
+.venv/
+env/
+ENV/
+
+# ===== Python cache & build =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+
+# ===== OS / Editors =====
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.code-workspace
+
+# ===== Claude / Cursor / agent dirs =====
+.claude/
+.cursor/
+.aider*
+
+# ===== Logs & temporary =====
+*.log
+*.tmp
+*.bak
+
+# ===== Local env =====
+.env
+.env.local
+.env.*.local
