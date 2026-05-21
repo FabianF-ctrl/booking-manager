@@ -1084,6 +1084,7 @@ let state = {
   billingMode: "room",   // "room" | "employee" — tryb rozliczenia firmowego
   customPrice: "",        // nadpisanie ceny finalnej, pusty = brak
   isPermanent: false,     // stały najemca (rezerwacja indywidualna open-ended)
+  permanentMonthlyRate: "", // stawka miesięczna stałego najemcy (pusty = liczyć za dobę z cennika)
   notesSearch: "",
   notesFilter: "all",     // "all" | "general" | "booking"
   mediaExpanded: {},      // { [locId]: true } — które sekcje Media są rozwinięte w raportach
@@ -1394,12 +1395,25 @@ function calcTotal(room, nights, guests, priceSnapshot) {
 // "room" → basePrice/dobę za tego pracownika, "employee" → ppe/dobę za tego pracownika.
 // Filtrujemy gości przypisanych do tego pokoju (b.roomId === g.assignedRoom).
 // Legacy fallback: stare booking-i z b.billingMode === "employee" liczą ppe × bedsUsed.
-function calcBookingTotal(b, room, nights) {
+// calcBookingTotal — przychód z rezerwacji.
+// periodRange (opcjonalne): { from: "YYYY-MM-DD", to: "YYYY-MM-DD" exclusive }
+//   - Dla stałego najemcy: clipuje wartość do tego okresu (każdy miesiąc raportu dostaje swoją część).
+//   - Dla nie-stałych rezerwacji: ignorowane (przychód przypisany jest do b.from jak dotąd).
+function calcBookingTotal(b, room, nights, periodRange) {
   if (typeof b?.customPrice === "number" && b.customPrice >= 0) return b.customPrice;
-  if (!room || !nights) return 0;
+  if (!room) return 0;
   const prices = b?.priceAtBooking || room;
   const basePrice = (prices.basePrice != null ? prices.basePrice : room.basePrice) || 0;
   const ppe       = (prices.pricePerEmployee != null ? prices.pricePerEmployee : room.pricePerEmployee) || 0;
+  const rFrom = periodRange?.from || null;
+  const rTo   = periodRange?.to   || null;
+
+  // Indywidualna rezerwacja — stały najemca obsługujemy osobnym helperem.
+  if (b?.bookingType !== "company" && b.isPermanent) {
+    return getPermanentRevenue(b, basePrice, b.from, rFrom, rTo);
+  }
+
+  if (!nights) return 0;
 
   // Firmowa rezerwacja — sumujemy per pracownik w tym pokoju
   if (b?.bookingType === "company" && Array.isArray(b.guests) && b.guests.length > 0) {
@@ -1409,16 +1423,18 @@ function calcBookingTotal(b, room, nights) {
       : b.guests;
     const hasPerGuestMode = inRoom.some(g => g.billingMode || g.dailyRate || g.isPermanent);
     if (hasPerGuestMode) {
-      // Nowy model — sumujemy stawkę × dni per pracownik.
-      // Stały najemca ma własny zakres dni (start..koniec_miesiąca_lub_permanentEnd).
+      // Nowy model — sumujemy stawkę × dni (lub miesiące dla stałego) per pracownik.
       let total = 0;
       for (const g of inRoom) {
         const mode = g.billingMode || b.billingMode || "room";
         const defaultRate = (mode === "employee") ? ppe : basePrice;
         const custom = parseFloat(g.dailyRate);
         const rate = (!isNaN(custom) && custom >= 0) ? custom : defaultRate;
-        const guestNights = g.isPermanent ? getPermanentNights(g, b.from) : nights;
-        total += rate * guestNights;
+        if (g.isPermanent) {
+          total += getPermanentRevenue(g, rate, b.from, rFrom, rTo);
+        } else {
+          total += rate * nights;
+        }
       }
       return total;
     }
@@ -1429,7 +1445,7 @@ function calcBookingTotal(b, room, nights) {
     return calcTotal(room, nights, b.guests, prices);
   }
 
-  // Indywidualna
+  // Indywidualna (nie-stały najemca)
   if (b?.billingMode === "employee") {
     return ppe * bedsUsedByBooking(b) * nights;
   }
@@ -1500,10 +1516,47 @@ function endOfCurrentMonthExclusive() {
 // Ile dni rozliczać dla bookingu/pracownika ze statusem stałego najemcy:
 // - jeśli wyłączono status (permanentEnd != null) → od permanentStart/from do permanentEnd
 // - jeśli aktywny → od permanentStart/from do końca bieżącego miesiąca (exclusive)
-function getPermanentNights(entity, fallbackFrom) {
-  const start = entity.permanentStart || fallbackFrom;
-  const end = entity.permanentEnd || endOfCurrentMonthExclusive();
+// rangeFrom/rangeTo (opcjonalne, exclusive end) — clipuje wynik do danego okresu raportu.
+function getPermanentNights(entity, fallbackFrom, rangeFrom, rangeTo) {
+  const pStart = entity.permanentStart || fallbackFrom;
+  const pEnd = entity.permanentEnd || endOfCurrentMonthExclusive();
+  const start = rangeFrom && rangeFrom > pStart ? rangeFrom : pStart;
+  const end   = rangeTo   && rangeTo   < pEnd   ? rangeTo   : pEnd;
   return Math.max(0, diffDays(start, end));
+}
+
+// Liczba odrębnych miesięcy kalendarzowych przeciętych przez [start, endExclusive).
+// 2026-05-15 → 2026-08-10 = 4 miesiące (V, VI, VII, VIII).
+// 2026-05-15 → 2026-06-01 = 1 miesiąc (V).
+function countCalendarMonths(start, endExclusive) {
+  if (!start || !endExclusive || start >= endExclusive) return 0;
+  const s = new Date(start);
+  const lastDay = new Date(new Date(endExclusive).getTime() - 86400000);
+  return Math.max(0, (lastDay.getFullYear() - s.getFullYear()) * 12 + (lastDay.getMonth() - s.getMonth()) + 1);
+}
+
+// Ile miesięcy stałego najemcy mieści się w [rangeFrom, rangeTo) (opcjonalne).
+// Bez range — pełna liczba miesięcy od permanentStart do permanentEnd (lub end-of-current-month).
+function getPermanentMonths(entity, fallbackFrom, rangeFrom, rangeTo) {
+  const pStart = entity.permanentStart || fallbackFrom;
+  const pEnd = entity.permanentEnd || endOfCurrentMonthExclusive();
+  const from = rangeFrom && rangeFrom > pStart ? rangeFrom : pStart;
+  const to   = rangeTo   && rangeTo   < pEnd   ? rangeTo   : pEnd;
+  return countCalendarMonths(from, to);
+}
+
+// Przychód stałego najemcy — ujednolicony wybór trybu:
+// - jeśli entity.permanentMonthlyRate > 0 → liczba miesięcy × stawka miesięczna
+// - inaczej → liczba dni × stawka dzienna (custom dailyRate albo defaultDailyRate)
+// rangeFrom/rangeTo — opcjonalny clip do okresu raportu (oba "YYYY-MM-DD", to exclusive).
+function getPermanentRevenue(entity, defaultDailyRate, fallbackFrom, rangeFrom, rangeTo) {
+  const monthly = parseFloat(entity.permanentMonthlyRate);
+  if (!isNaN(monthly) && monthly > 0) {
+    return monthly * getPermanentMonths(entity, fallbackFrom, rangeFrom, rangeTo);
+  }
+  const customDaily = parseFloat(entity.dailyRate);
+  const rate = (!isNaN(customDaily) && customDaily >= 0) ? customDaily : defaultDailyRate;
+  return rate * getPermanentNights(entity, fallbackFrom, rangeFrom, rangeTo);
 }
 function getActualNights(b) {
   if (b.isPermanent) return getPermanentNights(b, b.from);
@@ -2357,13 +2410,56 @@ function buildReports() {
   // Apply year/month filter
   const fy = state.reportsYear;
   const fm = state.reportsMonth;
-  const filteredByPeriod = fy || fm
-    ? uniqueBookings.filter(b => {
-        if (fy && !b.from?.startsWith(fy)) return false;
-        if (fm && b.from?.slice(5,7) !== fm) return false;
-        return true;
-      })
-    : uniqueBookings;
+
+  // Wyliczenie zakresu okresu raportu (jeśli filtry aktywne)
+  // periodRange.from inclusive, periodRange.to exclusive — w formacie YYYY-MM-DD
+  let periodRange = null;
+  if (fy) {
+    const yr = parseInt(fy);
+    if (fm) {
+      const mn = parseInt(fm) - 1; // JS months 0-based
+      periodRange = { from: toStr(new Date(yr, mn, 1)), to: toStr(new Date(yr, mn + 1, 1)) };
+    } else {
+      periodRange = { from: toStr(new Date(yr, 0, 1)), to: toStr(new Date(yr + 1, 0, 1)) };
+    }
+  }
+
+  // Sprawdza czy rezerwacja jest aktywna w okresie raportu.
+  // - Nie-stały najemca: matchuje po b.from (zachowanie historyczne)
+  // - Stały najemca (booking-level lub którykolwiek z guests): matchuje jeśli zakres aktywny
+  //   nakłada się z okresem raportu — żeby każdy miesiąc dostał swoją część przychodu.
+  const bookingMatchesPeriod = (b) => {
+    if (!periodRange) return true;
+    const hasPermBooking = !!b.isPermanent;
+    const hasPermGuest = Array.isArray(b.guests) && b.guests.some(g => g.isPermanent);
+    if (hasPermBooking || hasPermGuest) {
+      // Wyznacz najwcześniejszy start i najpóźniejszy koniec aktywności
+      let pStart = b.permanentStart || b.from;
+      let pEnd = b.permanentEnd;
+      if (hasPermGuest) {
+        const permGuests = b.guests.filter(g => g.isPermanent);
+        const guestStarts = permGuests.map(g => g.permanentStart || b.from);
+        const earliest = guestStarts.reduce((a, c) => (a < c ? a : c), pStart);
+        if (earliest < pStart) pStart = earliest;
+        // Końce: jeśli któryś jest jeszcze aktywny (brak permanentEnd) → kończy się end-of-current-month
+        const anyActive = permGuests.some(g => !g.permanentEnd);
+        if (anyActive) pEnd = null;
+        else {
+          const latest = permGuests.map(g => g.permanentEnd).reduce((a, c) => (a > c ? a : c), pEnd || "");
+          if (!pEnd || latest > pEnd) pEnd = latest;
+        }
+      }
+      const endExclusive = pEnd || endOfCurrentMonthExclusive();
+      // Overlap test: [pStart, endExclusive) ∩ [periodRange.from, periodRange.to)
+      return pStart < periodRange.to && endExclusive > periodRange.from;
+    }
+    // Klasyczna rezerwacja — przypisana do miesiąca startowego
+    if (fy && !b.from?.startsWith(fy)) return false;
+    if (fm && b.from?.slice(5,7) !== fm) return false;
+    return true;
+  };
+
+  const filteredByPeriod = uniqueBookings.filter(bookingMatchesPeriod);
 
   const periodLabel = fy ? (fm ? `${MONTH_NAMES[parseInt(fm)-1]} ${fy}` : `rok ${fy}`) : "wszystkie okresy";
 
@@ -2378,7 +2474,7 @@ function buildReports() {
     const loc = DATA.locations.find(l=>l.id===b.locId);
     const room = loc?.rooms.find(r=>r.id===b.roomId);
     const nights = getActualNights(b);
-    const t = calcBookingTotal(b, room, nights);
+    const t = calcBookingTotal(b, room, nights, periodRange);
     totRevenue += t;
     const p = parseFloat(b.payment?.amountPaid);
     if (!isNaN(p)) totPaid += p;
@@ -2400,7 +2496,7 @@ function buildReports() {
       const unpaidCount = filteredByPeriod.filter(b => {
         const loc = DATA.locations.find(l=>l.id===b.locId);
         const room = loc?.rooms.find(r=>r.id===b.roomId);
-        const t = calcBookingTotal(b, room, getActualNights(b));
+        const t = calcBookingTotal(b, room, getActualNights(b), periodRange);
         const p = parseFloat(b.payment?.amountPaid);
         const paid = !isNaN(p) ? p : (b.payment?.timing==="prepaid" ? t : 0);
         return Math.max(0, t - paid) > 0;
@@ -2456,7 +2552,7 @@ function buildReports() {
       bookings.forEach(b => {
         const room = loc.rooms.find(r=>r.id===b.roomId);
         const nights = getActualNights(b);
-        const t = calcBookingTotal(b, room, nights);
+        const t = calcBookingTotal(b, room, nights, periodRange);
         locRevenue += t;
         const p = parseFloat(b.payment?.amountPaid);
         if (!isNaN(p)) locPaid += p;
@@ -2502,7 +2598,7 @@ function buildReports() {
         const t = cBookings.reduce((s,b) => {
           const room = loc.rooms.find(r=>r.id===b.roomId);
           const nights = getActualNights(b);
-          return s + calcBookingTotal(b, room, nights);
+          return s + calcBookingTotal(b, room, nights, periodRange);
         }, 0);
         // Grupuj bookingi tej firmy po (from, to) — jedna transza = jedna grupa multi-room
         const trancheGroups = {};
@@ -2518,8 +2614,8 @@ function buildReports() {
             </div>
             ${Object.values(trancheGroups).map(group => {
               return group.length === 1
-                ? buildReportRow(group[0], loc)
-                : buildReportGroupRow(group, loc, name);
+                ? buildReportRow(group[0], loc, periodRange)
+                : buildReportGroupRow(group, loc, name, periodRange);
             }).join("")}
           </div>`;
       });
@@ -2528,7 +2624,7 @@ function buildReports() {
         const t = individuals.reduce((s,b) => {
           const room = loc.rooms.find(r=>r.id===b.roomId);
           const nights = getActualNights(b);
-          return s + calcBookingTotal(b, room, nights);
+          return s + calcBookingTotal(b, room, nights, periodRange);
         }, 0);
         html += `
           <div class="report-block" style="margin:0;border-radius:0;border-left:none;border-right:none;border-top:1px solid var(--border);">
@@ -2536,7 +2632,7 @@ function buildReports() {
               <div class="report-entity">${ICONS.user(13)} Indywidualne <span class="ibadge ibadge-in">Indyw.</span></div>
               <div class="report-total">zł${t.toLocaleString()}</div>
             </div>
-            ${individuals.map(b=>buildReportRow(b, loc)).join("")}
+            ${individuals.map(b=>buildReportRow(b, loc, periodRange)).join("")}
           </div>`;
       }
 
@@ -2553,17 +2649,17 @@ function buildReports() {
 
 // Grupowy wiersz dla firm multi-room (ta sama firma + te same daty = jedna transza).
 // Jeden wiersz z sumarycznym opisem; klik rozwija osobne wpisy per pokój.
-function buildReportGroupRow(groupBookings, loc, companyName) {
+function buildReportGroupRow(groupBookings, loc, companyName, periodRange) {
   const groupId = `${companyName}__${groupBookings[0].from}__${groupBookings[0].to}`;
   const isExpanded = !!state.expandedGroups[groupId];
   const first = groupBookings[0];
   const reservedNights = diffDays(first.from, first.to);
 
-  // Suma kwoty i wpłat
+  // Suma kwoty i wpłat (z opcjonalnym clip do okresu raportu)
   let totalCost = 0, totalPaid = 0;
   groupBookings.forEach(b => {
     const room = loc.rooms.find(r=>r.id===b.roomId);
-    const t = calcBookingTotal(b, room, getActualNights(b));
+    const t = calcBookingTotal(b, room, getActualNights(b), periodRange);
     totalCost += t;
     const p = parseFloat(b.payment?.amountPaid);
     if (!isNaN(p)) totalPaid += p;
@@ -2620,16 +2716,16 @@ function buildReportGroupRow(groupBookings, loc, companyName) {
       </div>` : ""}
     ${isExpanded ? `
       <div style="padding:0 0 0 24px;border-left:3px solid var(--blue-mid);margin:0 0 8px 14px;background:var(--surface2)">
-        ${groupBookings.map(b => buildReportRow(b, loc)).join("")}
+        ${groupBookings.map(b => buildReportRow(b, loc, periodRange)).join("")}
       </div>` : ""}`;
 }
 
-function buildReportRow(b, loc) {
+function buildReportRow(b, loc, periodRange) {
   const room = loc?.rooms.find(r=>r.id===b.roomId) || DATA.locations.find(l=>l.id===b.locId)?.rooms.find(r=>r.id===b.roomId);
   const actualNights = getActualNights(b);
   const reservedNights = diffDays(b.from, b.to);
   const ae = getActualEnd(b); const isExtended = ae && parseDate(ae) > parseDate(b.to);
-  const total = calcBookingTotal(b, room, actualNights);
+  const total = calcBookingTotal(b, room, actualNights, periodRange);
   const paid = b.payment?.amountPaid
     ? parseFloat(b.payment.amountPaid)
     : (b.payment?.timing==="prepaid" ? total : 0);
@@ -2653,6 +2749,18 @@ function buildReportRow(b, loc) {
   // "Pokój X" prefiks gdy nazwa jest czystą liczbą; inaczej zostaw oryginalną nazwę
   const roomLabel = room ? (/^\d+$/.test(room.name||"") ? `Pokój ${room.name}` : room.name) : "—";
 
+  // Permanent tenant rate info — pokazujemy w sub-tekście pod datami
+  const permMonthlyBooking = b.isPermanent ? parseFloat(b.permanentMonthlyRate) : NaN;
+  const permGuestsWithMonthly = (b.guests || []).filter(g => g.isPermanent && parseFloat(g.permanentMonthlyRate) > 0);
+  const showPermMonthly = (!isNaN(permMonthlyBooking) && permMonthlyBooking > 0) || permGuestsWithMonthly.length > 0;
+  const permMonthlyHint = !showPermMonthly ? "" : (() => {
+    if (!isNaN(permMonthlyBooking) && permMonthlyBooking > 0) {
+      return `<div class="report-dates-cell" style="color:var(--green);display:flex;align-items:center;gap:4px">${ICONS.house(11)} Stała stawka: zł${permMonthlyBooking}/mies.</div>`;
+    }
+    const labels = permGuestsWithMonthly.map(g => `${esc(g.name||"—")}: zł${parseFloat(g.permanentMonthlyRate)}/mies.`).join(", ");
+    return `<div class="report-dates-cell" style="color:var(--green);display:flex;align-items:center;gap:4px">${ICONS.house(11)} ${labels}</div>`;
+  })();
+
   return `
     <div>
       <div class="report-row">
@@ -2663,6 +2771,7 @@ function buildReportRow(b, loc) {
         <div>
           <div class="report-dates-cell">Zab: ${fmtDate(b.from)} → ${fmtDate(b.to)} (${reservedNights} ${nw(reservedNights)})</div>
           ${actualNights !== reservedNights ? `<div class="report-dates-cell" style="color:var(--orange)">Fakt: ${actualNights} ${nw(actualNights)} zaznaczonych</div>` : ""}
+          ${permMonthlyHint}
         </div>
         <div>
           <span class="pm-badge ${pmCls[b.payment?.method]||"pm-pending"}">${pmLabels[b.payment?.method]||"—"}</span>
@@ -3813,10 +3922,28 @@ function buildBookingForm(loc) {
     </div>
 
     ${!isCompany ? `
-    <label class="checkbox-row" style="margin-bottom:14px;padding:10px 12px;background:${state.isPermanent?"var(--green-light)":"var(--surface2)"};border:1px solid ${state.isPermanent?"var(--green-mid)":"var(--border)"};border-radius:var(--radius);cursor:pointer">
-      <input type="checkbox" id="isPermanentInput" ${state.isPermanent?"checked":""} />
-      <span style="display:inline-flex;align-items:center;gap:5px;vertical-align:-2px">${ICONS.house(14)}</span> Stały najemca — rezerwacja otwarta (bez konkretnej daty końca). Kończysz ręcznie z zakładki Raporty, system doliczy faktyczny okres.
-    </label>` : ""}
+    <div style="margin-bottom:14px;padding:10px 12px;background:${state.isPermanent?"var(--green-light)":"var(--surface2)"};border:1px solid ${state.isPermanent?"var(--green-mid)":"var(--border)"};border-radius:var(--radius)">
+      <label class="checkbox-row" style="margin:0;cursor:pointer">
+        <input type="checkbox" id="isPermanentInput" ${state.isPermanent?"checked":""} />
+        <span style="display:inline-flex;align-items:center;gap:5px;vertical-align:-2px">${ICONS.house(14)}</span> Stały najemca — rezerwacja otwarta (bez konkretnej daty końca). Kończysz ręcznie z zakładki Raporty, system doliczy faktyczny okres.
+      </label>
+      ${state.isPermanent ? `
+        <div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--green-mid);display:flex;flex-direction:column;gap:6px">
+          <label style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.3px">Tryb rozliczenia stałego najemcy</label>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <label style="font-size:12px;color:var(--text);white-space:nowrap">Cena miesięczna (zł):</label>
+            <input type="number" id="permanentMonthlyRateInput" min="0" step="0.01"
+              value="${esc(state.permanentMonthlyRate)}"
+              placeholder="np. 2500"
+              style="width:130px;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:13px;color:var(--text);font-family:'DM Mono',monospace;outline:none" />
+          </div>
+          <div style="font-size:10px;color:var(--text3);font-style:italic">
+            ${parseFloat(state.permanentMonthlyRate) > 0
+              ? `Każdy kolejny miesiąc liczy się jako zł${parseFloat(state.permanentMonthlyRate)} (28/29/30/31 dni — bez różnicy). Stawka dodaje się do raportu na koniec każdego miesiąca.`
+              : `Zostaw puste żeby liczyć za dobę z cennika pokoju. Wpisz kwotę żeby naliczać stałą stawkę miesięczną.`}
+          </div>
+        </div>` : ""}
+    </div>` : ""}
 
     <div class="payment-section">
       <div class="payment-sec-title" style="display:flex;align-items:center;gap:6px">${ICONS.banknote(14)} Forma płatności</div>
@@ -4235,13 +4362,26 @@ function buildEditModal() {
                   <input type="checkbox" data-edit-guest-perm="${idx}" ${isPerm?"checked":""} />
                   <span style="display:inline-flex;align-items:center;gap:5px;vertical-align:-2px">${ICONS.house(14)}</span> Stały najemca (otwarta rezerwacja)
                 </label>
-                ${isPerm ? `
+                ${isPerm ? (() => {
+                  const gMonthly = g.permanentMonthlyRate ?? "";
+                  const gMonthlyNum = parseFloat(gMonthly);
+                  const hasGMonthly = !isNaN(gMonthlyNum) && gMonthlyNum > 0;
+                  return `
                 <div style="display:flex;gap:6px;align-items:center">
                   <label style="font-size:11px;color:var(--text2);white-space:nowrap">Zakończono dnia:</label>
                   <input type="date" data-edit-guest-permend="${idx}" value="${esc(permEnd)}"
                     style="flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:11px;color:var(--text);font-family:inherit;outline:none" />
                 </div>
-                <div style="font-size:10px;color:var(--text3);font-style:italic">${permEnd ? `Naliczamy do ${fmtDate(permEnd)}.` : "Aktywny — dolicza pełne dni do końca bieżącego miesiąca. Wpisz datę żeby zakończyć."}</div>` : ""}
+                <div style="font-size:10px;color:var(--text3);font-style:italic">${permEnd ? `Naliczamy do ${fmtDate(permEnd)}.` : "Aktywny — dolicza pełne dni do końca bieżącego miesiąca."}</div>
+                <div style="display:flex;gap:6px;align-items:center;margin-top:6px">
+                  <label style="font-size:11px;color:var(--text2);white-space:nowrap">Cena miesięczna (zł):</label>
+                  <input type="number" data-edit-guest-permmonthly="${idx}" min="0" step="0.01"
+                    value="${esc(gMonthly)}"
+                    placeholder="pusto = za dobę"
+                    style="width:120px;padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:11px;color:var(--text);font-family:'DM Mono',monospace;outline:none" />
+                </div>
+                <div style="font-size:10px;color:var(--text3);font-style:italic">${hasGMonthly ? `Każdy miesiąc = zł${gMonthlyNum} (niezależnie od liczby dni).` : `Liczone za dobę. Wpisz miesięczną żeby przejść na stałą stawkę.`}</div>`;
+                })() : ""}
               </div>`;
             }).join("")}
           </div>` : ""}
@@ -4258,7 +4398,11 @@ function buildEditModal() {
               <input type="checkbox" id="editIsPermanent" ${(em.isPermanent ?? b.isPermanent)?"checked":""} style="width:auto;flex-shrink:0;margin:0;accent-color:var(--green)" />
               <span style="display:inline-flex;align-items:center;gap:5px">${ICONS.house(14)} Stały najemca (otwarta rezerwacja)</span>
             </label>
-            ${(em.isPermanent ?? b.isPermanent) ? `
+            ${(em.isPermanent ?? b.isPermanent) ? (() => {
+              const currentMonthly = em.permanentMonthlyRate !== undefined ? em.permanentMonthlyRate : (b.permanentMonthlyRate ?? "");
+              const monthlyNum = parseFloat(currentMonthly);
+              const hasMonthly = !isNaN(monthlyNum) && monthlyNum > 0;
+              return `
               <div style="margin-top:8px;display:flex;gap:6px;align-items:center">
                 <label style="font-size:11px;color:var(--text2);white-space:nowrap">Zakończono dnia:</label>
                 <input type="date" id="editPermanentEnd"
@@ -4266,8 +4410,21 @@ function buildEditModal() {
                   style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:12px;color:var(--text);font-family:inherit;outline:none" />
               </div>
               <div style="font-size:10px;color:var(--text3);font-style:italic;margin-top:4px">
-                ${(em.permanentEnd ?? b.permanentEnd) ? `Naliczamy do ${fmtDate(em.permanentEnd ?? b.permanentEnd)}.` : "Aktywny — dolicza pełne dni do końca bieżącego miesiąca. Wpisz datę żeby zakończyć."}
-              </div>` : ""}
+                ${(em.permanentEnd ?? b.permanentEnd) ? `Naliczamy do ${fmtDate(em.permanentEnd ?? b.permanentEnd)}.` : "Aktywny — dolicza do końca bieżącego miesiąca. Wpisz datę żeby zakończyć."}
+              </div>
+              <div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--green-mid)">
+                <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:4px">Cena miesięczna (zł) — opcjonalne</label>
+                <input type="number" id="editPermanentMonthlyRate" min="0" step="0.01"
+                  value="${esc(currentMonthly)}"
+                  placeholder="np. 2500 — pusto: liczyć za dobę z cennika"
+                  style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:13px;color:var(--text);font-family:'DM Mono',monospace;outline:none" />
+                <div style="font-size:10px;color:var(--text3);font-style:italic;margin-top:4px">
+                  ${hasMonthly
+                    ? `Każdy miesiąc liczy się jako zł${monthlyNum} (28/29/30/31 dni — bez różnicy). Stawka dodaje się do raportu na koniec każdego miesiąca.`
+                    : `Zostaw puste żeby liczyć za dobę. Wpisz kwotę żeby przejść na stawkę miesięczną.`}
+                </div>
+              </div>`;
+            })() : ""}
           </div>` : ""}
 
           <div class="divider"></div>
@@ -5087,8 +5244,13 @@ function attachEvents() {
 
     document.getElementById("isPermanentInput")?.addEventListener("change", e => {
       state.isPermanent = e.target.checked;
+      if (!e.target.checked) state.permanentMonthlyRate = "";
       render();
     });
+    document.getElementById("permanentMonthlyRateInput")?.addEventListener("input", e => {
+      state.permanentMonthlyRate = e.target.value;
+    });
+    document.getElementById("permanentMonthlyRateInput")?.addEventListener("change", () => render());
 
     // Per-pracownik tryb rozliczenia
     document.querySelectorAll("[data-guest-mode]").forEach(r => {
@@ -5220,14 +5382,30 @@ function attachEditEvents() {
       state.editModal.guests[idx].permanentEnd = e.target.value || null;
     });
   });
+  document.querySelectorAll("[data-edit-guest-permmonthly]").forEach(inp => {
+    inp.addEventListener("input", e => {
+      const idx = parseInt(e.target.dataset.editGuestPermmonthly);
+      if (!state.editModal.guests) state.editModal.guests = [];
+      if (!state.editModal.guests[idx]) state.editModal.guests[idx] = {};
+      state.editModal.guests[idx].permanentMonthlyRate = e.target.value;
+    });
+    inp.addEventListener("change", () => render());
+  });
   document.getElementById("editIsPermanent")?.addEventListener("change", e => {
     state.editModal.isPermanent = e.target.checked;
-    if (!e.target.checked) state.editModal.permanentEnd = null;
+    if (!e.target.checked) {
+      state.editModal.permanentEnd = null;
+      state.editModal.permanentMonthlyRate = "";
+    }
     render();
   });
   document.getElementById("editPermanentEnd")?.addEventListener("change", e => {
     state.editModal.permanentEnd = e.target.value || null;
   });
+  document.getElementById("editPermanentMonthlyRate")?.addEventListener("input", e => {
+    state.editModal.permanentMonthlyRate = e.target.value;
+  });
+  document.getElementById("editPermanentMonthlyRate")?.addEventListener("change", () => render());
   document.getElementById("editCustomPrice")?.addEventListener("input", e => { state.editModal.customPrice = e.target.value; });
 
   document.getElementById("editSaveBtn")?.addEventListener("click", () => {
@@ -5274,7 +5452,13 @@ function attachEditEvents() {
             delete b.guests[idx].isPermanent;
             delete b.guests[idx].permanentStart;
             delete b.guests[idx].permanentEnd;
+            delete b.guests[idx].permanentMonthlyRate;
           }
+        }
+        if (eg.permanentMonthlyRate !== undefined) {
+          const m = eg.permanentMonthlyRate === "" ? NaN : parseFloat(eg.permanentMonthlyRate);
+          if (!isNaN(m) && m > 0) b.guests[idx].permanentMonthlyRate = m;
+          else delete b.guests[idx].permanentMonthlyRate;
         }
       });
       // Booking-level isPermanent dla rezerwacji indywidualnej
@@ -5287,7 +5471,14 @@ function attachEditEvents() {
           delete b.isPermanent;
           delete b.permanentStart;
           delete b.permanentEnd;
+          delete b.permanentMonthlyRate;
         }
+      }
+      // Booking-level permanentMonthlyRate (rezerwacja indywidualna)
+      if (b.bookingType !== "company" && em.permanentMonthlyRate !== undefined) {
+        const m = em.permanentMonthlyRate === "" ? NaN : parseFloat(em.permanentMonthlyRate);
+        if (!isNaN(m) && m > 0 && b.isPermanent) b.permanentMonthlyRate = m;
+        else delete b.permanentMonthlyRate;
       }
       // Booking-level mode aktualizujemy heurystycznie (wszyscy w tym pokoju → "employee", inaczej "room")
       const inRoom = b.guests.filter(g => !g.assignedRoom || g.assignedRoom === b.roomId);
@@ -5331,6 +5522,7 @@ function openModal(locId) {
   state.billingMode = "room";
   state.customPrice = "";
   state.isPermanent = false;
+  state.permanentMonthlyRate = "";
   render();
 }
 
@@ -5383,6 +5575,8 @@ function confirmBooking() {
       ? "employee" : "room";
     // Booking-level permanent: dla indyw. lub gdy wszyscy goście w pokoju są permanent
     const isPerm = indivPermanent || (isCompany && inRoomGuests.length > 0 && inRoomGuests.every(g => g.isPermanent));
+    const permanentMonthly = indivPermanent ? parseFloat(state.permanentMonthlyRate) : NaN;
+    const hasPermMonthly = !isNaN(permanentMonthly) && permanentMonthly > 0;
     return {
       id: "sb" + bookingCounter,
       locId: state.modal, roomId,
@@ -5395,6 +5589,7 @@ function confirmBooking() {
       bedsUsed,
       billingMode,
       ...(isPerm ? { isPermanent: true, permanentStart: state.calStart, permanentEnd: null } : {}),
+      ...(hasPermMonthly ? { permanentMonthlyRate: permanentMonthly } : {}),
       ...(hasCustom ? { customPrice: customPriceNum } : {}),
       payment: { ...state.payment },
       actualFrom: null, actualTo: null, priceAtBooking,
@@ -5622,6 +5817,8 @@ async function confirmBookingAPI() {
     const billingMode = (isCompany && inRoomGuests.length > 0 && inRoomGuests.every(g => g.billingMode === "employee"))
       ? "employee" : "room";
     const isPerm = indivPermanent || (isCompany && inRoomGuests.length > 0 && inRoomGuests.every(g => g.isPermanent));
+    const permanentMonthly = indivPermanent ? parseFloat(state.permanentMonthlyRate) : NaN;
+    const hasPermMonthly = !isNaN(permanentMonthly) && permanentMonthly > 0;
     return {
       locId: state.modal, roomId,
       from: state.calStart, to: state.calEnd,
@@ -5632,6 +5829,7 @@ async function confirmBookingAPI() {
       bedsUsed,
       billingMode,
       ...(isPerm ? { isPermanent: true, permanentStart: state.calStart, permanentEnd: null } : {}),
+      ...(hasPermMonthly ? { permanentMonthlyRate: permanentMonthly } : {}),
       ...(hasCustom ? { customPrice: customPriceNum } : {}),
       payment: { ...state.payment },
       actualFrom: null, actualTo: null, priceAtBooking,
