@@ -13,12 +13,14 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg: #F5F4F0;
+  /* Neutralna chłodna paleta szarości (przedtem ciepłe kremowe było zbyt żółtawe).
+     Tailwind slate/zinc inspirowane — czystszy, nowoczesny look. */
+  --bg: #F4F5F7;
   --surface: #FFFFFF;
-  --surface2: #EFEDE7;
-  --surface3: #E6E3DC;
-  --border: #DEDAD2;
-  --border2: #C4C0B6;
+  --surface2: #ECEEF1;
+  --surface3: #E1E4E8;
+  --border: #D4D7DD;
+  --border2: #B7BCC4;
   --text: #1A1917;
   --text2: #6B6860;
   --text3: #A09D97;
@@ -1948,7 +1950,7 @@ function buildDashboard() {
 
       <!-- Quick actions -->
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px">
-        <div style="font-size:13px;font-weight:700;margin-bottom:12px">⚡ Szybkie akcje</div>
+        <div style="font-size:13px;font-weight:700;margin-bottom:12px">Szybkie akcje</div>
         <div style="display:flex;gap:10px;flex-wrap:wrap">
           <button class="dash-action-btn" data-dash-tab="locations">${ICONS.plus(14)} Nowa rezerwacja</button>
           <button class="dash-action-btn" data-dash-tab="status">${ICONS.grid(14)} Sprawdź status</button>
