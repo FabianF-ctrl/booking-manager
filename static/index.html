@@ -5785,6 +5785,15 @@ function attachEditEvents() {
 
   document.getElementById("editDeleteBtn")?.addEventListener("click", () => {
     if (API_CREDS) return;
+    const b = savedBookings.find(x => x.id === state.editModal.bookingId);
+    if (!b) return;
+    const who = b.bookingType === "company"
+      ? b.companyName
+      : (b.guests?.map(g => g.name).filter(Boolean).join(", ") || "rezerwacja");
+    const loc = DATA.locations.find(l => l.id === b.locId);
+    const room = loc?.rooms.find(r => r.id === b.roomId);
+    const ctx = `${loc?.name || ""} · ${room?.name || ""} · ${b.from} → ${b.to}`;
+    if (!confirm(`Usunąć rezerwację?\n\n${who}\n${ctx}\n\nTej operacji nie da się cofnąć.`)) return;
     savedBookings = savedBookings.filter(x=>x.id!==state.editModal.bookingId);
     state.editModal = null;
     showToast("🗑 Rezerwacja usunięta");
@@ -6384,6 +6393,16 @@ document.addEventListener("click", async (e) => {
     e.stopImmediatePropagation();
     const bookingId = state.editModal?.bookingId;
     if (!bookingId) return;
+    const b = savedBookings.find(x => x.id === bookingId);
+    if (b) {
+      const who = b.bookingType === "company"
+        ? b.companyName
+        : (b.guests?.map(g => g.name).filter(Boolean).join(", ") || "rezerwacja");
+      const loc = DATA.locations.find(l => l.id === b.locId);
+      const room = loc?.rooms.find(r => r.id === b.roomId);
+      const ctx = `${loc?.name || ""} · ${room?.name || ""} · ${b.from} → ${b.to}`;
+      if (!confirm(`Usunąć rezerwację?\n\n${who}\n${ctx}\n\nTej operacji nie da się cofnąć.`)) return;
+    }
     await deleteBookingAPI(bookingId);
     return;
   }
