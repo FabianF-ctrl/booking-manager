@@ -8,7 +8,7 @@
 <meta name="theme-color" content="#1855A3" media="(prefers-color-scheme: light)" />
 <meta name="theme-color" content="#111110" media="(prefers-color-scheme: dark)" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -105,7 +105,7 @@ body {
 .nav-btn {
   padding: 8px 12px; border-radius: var(--radius); border: none;
   background: transparent; color: var(--text2); font-size: 13px; font-weight: 500;
-  cursor: pointer; font-family: inherit; transition: all 0.1s;
+  cursor: pointer; font-family: inherit; font-variant-numeric: tabular-nums; transition: all 0.1s;
   display: flex; align-items: center; gap: 9px; text-align: left; width: 100%;
 }
 .nav-btn:hover { background: var(--surface2); color: var(--text); }
@@ -136,20 +136,20 @@ body {
 }
 .topbar-greeting-main { font-weight: 600; color: var(--text); }
 .topbar-greeting-sep { color: var(--text3); }
-.topbar-greeting-date { color: var(--text2); font-family: "IBM Plex Mono", monospace; font-size: 12px; }
+.topbar-greeting-date { color: var(--text2); font-family: inherit; font-variant-numeric: tabular-nums; font-size: 12px; }
 
 .search-wrap { flex: 1; max-width: 320px; position: relative; }
 .search-wrap input {
   width: 100%; padding: 6px 10px 6px 28px; border: 1px solid var(--border);
   border-radius: var(--radius); background: var(--surface2); font-size: 13px;
-  color: var(--text); outline: none; font-family: inherit; transition: border-color 0.12s;
+  color: var(--text); outline: none; font-family: inherit; font-variant-numeric: tabular-nums; transition: border-color 0.12s;
 }
 .search-wrap input:focus { border-color: var(--blue); background: var(--surface); }
 .search-icon { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); color: var(--text3); font-size: 13px; pointer-events: none; }
 
 .icon-btn {
   background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
-  padding: 5px 10px; cursor: pointer; color: var(--text); font-family: inherit; font-size: 12px;
+  padding: 5px 10px; cursor: pointer; color: var(--text); font-family: inherit; font-variant-numeric: tabular-nums; font-size: 12px;
   display: flex; align-items: center; gap: 5px; transition: background 0.1s;
 }
 .icon-btn:hover { background: var(--border); }
@@ -189,7 +189,7 @@ body {
 .loc-info { padding: 11px; }
 .loc-name { font-size: 13px; font-weight: 600; margin-bottom: 1px; }
 .loc-city { font-size: 11px; color: var(--text2); }
-.loc-rooms { font-size: 10px; color: var(--text3); margin-top: 4px; font-family: "IBM Plex Mono", monospace; }
+.loc-rooms { font-size: 10px; color: var(--text3); margin-top: 4px; font-family: inherit; font-variant-numeric: tabular-nums; }
 
 /* ─── STATUS TAB ─── */
 .status-controls {
@@ -200,13 +200,13 @@ body {
 .ctrl-group label { font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.3px; }
 .ctrl-group input[type=date] {
   padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius);
-  background: var(--surface2); font-size: 13px; color: var(--text); font-family: inherit;
+  background: var(--surface2); font-size: 13px; color: var(--text); font-family: inherit; font-variant-numeric: tabular-nums;
   outline: none; transition: border-color 0.12s; cursor: pointer;
 }
 .ctrl-group input[type=date]:focus { border-color: var(--blue); background: var(--surface); }
 .ctrl-search-btn {
   padding: 7px 18px; background: var(--blue); color: #fff; border: none; border-radius: var(--radius);
-  font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; transition: background 0.12s; white-space: nowrap;
+  font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; font-variant-numeric: tabular-nums; transition: background 0.12s; white-space: nowrap;
 }
 .ctrl-search-btn:hover { background: var(--blue-dark); }
 
@@ -231,7 +231,7 @@ body {
 .status-loc-hdr .loc-icon { font-size: 20px; }
 .status-loc-hdr strong { font-size: 14px; font-weight: 700; }
 .status-loc-hdr em { font-size: 11px; color: var(--text2); font-style: normal; }
-.status-loc-hdr-meta { margin-left: auto; display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--text2); font-family: "IBM Plex Mono", monospace; }
+.status-loc-hdr-meta { margin-left: auto; display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--text2); font-family: inherit; font-variant-numeric: tabular-nums; }
 .status-loc-toggle { color: var(--text3); font-size: 14px; transition: transform 0.15s; }
 
 .status-loc-body {
@@ -265,7 +265,7 @@ body {
 .status-room-who .who-name.who-company { color: #7B2FBE; }
 .status-room-who .who-name.who-individual { color: var(--blue); }
 [data-theme="dark"] .status-room-who .who-name.who-company { color: #B87FE8; }
-.status-room-who .who-dates { font-family: "IBM Plex Mono", monospace; font-size: 10px; color: var(--text3); }
+.status-room-who .who-dates { font-family: inherit; font-variant-numeric: tabular-nums; font-size: 10px; color: var(--text3); }
 .status-badge-col { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
 
 /* Status detail view (single location) */
@@ -289,7 +289,7 @@ body {
 }
 .status-result-header .loc-icon { font-size: 20px; }
 .status-result-header strong { font-size: 14px; font-weight: 700; }
-.status-result-header span { font-size: 12px; color: var(--text2); margin-left: auto; font-family: "IBM Plex Mono", monospace; }
+.status-result-header span { font-size: 12px; color: var(--text2); margin-left: auto; font-family: inherit; font-variant-numeric: tabular-nums; }
 
 .status-detail-row {
   display: grid; grid-template-columns: 180px 110px 1fr 140px;
@@ -315,7 +315,7 @@ body {
 .badge-blocked::before { background: var(--orange); }
 
 .status-who { font-size: 12px; color: var(--text2); }
-.status-dates { font-size: 11px; color: var(--text3); font-family: "IBM Plex Mono", monospace; }
+.status-dates { font-size: 11px; color: var(--text3); font-family: inherit; font-variant-numeric: tabular-nums; }
 
 /* ─── STATUS TODAY GRID (fallback) ─── */
 .status-today-block { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; margin-bottom: 14px; }
@@ -335,7 +335,7 @@ body {
 .sum-card.hero:hover { border-color: var(--green); }
 .sum-card .lbl { font-size: 10px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 5px; }
 .sum-card.hero .lbl { color: var(--green); }
-.sum-card .val { font-size: 22px; font-weight: 700; font-family: "IBM Plex Mono", monospace; }
+.sum-card .val { font-size: 22px; font-weight: 700; font-family: inherit; font-variant-numeric: tabular-nums; }
 .sum-card.hero .val { font-size: 28px; color: var(--green); }
 .sum-card .sub { font-size: 11px; color: var(--text3); margin-top: 2px; }
 
@@ -360,7 +360,7 @@ body {
 .loc-fin-stat.hero { background: linear-gradient(135deg, var(--green-light) 0%, var(--surface) 100%); }
 .loc-fin-stat .k { font-size: 10px; color: var(--text3); font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
 .loc-fin-stat.hero .k { color: var(--green); }
-.loc-fin-stat .v { font-size: 17px; font-weight: 700; font-family: "IBM Plex Mono", monospace; }
+.loc-fin-stat .v { font-size: 17px; font-weight: 700; font-family: inherit; font-variant-numeric: tabular-nums; }
 .loc-fin-stat.hero .v { font-size: 22px; color: var(--green); }
 .loc-fin-stat .sub { font-size: 10px; color: var(--text3); margin-top: 2px; }
 .loc-fin-stat .v.green { color: var(--green); }
@@ -369,7 +369,7 @@ body {
 
 .dash-action-btn {
   padding: 9px 16px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-lg);
-  font-size: 13px; font-weight: 600; cursor: pointer; color: var(--text); font-family: inherit;
+  font-size: 13px; font-weight: 600; cursor: pointer; color: var(--text); font-family: inherit; font-variant-numeric: tabular-nums;
   transition: all 0.12s;
   display: inline-flex; align-items: center; gap: 6px;
 }
@@ -389,7 +389,7 @@ body {
   display: flex; align-items: center; justify-content: space-between;
 }
 .report-entity { font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 6px; }
-.report-total { background: var(--blue-light); color: var(--blue); padding: 3px 10px; border-radius: 99px; font-size: 12px; font-weight: 700; font-family: "IBM Plex Mono", monospace; }
+.report-total { background: var(--blue-light); color: var(--blue); padding: 3px 10px; border-radius: 99px; font-size: 12px; font-weight: 700; font-family: inherit; font-variant-numeric: tabular-nums; }
 
 .report-row {
   padding: 10px 16px; border-bottom: 1px solid var(--border);
@@ -400,8 +400,8 @@ body {
 .report-row:last-child { border-bottom: none; }
 .report-guest { font-weight: 500; }
 .report-sub { font-size: 11px; color: var(--text3); }
-.report-dates-cell { font-size: 11px; color: var(--text2); font-family: "IBM Plex Mono", monospace; }
-.report-amount { font-weight: 700; font-family: "IBM Plex Mono", monospace; text-align: right; }
+.report-dates-cell { font-size: 11px; color: var(--text2); font-family: inherit; font-variant-numeric: tabular-nums; }
+.report-amount { font-weight: 700; font-family: inherit; font-variant-numeric: tabular-nums; text-align: right; }
 
 .pm-badge { font-size: 11px; padding: 2px 7px; border-radius: 99px; font-weight: 600; }
 .pm-invoice { background: var(--blue-light); color: var(--blue); }
@@ -412,7 +412,7 @@ body {
 .pay-strip { padding: 8px 16px; background: var(--surface2); font-size: 12px; display: flex; gap: 20px; flex-wrap: wrap; border-top: 1px solid var(--border); }
 .pay-strip-item { display: flex; flex-direction: column; gap: 1px; }
 .pay-strip-key { font-size: 10px; color: var(--text3); font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
-.pay-strip-val { font-weight: 600; font-family: "IBM Plex Mono", monospace; }
+.pay-strip-val { font-weight: 600; font-family: inherit; font-variant-numeric: tabular-nums; }
 .pay-strip-val.ok { color: var(--green); }
 .pay-strip-val.warn { color: var(--orange); }
 
@@ -433,34 +433,34 @@ body {
   background: var(--surface2); cursor: pointer; gap: 10px;
 }
 .media-room-hdr-title { font-size: 12px; font-weight: 600; }
-.media-room-hdr-total { font-size: 11px; color: var(--orange); font-family: "IBM Plex Mono", monospace; font-weight: 600; }
+.media-room-hdr-total { font-size: 11px; color: var(--orange); font-family: inherit; font-variant-numeric: tabular-nums; font-weight: 600; }
 .media-room-body { padding: 12px 14px; }
 .media-period-row {
   display: grid; grid-template-columns: 100px 1fr 1fr 1fr auto;
   gap: 8px; align-items: flex-end; margin-bottom: 8px;
 }
-.media-period-label { font-size: 11px; font-weight: 600; color: var(--text2); padding-top: 20px; font-family: "IBM Plex Mono", monospace; }
+.media-period-label { font-size: 11px; font-weight: 600; color: var(--text2); padding-top: 20px; font-family: inherit; font-variant-numeric: tabular-nums; }
 .media-field { display: flex; flex-direction: column; gap: 3px; }
 .media-field label { font-size: 10px; color: var(--orange); font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
 .media-field input {
   padding: 6px 8px; border: 1px solid var(--orange-border); border-radius: var(--radius);
-  background: var(--surface); font-size: 13px; color: var(--text); font-family: "IBM Plex Mono", monospace; outline: none;
+  background: var(--surface); font-size: 13px; color: var(--text); font-family: inherit; font-variant-numeric: tabular-nums; outline: none;
   width: 100%;
 }
 .media-field input:focus { border-color: var(--orange); }
 .media-save-btn {
   padding: 6px 12px; background: var(--orange); color: white; border: none; border-radius: var(--radius);
-  font-size: 11px; font-weight: 600; cursor: pointer; font-family: inherit; white-space: nowrap;
+  font-size: 11px; font-weight: 600; cursor: pointer; font-family: inherit; font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 .media-add-period-btn {
   background: none; border: 1px dashed var(--orange-border); border-radius: var(--radius);
-  padding: 5px 12px; font-size: 11px; color: var(--orange); cursor: pointer; font-family: inherit;
+  padding: 5px 12px; font-size: 11px; color: var(--orange); cursor: pointer; font-family: inherit; font-variant-numeric: tabular-nums;
   margin-top: 4px;
 }
 .media-add-period-btn:hover { background: var(--orange-light); }
 .media-room-summary {
   margin-top: 8px; padding: 8px 10px; background: var(--orange-light); border-radius: var(--radius);
-  font-size: 11px; color: var(--orange); font-family: "IBM Plex Mono", monospace;
+  font-size: 11px; color: var(--orange); font-family: inherit; font-variant-numeric: tabular-nums;
 }
 .media-price-breakdown {
   font-size: 11px; color: var(--text3); padding: 6px 14px 8px;
@@ -475,7 +475,7 @@ body {
 .act-btn {
   padding: 3px 9px; border-radius: var(--radius); border: 1px solid var(--border);
   background: var(--surface); cursor: pointer; font-size: 11px; font-weight: 500;
-  color: var(--text2); transition: all 0.1s; font-family: inherit; display: flex; align-items: center; gap: 3px;
+  color: var(--text2); transition: all 0.1s; font-family: inherit; font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 3px;
 }
 .act-btn:hover { background: var(--blue-light); color: var(--blue); border-color: var(--blue); }
 .act-btn.danger:hover { background: var(--red-light); color: var(--red); border-color: var(--red-border); }
@@ -495,12 +495,12 @@ body {
 .s-inp-grp label { font-size: 9px; color: var(--text3); font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
 .s-inp-grp input {
   width: 72px; padding: 5px 7px; border: 1px solid var(--border); border-radius: var(--radius);
-  background: var(--surface2); font-size: 12px; color: var(--text); font-family: "IBM Plex Mono", monospace; outline: none;
+  background: var(--surface2); font-size: 12px; color: var(--text); font-family: inherit; font-variant-numeric: tabular-nums; outline: none;
 }
 .s-inp-grp input:focus { border-color: var(--blue); }
 .save-btn {
   padding: 8px 18px; background: var(--blue); color: white; border: none; border-radius: var(--radius);
-  font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; transition: background 0.12s;
+  font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; font-variant-numeric: tabular-nums; transition: background 0.12s;
 }
 .save-btn:hover { background: var(--blue-dark); }
 
@@ -540,7 +540,7 @@ body {
 .type-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-bottom: 14px; }
 .type-btn {
   padding: 12px; border: 2px solid var(--border); border-radius: var(--radius-lg); background: var(--surface);
-  cursor: pointer; font-family: inherit; text-align: center; transition: all 0.15s; color: var(--text);
+  cursor: pointer; font-family: inherit; font-variant-numeric: tabular-nums; text-align: center; transition: all 0.15s; color: var(--text);
   display: flex; flex-direction: column; align-items: center;
 }
 .type-btn:hover { border-color: var(--border2); background: var(--surface2); }
@@ -564,7 +564,7 @@ body {
   aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
   font-size: 12px; border-radius: 6px; cursor: pointer; border: none;
   background: transparent; color: var(--text); transition: background 0.1s, color 0.1s;
-  font-family: inherit; width: 100%; position: relative;
+  font-family: inherit; font-variant-numeric: tabular-nums; width: 100%; position: relative;
 }
 .cal-day:hover:not([disabled]):not(.empty) { background: var(--surface2); }
 .cal-day.empty { pointer-events: none; visibility: hidden; }
@@ -579,11 +579,11 @@ body {
 .cal-legend { display: flex; gap: 12px; margin-bottom: 10px; font-size: 11px; color: var(--text2); flex-wrap: wrap; }
 .legend-dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; }
 
-.cal-hint { font-size: 12px; color: var(--text2); text-align: center; min-height: 16px; margin-bottom: 10px; font-family: "IBM Plex Mono", monospace; }
+.cal-hint { font-size: 12px; color: var(--text2); text-align: center; min-height: 16px; margin-bottom: 10px; font-family: inherit; font-variant-numeric: tabular-nums; }
 
 .check-btn {
   width: 100%; padding: 9px; background: var(--blue); color: white; border: none; border-radius: var(--radius);
-  font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; transition: background 0.12s;
+  font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; font-variant-numeric: tabular-nums; transition: background 0.12s;
 }
 .check-btn:hover:not([disabled]) { background: var(--blue-dark); }
 .check-btn[disabled] { background: var(--surface2); color: var(--text3); cursor: default; }
@@ -594,14 +594,14 @@ body {
 .room-option {
   display: block; width: 100%; text-align: left; padding: 10px 12px; border: 1px solid var(--border);
   border-radius: var(--radius); background: var(--surface); cursor: pointer; font-size: 13px;
-  color: var(--text); margin-bottom: 7px; transition: all 0.1s; font-family: inherit;
+  color: var(--text); margin-bottom: 7px; transition: all 0.1s; font-family: inherit; font-variant-numeric: tabular-nums;
 }
 .room-option:hover { background: var(--surface2); border-color: var(--border2); }
 .room-option.sel { border-color: var(--blue); background: var(--blue-light); }
-.room-meta { font-size: 11px; color: var(--text3); margin-top: 2px; font-family: "IBM Plex Mono", monospace; }
+.room-meta { font-size: 11px; color: var(--text3); margin-top: 2px; font-family: inherit; font-variant-numeric: tabular-nums; }
 .continue-btn {
   width: 100%; padding: 9px; background: var(--green); color: white; border: none; border-radius: var(--radius);
-  font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; transition: background 0.12s; margin-top: 2px;
+  font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; font-variant-numeric: tabular-nums; transition: background 0.12s; margin-top: 2px;
 }
 .continue-btn:hover { background: #1A4E0A; }
 .no-avail-box { background: var(--red-light); border: 1px solid var(--red-border); border-radius: var(--radius); padding: 12px 14px; }
@@ -615,14 +615,14 @@ body {
   padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;
 }
 .price-lbl { font-size: 12px; color: var(--text2); }
-.price-breakdown { font-size: 10px; color: var(--text3); margin-top: 2px; font-family: "IBM Plex Mono", monospace; }
-.price-val { font-size: 22px; font-weight: 700; font-family: "IBM Plex Mono", monospace; }
+.price-breakdown { font-size: 10px; color: var(--text3); margin-top: 2px; font-family: inherit; font-variant-numeric: tabular-nums; }
+.price-val { font-size: 22px; font-weight: 700; font-family: inherit; font-variant-numeric: tabular-nums; }
 
 .form-field { margin-bottom: 12px; }
 .form-field label { font-size: 11px; color: var(--text2); font-weight: 600; display: block; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.3px; }
 .form-field input, .form-field select {
   width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius);
-  background: var(--surface2); font-size: 13px; color: var(--text); font-family: inherit; outline: none; transition: border-color 0.12s;
+  background: var(--surface2); font-size: 13px; color: var(--text); font-family: inherit; font-variant-numeric: tabular-nums; outline: none; transition: border-color 0.12s;
 }
 .form-field input:focus, .form-field select:focus { border-color: var(--blue); background: var(--surface); }
 
@@ -631,7 +631,7 @@ body {
 .field-wrap label { font-size: 11px; color: var(--text2); font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
 .field-wrap input {
   padding: 7px 9px; border: 1px solid var(--border); border-radius: var(--radius);
-  background: var(--surface2); font-size: 13px; color: var(--text); font-family: inherit; outline: none; transition: border-color 0.12s;
+  background: var(--surface2); font-size: 13px; color: var(--text); font-family: inherit; font-variant-numeric: tabular-nums; outline: none; transition: border-color 0.12s;
 }
 .field-wrap input:focus { border-color: var(--blue); background: var(--surface); }
 .checkbox-row { display: flex; align-items: center; gap: 7px; font-size: 13px; cursor: pointer; margin-top: 6px; }
@@ -642,7 +642,7 @@ body {
 .buffer-field label { font-size: 11px; color: var(--yellow); font-weight: 600; display: block; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.3px; }
 .buffer-field input {
   width: 100%; padding: 6px 9px; border: 1px solid var(--yellow-border); border-radius: var(--radius);
-  background: var(--surface); font-size: 13px; color: var(--text); font-family: "IBM Plex Mono", monospace; outline: none;
+  background: var(--surface); font-size: 13px; color: var(--text); font-family: inherit; font-variant-numeric: tabular-nums; outline: none;
 }
 .buffer-hint { font-size: 11px; color: var(--yellow); margin-top: 4px; }
 
@@ -652,7 +652,7 @@ body {
 .pm-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 6px; margin-bottom: 10px; }
 .pm-btn {
   padding: 7px 4px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
-  cursor: pointer; font-family: inherit; text-align: center; transition: all 0.12s; color: var(--text); font-size: 12px; font-weight: 500;
+  cursor: pointer; font-family: inherit; font-variant-numeric: tabular-nums; text-align: center; transition: all 0.12s; color: var(--text); font-size: 12px; font-weight: 500;
 }
 .pm-btn:hover { border-color: var(--border2); }
 .pm-btn.sel { border-color: var(--blue); background: var(--blue-light); color: var(--blue); }
@@ -660,7 +660,7 @@ body {
 .timing-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .timing-btn {
   padding: 7px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
-  cursor: pointer; font-family: inherit; text-align: center; transition: all 0.12s; color: var(--text); font-size: 12px; font-weight: 500;
+  cursor: pointer; font-family: inherit; font-variant-numeric: tabular-nums; text-align: center; transition: all 0.12s; color: var(--text); font-size: 12px; font-weight: 500;
 }
 .timing-btn.sel { border-color: var(--green); background: var(--green-light); color: var(--green); }
 .pay-info-note { font-size: 11px; color: var(--text3); margin-top: 8px; font-style: italic; }
@@ -671,14 +671,14 @@ body {
 .add-guest-btn {
   background: none; border: 1px solid var(--border); border-radius: var(--radius); padding: 4px 10px;
   font-size: 12px; cursor: pointer; color: var(--text); display: flex; align-items: center; gap: 3px;
-  transition: background 0.1s; font-family: inherit;
+  transition: background 0.1s; font-family: inherit; font-variant-numeric: tabular-nums;
 }
 .add-guest-btn:hover { background: var(--surface2); }
 
 .guest-card { border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 12px; margin-bottom: 8px; background: var(--surface); }
 .guest-card-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .guest-num { font-size: 10px; color: var(--text2); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
-.remove-btn { background: none; border: none; cursor: pointer; color: var(--text3); font-size: 12px; padding: 3px 7px; border-radius: var(--radius); transition: all 0.1s; font-family: inherit; }
+.remove-btn { background: none; border: none; cursor: pointer; color: var(--text3); font-size: 12px; padding: 3px 7px; border-radius: var(--radius); transition: all 0.1s; font-family: inherit; font-variant-numeric: tabular-nums; }
 .remove-btn:hover { background: var(--red-light); color: var(--red); }
 
 .cap-warning { background: var(--yellow-light); border: 1px solid var(--yellow-border); border-radius: var(--radius); padding: 8px 12px; margin-bottom: 10px; font-size: 12px; color: var(--yellow); }
@@ -692,13 +692,13 @@ body {
 .btn-back {
   flex: 1; padding: 9px; border: 1px solid var(--border); background: transparent;
   border-radius: var(--radius); font-size: 13px; cursor: pointer; color: var(--text);
-  transition: background 0.1s; font-family: inherit;
+  transition: background 0.1s; font-family: inherit; font-variant-numeric: tabular-nums;
 }
 .btn-back:hover { background: var(--surface2); }
 .btn-confirm {
   flex: 2; padding: 9px; background: var(--blue); color: white; border: none;
   border-radius: var(--radius); font-size: 13px; font-weight: 600; cursor: pointer;
-  transition: background 0.12s; font-family: inherit;
+  transition: background 0.12s; font-family: inherit; font-variant-numeric: tabular-nums;
 }
 .btn-confirm:hover:not([disabled]) { background: var(--blue-dark); }
 .btn-confirm[disabled] { background: var(--surface2); color: var(--text3); cursor: default; }
@@ -714,7 +714,7 @@ body {
 .success-row span:first-child { color: var(--text2); }
 .done-btn {
   width: 100%; padding: 10px; background: var(--blue); color: white; border: none;
-  border-radius: var(--radius); font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit;
+  border-radius: var(--radius); font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; font-variant-numeric: tabular-nums;
 }
 .done-btn:hover { background: var(--blue-dark); }
 
@@ -731,16 +731,16 @@ body {
 .edit-field label { font-size: 11px; color: var(--text2); font-weight: 600; display: block; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.3px; }
 .edit-field input:not([type="checkbox"]):not([type="radio"]), .edit-field select {
   width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius);
-  background: var(--surface2); font-size: 13px; color: var(--text); font-family: "IBM Plex Mono", monospace; outline: none; transition: border-color 0.12s;
+  background: var(--surface2); font-size: 13px; color: var(--text); font-family: inherit; font-variant-numeric: tabular-nums; outline: none; transition: border-color 0.12s;
 }
 .edit-field input[type="checkbox"], .edit-field input[type="radio"] { width: auto; }
 .edit-field input:focus, .edit-field select:focus { border-color: var(--blue); background: var(--surface); }
 .edit-conflict { font-size: 12px; color: var(--red); margin-top: 6px; }
 .edit-extend-warn { background: var(--orange-light); border: 1px solid var(--orange-border); border-radius: var(--radius); padding: 8px 12px; font-size: 12px; color: var(--orange); margin-top: 8px; }
 .edit-footer { padding: 12px 16px; border-top: 1px solid var(--border); display: flex; gap: 7px; }
-.btn-danger { flex: 1; padding: 8px; background: var(--red-light); color: var(--red); border: 1px solid var(--red-border); border-radius: var(--radius); font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.btn-danger { flex: 1; padding: 8px; background: var(--red-light); color: var(--red); border: 1px solid var(--red-border); border-radius: var(--radius); font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; font-variant-numeric: tabular-nums; }
 .btn-danger:hover { background: var(--red); color: white; }
-.btn-save { flex: 2; padding: 8px; background: var(--blue); color: white; border: none; border-radius: var(--radius); font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.btn-save { flex: 2; padding: 8px; background: var(--blue); color: white; border: none; border-radius: var(--radius); font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; font-variant-numeric: tabular-nums; }
 .btn-save:hover { background: var(--blue-dark); }
 
 /* Inline badges */
@@ -769,7 +769,7 @@ body {
 .room-booking-row { display: flex; justify-content: space-between; font-size: 12px; padding: 3px 0; border-bottom: 1px solid var(--border); }
 .room-booking-row:last-child { border-bottom: none; }
 .room-booking-row span:first-child { color: var(--text2); }
-.room-booking-row span:last-child { font-family: "IBM Plex Mono", monospace; font-weight: 500; }
+.room-booking-row span:last-child { font-family: inherit; font-variant-numeric: tabular-nums; font-weight: 500; }
 .toast {
   position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(70px);
   background: var(--text); color: var(--bg); padding: 9px 18px; border-radius: 99px;
@@ -790,7 +790,7 @@ body {
 /* Chart type buttons */
 .chart-type-btn {
   padding: 6px 14px; border: 1px solid var(--border); border-radius: var(--radius);
-  background: var(--surface); cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 500;
+  background: var(--surface); cursor: pointer; font-family: inherit; font-variant-numeric: tabular-nums; font-size: 12px; font-weight: 500;
   color: var(--text2); transition: all 0.12s;
 }
 .chart-type-btn:hover { background: var(--surface2); }
@@ -1793,7 +1793,7 @@ function buildDashboard() {
       <div style="margin-bottom:10px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
           <span style="font-size:12px;font-weight:600">${locIcon(loc, 16)} ${esc(loc.name)}</span>
-          <span style="font-size:11px;color:var(--text2);font-family:'IBM Plex Mono',monospace">${occ}/${total} · ${pct}%</span>
+          <span style="font-size:11px;color:var(--text2);font-variant-numeric:tabular-nums">${occ}/${total} · ${pct}%</span>
         </div>
         <div style="height:6px;background:var(--surface2);border-radius:99px;overflow:hidden">
           <div style="height:100%;width:${pct}%;background:${color};border-radius:99px;transition:width 0.4s"></div>
@@ -1815,7 +1815,7 @@ function buildDashboard() {
               <div style="color:var(--text2);font-size:11px">${loc ? locIcon(loc, 14) : ""} ${esc(loc?.name||"")} · ${esc(room?.name||"")}</div>
             </div>
             <div style="text-align:right">
-              <div style="font-family:'IBM Plex Mono',monospace;color:var(--blue)">${fmtDate(b.from)}</div>
+              <div style="font-variant-numeric:tabular-nums;color:var(--blue)">${fmtDate(b.from)}</div>
               <span class="ibadge ${b.bookingType==="company"?"ibadge-co":"ibadge-in"}">${b.bookingType==="company"?"Firma":"Indyw."}</span>
             </div>
           </div>`;
@@ -1835,7 +1835,7 @@ function buildDashboard() {
               <div style="color:var(--text2);font-size:11px">${loc ? locIcon(loc, 14) : ""} ${esc(loc?.name||"")} · ${esc(room?.name||"")}</div>
             </div>
             <div style="text-align:right">
-              <div style="font-family:'IBM Plex Mono',monospace;color:var(--orange)">${fmtDate(b.to)}</div>
+              <div style="font-variant-numeric:tabular-nums;color:var(--orange)">${fmtDate(b.to)}</div>
             </div>
           </div>`;
       }).join("");
@@ -1855,23 +1855,23 @@ function buildDashboard() {
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:20px">
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px 18px">
           <div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;margin-bottom:6px">Zajęte dziś</div>
-          <div style="font-size:26px;font-weight:700;font-family:'IBM Plex Mono',monospace">${occupiedToday}<span style="font-size:14px;color:var(--text3);font-weight:400">/${totalRooms}</span></div>
+          <div style="font-size:26px;font-weight:700;font-variant-numeric:tabular-nums">${occupiedToday}<span style="font-size:14px;color:var(--text3);font-weight:400">/${totalRooms}</span></div>
           <div style="margin-top:6px;height:4px;background:var(--surface2);border-radius:99px"><div style="height:100%;width:${occupancyPct}%;background:${occupancyPct>=80?"var(--red)":occupancyPct>=50?"var(--orange)":"var(--green)"};border-radius:99px"></div></div>
           <div style="font-size:11px;color:var(--text3);margin-top:4px">${occupancyPct}% obłożenia</div>
         </div>
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px 18px">
           <div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;margin-bottom:6px">Przychód — ten miesiąc</div>
-          <div style="font-size:26px;font-weight:700;font-family:'IBM Plex Mono',monospace">zł${thisMonthRevenue.toLocaleString()}</div>
+          <div style="font-size:26px;font-weight:700;font-variant-numeric:tabular-nums">zł${thisMonthRevenue.toLocaleString()}</div>
           <div style="font-size:11px;color:var(--text3);margin-top:4px">${revDeltaHtml || "Brak danych poprzedniego miesiąca"}</div>
         </div>
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px 18px">
           <div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;margin-bottom:6px">Bez potwierdzenia płatności</div>
-          <div style="font-size:26px;font-weight:700;font-family:'IBM Plex Mono',monospace;color:${unpaid.length>0?"var(--orange)":"var(--green)"}">${unpaid.length}</div>
+          <div style="font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;color:${unpaid.length>0?"var(--orange)":"var(--green)"}">${unpaid.length}</div>
           <div style="font-size:11px;color:var(--text3);margin-top:4px">${unpaid.length > 0 ? `zł${unpaidTotal.toLocaleString()} do pobrania` : "Wszystkie płatności OK"}</div>
         </div>
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px 18px">
           <div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;margin-bottom:6px">Przychód poprzedni miesiąc</div>
-          <div style="font-size:26px;font-weight:700;font-family:'IBM Plex Mono',monospace">zł${prevMonthRevenue.toLocaleString()}</div>
+          <div style="font-size:26px;font-weight:700;font-variant-numeric:tabular-nums">zł${prevMonthRevenue.toLocaleString()}</div>
           <div style="font-size:11px;color:var(--text3);margin-top:4px">${savedBookings.filter(b=>b.from>=prevMonthStart&&b.from<=prevMonthEnd).length} rezerwacji</div>
         </div>
       </div>
@@ -2231,7 +2231,7 @@ function buildRoomDetailModal() {
       const periodInvs = invoices.filter(inv => inv.roomId === b.roomId && inv.period === period);
       return `<div style="padding:5px 8px;border-radius:var(--radius);background:var(--surface2);margin-bottom:4px">
         <div style="display:flex;justify-content:space-between;align-items:center">
-          <span style="font-size:11px;font-weight:600;color:var(--text2);font-family:'IBM Plex Mono',monospace">${period}</span>
+          <span style="font-size:11px;font-weight:600;color:var(--text2);font-variant-numeric:tabular-nums">${period}</span>
           ${s > 0 ? `<span style="font-size:11px;font-weight:700;color:var(--orange)">${s.toFixed(2)} zł</span>` : ""}
         </div>
         ${details.length > 0 ? `<div style="font-size:10px;color:var(--text3);margin-top:2px">${details.join(" &nbsp;·&nbsp; ")}</div>` : ""}
@@ -2699,7 +2699,7 @@ function buildReportGroupRow(groupBookings, loc, companyName, periodRange) {
   const roomChips = groupBookings.map(b => {
     const r = loc.rooms.find(x => x.id === b.roomId);
     const label = r ? (/^\d+$/.test(r.name||"") ? `Pokój ${r.name}` : r.name) : b.roomId;
-    return `<span style="font-family:'IBM Plex Mono',monospace;background:var(--surface);padding:2px 8px;border-radius:99px;border:1px solid var(--border);font-size:11px">${esc(label)}</span>`;
+    return `<span style="font-variant-numeric:tabular-nums;background:var(--surface);padding:2px 8px;border-radius:99px;border:1px solid var(--border);font-size:11px">${esc(label)}</span>`;
   }).join("");
 
   // Unikalne osoby w grupie (po name) — bo guests są kopiowani do każdego bookingu
@@ -2847,7 +2847,7 @@ function buildMediaSectionForLoc(loc) {
     <div class="media-loc-section" style="margin-top:0;border-top:2px dashed var(--orange-border)">
       <div class="media-loc-title" data-media-loc-toggle="${loc.id}" style="border-radius:0;border-top:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px">
         <span>${isExpanded ? "▼" : "▶"} Media — ${locIcon(loc, 16)} ${esc(loc.name)}</span>
-        <span style="font-size:11px;font-weight:500;color:var(--text2);font-family:'IBM Plex Mono',monospace">${summary}</span>
+        <span style="font-size:11px;font-weight:500;color:var(--text2);font-variant-numeric:tabular-nums">${summary}</span>
       </div>
       ${isExpanded ? `<div style="padding:0">` : ""}`;
 
@@ -2887,8 +2887,8 @@ function buildMediaSectionForLoc(loc) {
             return `
               <div style="border:1px solid var(--orange-border);border-radius:var(--radius);padding:10px 12px;margin-bottom:8px">
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-                  <span style="font-size:11px;font-weight:600;color:var(--text2);font-family:'IBM Plex Mono',monospace">${period}</span>
-                  <span style="font-size:11px;color:var(--orange);font-family:'IBM Plex Mono',monospace;font-weight:600">${periodSum>0?`Suma: zł${periodSum.toFixed(2)}`:""}</span>
+                  <span style="font-size:11px;font-weight:600;color:var(--text2);font-variant-numeric:tabular-nums">${period}</span>
+                  <span style="font-size:11px;color:var(--orange);font-variant-numeric:tabular-nums;font-weight:600">${periodSum>0?`Suma: zł${periodSum.toFixed(2)}`:""}</span>
                 </div>
                 <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
                   ${[{field:"electricity",label:"Prąd",icon:ICONS.zap,val:m.electricity},{field:"gas",label:"Gaz",icon:ICONS.flame,val:m.gas},{field:"water",label:"Woda",icon:ICONS.droplet,val:m.water}].map(ft => {
@@ -2936,7 +2936,7 @@ function buildMediaSectionForLoc(loc) {
           }).join("")}
           <div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap">
             <input type="month" id="media-period-picker-${room.id}" value="${currentPeriod()}"
-              style="padding:5px 8px;border:1px dashed var(--orange-border);border-radius:var(--radius);font-size:11px;color:var(--orange);background:var(--surface);font-family:'IBM Plex Mono',monospace;outline:none;cursor:pointer" />
+              style="padding:5px 8px;border:1px dashed var(--orange-border);border-radius:var(--radius);font-size:11px;color:var(--orange);background:var(--surface);font-variant-numeric:tabular-nums;outline:none;cursor:pointer" />
             <button class="media-add-period-btn" data-add-period="${room.id}" style="margin-top:0">+ Dodaj wybrany okres</button>
           </div>
         </div>
@@ -3180,7 +3180,7 @@ function buildChartCanvas(locId, type, from, to) {
     </div>
     <div style="margin-top:12px;display:flex;gap:14px;flex-wrap:wrap">
       ${keys.map((k,i)=>`
-        <div style="font-size:11px;font-family:'IBM Plex Mono',monospace">
+        <div style="font-size:11px;font-variant-numeric:tabular-nums">
           <span style="color:var(--text2)">${k}</span>
           <span style="color:var(--text);font-weight:600;margin-left:6px">${type==="revenue"?"zł":""}${vals[i]} ${type!=="revenue"?unit:""}</span>
         </div>`).join("")}
@@ -3290,7 +3290,7 @@ function buildPieChart(locId, from, to) {
     <div style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:6px;padding:5px 8px;border-radius:var(--radius);background:var(--surface2)">
       <span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${COLORS[i % COLORS.length]};flex-shrink:0"></span>
       <span style="font-weight:600;display:inline-flex;align-items:center;gap:5px">${(LOC_ICON_MAP[sl.icon] ? ICONS[LOC_ICON_MAP[sl.icon]](14) : ICONS.building(14))} ${esc(sl.label)}</span>
-      <span style="margin-left:auto;font-family:'IBM Plex Mono',monospace;font-weight:700;color:var(--blue)">zł${sl.value.toLocaleString()}</span>
+      <span style="margin-left:auto;font-variant-numeric:tabular-nums;font-weight:700;color:var(--blue)">zł${sl.value.toLocaleString()}</span>
       <span style="background:var(--surface3);border-radius:99px;padding:1px 7px;font-size:11px;font-weight:700;color:var(--text)">${Math.round(sl.value/total*100)}%</span>
     </div>`).join("");
 
@@ -3365,12 +3365,12 @@ function buildInvoices() {
       <div class="ctrl-group">
         <label>Okres od</label>
         <input type="month" id="invDateFrom" value="${dfrom}"
-          style="padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-size:13px;color:var(--text);font-family:'IBM Plex Mono',monospace;outline:none" />
+          style="padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-size:13px;color:var(--text);font-variant-numeric:tabular-nums;outline:none" />
       </div>
       <div class="ctrl-group">
         <label>Okres do</label>
         <input type="month" id="invDateTo" value="${dto}"
-          style="padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-size:13px;color:var(--text);font-family:'IBM Plex Mono',monospace;outline:none" />
+          style="padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-size:13px;color:var(--text);font-variant-numeric:tabular-nums;outline:none" />
       </div>
       ${hasFilter ? `<div class="ctrl-group" style="align-self:flex-end">
         <button class="cal-nav-btn" id="invClearFilter" style="padding:7px 12px;white-space:nowrap;display:inline-flex;align-items:center;gap:5px">${ICONS.x(12)} Wyczyść</button>
@@ -3390,7 +3390,7 @@ function buildInvoices() {
                   <div class="settings-room-loc" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
                     ${loc ? `<span style="display:inline-flex;align-items:center;gap:4px">${locIcon(loc, 13)} ${esc(loc.name)}</span>` : "—"}
                     ${room ? ` · ${esc(room.name)}` : ""}
-                    ${inv.period ? ` · <span style="font-family:'IBM Plex Mono',monospace">${inv.period}</span>` : ""}
+                    ${inv.period ? ` · <span style="font-variant-numeric:tabular-nums">${inv.period}</span>` : ""}
                     ${inv.amount ? ` · <strong>zł${parseFloat(inv.amount).toLocaleString()}</strong>` : ""}
                     ${inv.date ? ` · <span style="color:var(--text3);font-size:11px">dodano ${inv.date}</span>` : ""}
                   </div>
@@ -3428,11 +3428,11 @@ function buildAddInvoiceForm() {
         <div class="field-row" style="margin-bottom:10px">
           <div class="field-wrap">
             <label>Okres (np. 2025-01)</label>
-            <input type="text" id="invAddPeriod" placeholder="YYYY-MM" value="${currentPeriod()}" style="padding:7px 9px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-size:13px;color:var(--text);font-family:'IBM Plex Mono',monospace;outline:none;width:100%" />
+            <input type="text" id="invAddPeriod" placeholder="YYYY-MM" value="${currentPeriod()}" style="padding:7px 9px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-size:13px;color:var(--text);font-variant-numeric:tabular-nums;outline:none;width:100%" />
           </div>
           <div class="field-wrap">
             <label>Kwota (zł)</label>
-            <input type="number" id="invAddAmount" placeholder="0.00" min="0" step="0.01" style="padding:7px 9px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-size:13px;color:var(--text);font-family:'IBM Plex Mono',monospace;outline:none;width:100%" />
+            <input type="number" id="invAddAmount" placeholder="0.00" min="0" step="0.01" style="padding:7px 9px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-size:13px;color:var(--text);font-variant-numeric:tabular-nums;outline:none;width:100%" />
           </div>
         </div>
         <div class="form-field" style="margin-bottom:10px">
@@ -3499,7 +3499,7 @@ function buildNotes() {
         <div style="flex:1;min-width:0">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
             <span class="ibadge ${n.type==='general'?'ibadge-in':'ibadge-co'}" style="display:inline-flex;align-items:center;gap:4px">${n.type==='general'?`${ICONS.notebook(11)} Ogólna`:`${ICONS.pin(11)} Rezerwacja`}</span>
-            <span style="font-size:11px;color:var(--text3);font-family:'IBM Plex Mono',monospace">${dtStr} · ${esc(n.createdBy||"")}</span>
+            <span style="font-size:11px;color:var(--text3);font-variant-numeric:tabular-nums">${dtStr} · ${esc(n.createdBy||"")}</span>
           </div>
           ${context}
           <div data-note-text="${n.id}" style="white-space:pre-wrap;font-size:13px;line-height:1.5">${esc(n.text||"")}</div>
@@ -3637,7 +3637,7 @@ function buildHelp() {
       </h3>
       <div style="font-size:13px;color:var(--text2);line-height:1.6">${content}</div>
     </div>`;
-  const kbd = (key) => `<kbd style="display:inline-block;padding:1px 6px;background:var(--surface);border:1px solid var(--border);border-radius:4px;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;color:var(--text)">${key}</kbd>`;
+  const kbd = (key) => `<kbd style="display:inline-block;padding:1px 6px;background:var(--surface);border:1px solid var(--border);border-radius:4px;font-variant-numeric:tabular-nums;font-size:11px;font-weight:600;color:var(--text)">${key}</kbd>`;
   return `
     <div class="page-hdr" style="margin-bottom:18px">
       <h2 style="font-size:17px;font-weight:700;display:flex;align-items:center;gap:8px">${ICONS.helpCircle(22)} Instrukcja / Pomoc</h2>
@@ -3700,7 +3700,7 @@ function buildHelp() {
       `)}
       ${section(ICONS.settings(16), "Hasła i użytkownicy", `
         <p>Zarządzanie z linii komend (na serwerze lub lokalnie):</p>
-        <pre style="background:var(--surface);padding:8px 10px;border-radius:6px;font-family:'IBM Plex Mono',monospace;font-size:11px;margin:8px 0;overflow-x:auto"><code>./users list                                  # lista
+        <pre style="background:var(--surface);padding:8px 10px;border-radius:6px;font-variant-numeric:tabular-nums;font-size:11px;margin:8px 0;overflow-x:auto"><code>./users list                                  # lista
 ./users add nowy "haslo" --role worker        # dodaj
 ./users passwd admin "nowe-haslo"             # zmiana hasła
 ./users role nowy admin                        # promocja
@@ -3764,13 +3764,13 @@ function buildSettings() {
         <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1.2fr;gap:8px;padding:6px 14px;border-bottom:1px solid var(--border);align-items:center;font-size:12px">
           <div>${esc(room.name)} <span style="color:var(--text3);font-size:10px">· ${esc(room.beds)}</span></div>
           <input type="number" class="price-inp" data-room="${room.id}" data-field="basePrice" value="${room.basePrice||0}" min="0"
-            style="padding:5px 8px;border:1px solid ${noBase?"var(--orange-border)":"var(--border)"};border-radius:var(--radius);background:${noBase?"var(--orange-light)":"var(--surface2)"};font-family:'IBM Plex Mono',monospace;text-align:right;outline:none;font-size:12px;color:var(--text)" />
+            style="padding:5px 8px;border:1px solid ${noBase?"var(--orange-border)":"var(--border)"};border-radius:var(--radius);background:${noBase?"var(--orange-light)":"var(--surface2)"};font-variant-numeric:tabular-nums;text-align:right;outline:none;font-size:12px;color:var(--text)" />
           <input type="number" class="price-inp" data-room="${room.id}" data-field="extraPerAdult" value="${room.extraPerAdult||0}" min="0"
-            style="padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-family:'IBM Plex Mono',monospace;text-align:right;outline:none;font-size:12px;color:var(--text)" />
+            style="padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-variant-numeric:tabular-nums;text-align:right;outline:none;font-size:12px;color:var(--text)" />
           <input type="number" class="price-inp" data-room="${room.id}" data-field="extraPerChild" value="${room.extraPerChild||0}" min="0"
-            style="padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-family:'IBM Plex Mono',monospace;text-align:right;outline:none;font-size:12px;color:var(--text)" />
+            style="padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-variant-numeric:tabular-nums;text-align:right;outline:none;font-size:12px;color:var(--text)" />
           <input type="number" class="price-inp" data-room="${room.id}" data-field="pricePerEmployee" value="${room.pricePerEmployee||0}" min="0"
-            style="padding:5px 8px;border:1px solid ${noPpe?"var(--orange-border)":"var(--border)"};border-radius:var(--radius);background:${noPpe?"var(--orange-light)":"var(--surface2)"};font-family:'IBM Plex Mono',monospace;text-align:right;outline:none;font-size:12px;color:var(--text)" />
+            style="padding:5px 8px;border:1px solid ${noPpe?"var(--orange-border)":"var(--border)"};border-radius:var(--radius);background:${noPpe?"var(--orange-light)":"var(--surface2)"};font-variant-numeric:tabular-nums;text-align:right;outline:none;font-size:12px;color:var(--text)" />
         </div>`;
     }).join("");
 
@@ -3779,13 +3779,13 @@ function buildSettings() {
       <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1.2fr auto;gap:8px;padding:10px 14px;background:var(--blue-light);border-top:1px dashed var(--border);align-items:center;font-size:11px">
         <div style="font-size:11px;color:var(--blue);font-weight:600;display:flex;align-items:center;gap:5px">${ICONS.clipboardList(13)} Ustaw dla wszystkich pokoi tego obiektu →</div>
         <input type="number" data-bulk-loc="${loc.id}" data-bulk-field="basePrice" placeholder="—" min="0"
-          style="padding:5px 8px;border:1px solid var(--blue-mid);border-radius:var(--radius);background:var(--surface);font-family:'IBM Plex Mono',monospace;text-align:right;outline:none;font-size:12px;color:var(--text)" />
+          style="padding:5px 8px;border:1px solid var(--blue-mid);border-radius:var(--radius);background:var(--surface);font-variant-numeric:tabular-nums;text-align:right;outline:none;font-size:12px;color:var(--text)" />
         <input type="number" data-bulk-loc="${loc.id}" data-bulk-field="extraPerAdult" placeholder="—" min="0"
-          style="padding:5px 8px;border:1px solid var(--blue-mid);border-radius:var(--radius);background:var(--surface);font-family:'IBM Plex Mono',monospace;text-align:right;outline:none;font-size:12px;color:var(--text)" />
+          style="padding:5px 8px;border:1px solid var(--blue-mid);border-radius:var(--radius);background:var(--surface);font-variant-numeric:tabular-nums;text-align:right;outline:none;font-size:12px;color:var(--text)" />
         <input type="number" data-bulk-loc="${loc.id}" data-bulk-field="extraPerChild" placeholder="—" min="0"
-          style="padding:5px 8px;border:1px solid var(--blue-mid);border-radius:var(--radius);background:var(--surface);font-family:'IBM Plex Mono',monospace;text-align:right;outline:none;font-size:12px;color:var(--text)" />
+          style="padding:5px 8px;border:1px solid var(--blue-mid);border-radius:var(--radius);background:var(--surface);font-variant-numeric:tabular-nums;text-align:right;outline:none;font-size:12px;color:var(--text)" />
         <input type="number" data-bulk-loc="${loc.id}" data-bulk-field="pricePerEmployee" placeholder="—" min="0"
-          style="padding:5px 8px;border:1px solid var(--blue-mid);border-radius:var(--radius);background:var(--surface);font-family:'IBM Plex Mono',monospace;text-align:right;outline:none;font-size:12px;color:var(--text)" />
+          style="padding:5px 8px;border:1px solid var(--blue-mid);border-radius:var(--radius);background:var(--surface);font-variant-numeric:tabular-nums;text-align:right;outline:none;font-size:12px;color:var(--text)" />
         <button class="cal-nav-btn" data-bulk-apply="${loc.id}" style="padding:5px 12px;font-size:11px;background:var(--blue);color:#fff;border-color:var(--blue);font-weight:600">Zastosuj</button>
       </div>`;
 
@@ -3793,7 +3793,7 @@ function buildSettings() {
       <div class="settings-block" style="margin-bottom:14px;overflow:hidden">
         <div class="settings-hdr" data-settings-toggle="${loc.id}" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px">
           <span>${collapsed ? "▶" : "▼"} ${locIcon(loc, 16)} ${esc(loc.name)} <span style="color:var(--text3);font-weight:500;font-size:11px">· ${esc(loc.city)}</span></span>
-          <span style="font-size:11px;font-weight:500;color:var(--text2);font-family:'IBM Plex Mono',monospace">
+          <span style="font-size:11px;font-weight:500;color:var(--text2);font-variant-numeric:tabular-nums">
             ${rooms.length} ${rooms.length===1?"pokój":rooms.length<5?"pokoje":"pokoi"}${missingCount > 0 ? ` · <span style="color:var(--orange)">${missingCount} bez ceny</span>` : ""}
           </span>
         </div>
@@ -4039,7 +4039,7 @@ function buildCalendar(loc) {
     ${permPickerActive ? `
       <div style="padding:14px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius)">
         <label style="display:block;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.3px;margin-bottom:6px">Data rozpoczęcia (od kiedy najemca mieszka)</label>
-        <input type="date" id="permStartInput" value="${esc(state.calStart || todayStr())}" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:14px;color:var(--text);font-family:'IBM Plex Mono',monospace;outline:none" />
+        <input type="date" id="permStartInput" value="${esc(state.calStart || todayStr())}" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:14px;color:var(--text);font-variant-numeric:tabular-nums;outline:none" />
         <div style="font-size:11px;color:var(--text3);margin-top:6px;font-style:italic">Rezerwacja jest otwarta — kończysz ją ręcznie w Raportach. Termin "do" nie jest tu potrzebny.</div>
       </div>
       <button class="check-btn" id="checkAvailBtn" style="margin-top:12px" ${!state.calStart?"disabled":""}>Sprawdź dostępność</button>
@@ -4155,7 +4155,7 @@ function buildBookingForm(loc) {
             <input type="number" id="permanentMonthlyRateInput" min="0" step="0.01"
               value="${esc(state.permanentMonthlyRate)}"
               placeholder="np. 2500"
-              style="width:130px;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:13px;color:var(--text);font-family:'IBM Plex Mono',monospace;outline:none" />
+              style="width:130px;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:13px;color:var(--text);font-variant-numeric:tabular-nums;outline:none" />
           </div>
           <div style="font-size:10px;color:var(--text3);font-style:italic">
             ${parseFloat(state.permanentMonthlyRate) > 0
@@ -4187,7 +4187,7 @@ function buildBookingForm(loc) {
       <strong>Wybrane pokoje:</strong>
       ${selectedRooms.map(rid => {
         const r = loc.rooms.find(r=>r.id===rid);
-        return r ? `<span style="font-family:'IBM Plex Mono',monospace;background:var(--surface);padding:2px 7px;border-radius:99px;border:1px solid var(--blue-mid)">${esc(r.name)} (${r.beds})</span>` : '';
+        return r ? `<span style="font-variant-numeric:tabular-nums;background:var(--surface);padding:2px 7px;border-radius:99px;border:1px solid var(--blue-mid)">${esc(r.name)} (${r.beds})</span>` : '';
       }).join('')}
     </div>` : ""}
 
@@ -4239,7 +4239,7 @@ function buildBookingForm(loc) {
             <input type="number" data-guest="${i}" data-field="dailyRate" min="0" step="0.01"
               value="${g.dailyRate != null && g.dailyRate !== "" ? esc(g.dailyRate) : ""}"
               placeholder="${defaultRate || "0"}"
-              style="padding:7px 9px;border:1px solid ${noPriceWarning?"var(--orange-border)":"var(--border)"};border-radius:var(--radius);background:${noPriceWarning?"var(--orange-light)":"var(--surface2)"};font-size:12px;color:var(--text);font-family:'IBM Plex Mono',monospace;outline:none;width:100%" />
+              style="padding:7px 9px;border:1px solid ${noPriceWarning?"var(--orange-border)":"var(--border)"};border-radius:var(--radius);background:${noPriceWarning?"var(--orange-light)":"var(--surface2)"};font-size:12px;color:var(--text);font-variant-numeric:tabular-nums;outline:none;width:100%" />
           </div>
         </div>
         <div style="font-size:10px;color:${noPriceWarning?"var(--orange)":"var(--text3)"};font-style:italic;margin-top:4px">
@@ -4539,7 +4539,7 @@ function buildEditModal() {
                 <button class="cal-nav-btn" id="actualClearAll" style="font-size:11px;padding:3px 10px;color:var(--red)">Wyczyść</button>
               </div>
               ${actualNights > 0
-                ? `<div style="font-size:12px;color:var(--text2);margin-bottom:10px;font-family:'IBM Plex Mono',monospace">Faktyczne: ${actualNights} ${nw(actualNights)}${hasExtended?` <span style="color:var(--orange);font-weight:700">(zawiera dni poza rezerwacją)</span>`:""}${room?` · zł${calcBookingTotal(b, room, actualNights).toLocaleString()}`:""}</div>`
+                ? `<div style="font-size:12px;color:var(--text2);margin-bottom:10px;font-variant-numeric:tabular-nums">Faktyczne: ${actualNights} ${nw(actualNights)}${hasExtended?` <span style="color:var(--orange);font-weight:700">(zawiera dni poza rezerwacją)</span>`:""}${room?` · zł${calcBookingTotal(b, room, actualNights).toLocaleString()}`:""}</div>`
                 : `<div style="font-size:12px;color:var(--text3);margin-bottom:10px">Brak zaznaczonych — rozliczenie wg rezerwacji (${reservedNights} ${nw(reservedNights)})</div>`
               }
               ${hasExtended ? `<div class="edit-extend-warn" style="display:flex;align-items:center;gap:6px">${ICONS.alertTriangle(13)} Pobyt zawiera dni poza terminem rezerwacji.</div>` : ""}
@@ -4567,7 +4567,7 @@ function buildEditModal() {
                   <input type="number" data-edit-guest-rate="${idx}" min="0" step="0.01"
                     value="${g.dailyRate != null && g.dailyRate !== "" ? esc(g.dailyRate) : ""}"
                     placeholder="${ppe}"
-                    style="flex:1;min-width:100px;padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:12px;color:var(--text);font-family:'IBM Plex Mono',monospace;outline:none" />
+                    style="flex:1;min-width:100px;padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:12px;color:var(--text);font-variant-numeric:tabular-nums;outline:none" />
                 </div>
                 <div style="font-size:10px;color:var(--text3);font-style:italic">${g.dailyRate != null && g.dailyRate !== "" ? "stawka nadpisana indywidualnie" : `domyślnie zł${ppe}/osobę/dobę (z cennika pokoju)`}</div>
                 ${!isPerm ? (() => {
@@ -4581,7 +4581,7 @@ function buildEditModal() {
                   <label style="font-size:11px;color:var(--text2);white-space:nowrap">Faktyczne dni:</label>
                   <input type="number" data-edit-guest-actualnights="${idx}" min="0" max="999" value="${esc(actualN)}"
                     placeholder="${bookingNights}"
-                    style="width:80px;padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:12px;color:var(--text);font-family:'IBM Plex Mono',monospace;outline:none" />
+                    style="width:80px;padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:12px;color:var(--text);font-variant-numeric:tabular-nums;outline:none" />
                   <span style="font-size:10px;color:var(--text3);font-style:italic">${hasOverride ? `liczone: ${finalN} ${nw(finalN)}` : `wg rezerwacji: ${bookingNights} ${nw(bookingNights)}`}</span>
                 </div>`;
                 })() : ""}
@@ -4605,7 +4605,7 @@ function buildEditModal() {
                   <input type="number" data-edit-guest-permmonthly="${idx}" min="0" step="0.01"
                     value="${esc(gMonthly)}"
                     placeholder="pusto = za dobę"
-                    style="width:120px;padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:11px;color:var(--text);font-family:'IBM Plex Mono',monospace;outline:none" />
+                    style="width:120px;padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:11px;color:var(--text);font-variant-numeric:tabular-nums;outline:none" />
                 </div>
                 <div style="font-size:10px;color:var(--text3);font-style:italic">${hasGMonthly ? `Każdy miesiąc = zł${gMonthlyNum} (niezależnie od liczby dni).` : `Liczone za dobę. Wpisz miesięczną żeby przejść na stałą stawkę.`}</div>`;
                 })() : ""}
@@ -4644,7 +4644,7 @@ function buildEditModal() {
                 <input type="number" id="editPermanentMonthlyRate" min="0" step="0.01"
                   value="${esc(currentMonthly)}"
                   placeholder="np. 2500 — pusto: liczyć za dobę z cennika"
-                  style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:13px;color:var(--text);font-family:'IBM Plex Mono',monospace;outline:none" />
+                  style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:13px;color:var(--text);font-variant-numeric:tabular-nums;outline:none" />
                 <div style="font-size:10px;color:var(--text3);font-style:italic;margin-top:4px">
                   ${hasMonthly
                     ? `Każdy miesiąc liczy się jako zł${monthlyNum} (28/29/30/31 dni — bez różnicy). Stawka dodaje się do raportu na koniec każdego miesiąca.`
@@ -4688,7 +4688,7 @@ function buildEditModal() {
               const dtStr = dt ? `${dt.toLocaleDateString("pl-PL")} ${dt.toTimeString().slice(0,5)}` : "";
               return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;margin-bottom:6px;font-size:12px">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-                  <span style="font-size:10px;color:var(--text3);font-family:'IBM Plex Mono',monospace">${dtStr} · ${esc(n.createdBy||"")}</span>
+                  <span style="font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">${dtStr} · ${esc(n.createdBy||"")}</span>
                   <div style="display:flex;gap:4px">
                     <button class="cal-nav-btn" data-edit-note="${n.id}" style="font-size:10px;padding:2px 6px;display:inline-flex;align-items:center" title="Edytuj">${ICONS.pencil(11)}</button>
                     <button class="cal-nav-btn" data-delete-note="${n.id}" style="font-size:10px;padding:2px 6px;color:var(--red);border-color:var(--red);display:inline-flex;align-items:center" title="Usuń">${ICONS.trash(11)}</button>
