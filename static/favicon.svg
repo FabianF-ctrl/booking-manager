@@ -1,13 +1,25 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
   <style>
-    :root { color: #1855A3 } /* light mode: --blue */
+    /* Lewa półkula: ciemny w light mode (kontrast na białej karcie zakładki),
+       biała w dark mode. Prawa półkula: zawsze czerwony AI accent. */
+    .left { color: #111827 }
     @media (prefers-color-scheme: dark) {
-      :root { color: #4D8ED9 } /* dark mode: --blue (jaśniejszy) */
+      .left { color: #ffffff }
     }
-    path, rect { stroke: currentColor }
+    .left path { stroke: currentColor }
+    .right path { stroke: #e63946 }
   </style>
-  <rect width="8" height="4" x="8" y="2" rx="1"/>
-  <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
-  <path d="M8 11h8"/>
-  <path d="M8 15h5"/>
+  <g class="left">
+    <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/>
+    <path d="M6.003 5.125A3 3 0 0 0 6.401 6.5"/>
+    <path d="M3.477 10.896a4 4 0 0 1 .585-.396"/>
+    <path d="M6 18a4 4 0 0 1-1.967-.516"/>
+    <path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/>
+  </g>
+  <g class="right">
+    <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/>
+    <path d="M17.599 6.5a3 3 0 0 0 .399-1.375"/>
+    <path d="M19.938 10.5a4 4 0 0 1 .585.396"/>
+    <path d="M19.967 17.484A4 4 0 0 1 18 18"/>
+  </g>
 </svg>
