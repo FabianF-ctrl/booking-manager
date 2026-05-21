@@ -31,11 +31,25 @@ else
     exit 1
 fi
 
+UVICORN_PID=""
+
 cleanup() {
+    # Idempotentny — guard przed dwukrotnym uruchomieniem (EXIT+INT mogą oba odpalić)
+    [ -n "$CLEANUP_DONE" ] && return
+    CLEANUP_DONE=1
+
+    # Zabij uvicorn jeśli jeszcze żyje
+    if [ -n "$UVICORN_PID" ] && kill -0 "$UVICORN_PID" 2>/dev/null; then
+        kill -TERM "$UVICORN_PID" 2>/dev/null
+        wait "$UVICORN_PID" 2>/dev/null
+    fi
+
     echo ""
     echo "[DEMO] Sprzątam — przywracam prawdziwe dane…"
+
     # Restore index.html
     $PYTHON demo/patch_locations.py restore 2>/dev/null || true
+
     # Restore data/
     if [ -d "$REAL_DATA_BACKUP" ]; then
         rm -rf data
@@ -44,7 +58,10 @@ cleanup() {
     fi
     echo "[DEMO] Tryb demo zakończony."
 }
-trap cleanup EXIT INT TERM
+
+# Trap on INT/TERM przekieruje sygnał na cleanup, EXIT łapie wszystkie ścieżki wyjścia.
+trap 'cleanup; exit 130' INT TERM
+trap cleanup EXIT
 
 # Sanity check: czy nie jesteśmy już w trybie demo?
 if [ -d "$REAL_DATA_BACKUP" ]; then
@@ -76,5 +93,9 @@ echo "[DEMO] Skopiowano demo/data/ → data/"
 $PYTHON demo/patch_locations.py patch
 echo "[DEMO] Spatchowano nazwy obiektów w static/index.html"
 
-# 4. Start serwer (foreground, Ctrl+C → cleanup)
-exec $PYTHON -m uvicorn app:app --host 127.0.0.1 --port "$PORT"
+# 4. Start serwer w tle, `wait` w foreground — kluczowe dla działania trapów.
+# Gdy bash dostaje SIGINT/SIGTERM, `wait` jest przerywany i odpala się trap.
+# Z `exec` lub bez `&` shell blokowałby się w foreground command i trap nie zadziałał.
+$PYTHON -m uvicorn app:app --host 127.0.0.1 --port "$PORT" &
+UVICORN_PID=$!
+wait "$UVICORN_PID"
