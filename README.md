@@ -109,6 +109,14 @@ pip install -r requirements.txt
 ### Backups
 Daily backups are made by `backup_scheduler.py` (started as a background thread by `app.py`). They go to `data/backups/daily/YYYY-MM-DD/` and keep the last 90 days. To trigger a manual backup: `python3 backup_scheduler.py`.
 
+### Demo mode (try without setup)
+```bash
+./demo/start.sh
+# → http://localhost:8003  (admin / demo123)
+# Ctrl+C restores your real data
+```
+Loads fictional locations, ~12 sample bookings (individual / company / permanent tenant / recurring series / mixed billing modes / custom price overrides), notes, media bills and prices. Production `data/` is moved aside and restored on exit. See [`demo/README.md`](demo/README.md).
+
 ---
 
 ## Repo structure
@@ -124,14 +132,66 @@ Daily backups are made by `backup_scheduler.py` (started as a background thread 
 ├── static/
 │   ├── index.html          # The entire frontend (~5800 lines)
 │   └── favicon.svg
+├── demo/                   # Fictional dataset + screenshot runner
+│   ├── data/               # Fake bookings, users, prices, etc.
+│   ├── patch_locations.py  # Swaps real building names for fictional ones
+│   └── start.sh            # Orchestrator: swap in → run → restore on exit
 └── data/                   # gitignored — bookings, invoices, users.json, backups
 ```
 
 ---
 
+## Lessons learned
+
+Things I'd do differently with hindsight (or that took me a while to figure out):
+
+- **Pick the boring storage layer last, not first.** I almost reached for SQLite + SQLAlchemy on day 1 out of habit. For a single-tenant 2MB dataset, the JSON-on-disk approach turned out to be faster to build, easier to back up (just `cp -r`), and trivial to inspect during debugging. Schema "migrations" become a `python3 -c "for b in bookings: b.setdefault(...)"` script. The cost: no concurrent writes (single FastAPI worker), no joins, no indexes. At this scale, those costs are zero.
+
+- **State + render() beat me trying to be clever.** Early commits had per-component event handlers and direct DOM manipulation. It became unmaintainable around the 2000-line mark. Switching to `state = {...}; render()` (single function returning a fresh HTML string, set as `innerHTML`) made the whole frontend dramatically easier to reason about. The "performance hit" of full re-rendering is invisible on a 126-room dataset.
+
+- **Backups need to be out-of-band.** The first backup design was a cron job inside the same VPS — perfectly worthless if the VPS dies. Adding a launchd job on my Mac that pulls both production and staging via rsync took 30 minutes and is the single most important reliability feature in the project. (Bonus pain point: macOS TCC blocks launchd from accessing `~/Documents/`. Spent an evening on this before moving the script to `~/Library/Scripts/`.)
+
+- **Plaintext passwords in source were a mistake.** Original version had a hardcoded `_LEGACY_USERS` dict for convenience during early dev. By the time I noticed how much surface area that created, I had to migrate to bcrypt hashes in a separate chmod-600 file. Now there's a CLI (`./users add admin "pw" --role admin`) and the application code has no idea what any password is.
+
+- **Per-bed availability should have been there from day one.** I shipped per-room availability first ("the room is booked or it isn't"), got bookings into prod, then discovered the business actually needs to put two unrelated guests in the same 4-bed room. Retrofitting the bed accounting through `bedsUsedByBooking` / `getFreeBeds` / `getRoomOccupants` was painful because every booking screen needed updating. Lesson: ask "what's the granularity of the resource?" before designing the model.
+
+- **The icon migration was worth it.** Replacing every emoji with a Lucide-style inline SVG felt like busywork. The result: consistent rendering across OS/browser, light/dark mode aware (`currentColor`), per-call sizing, no font dependencies. The `ICONS` object is now ~50 small functions; total cost ~2KB gzipped.
+
+---
+
+## Trade-offs
+
+The conscious technical decisions and what each one cost:
+
+| Decision | Got | Gave up |
+|---|---|---|
+| JSON files vs SQL DB | Trivial backups, atomic writes (tempfile+rename), zero schema management, dataset readable in any editor | No concurrent writes, no joins or indexes, hard upper bound (~10MB before noticeable I/O cost) |
+| Single-page no-framework JS | Zero build step, instant page loads, easy to deploy (one static file), no dependency churn | No type checking (it's vanilla JS), no component library, manual reactivity, long single file |
+| HTTP Basic + bcrypt | Stateless (no sessions to manage), works behind any reverse proxy, browser handles the login UI | No "remember me", no password reset flow, no MFA, slightly worse UX than custom form |
+| FastAPI single worker | Simplest possible deploy (one systemd service), no inter-worker state coordination needed | Can't scale horizontally; one slow request blocks the next. Fine at this dataset size |
+| Polish UI + mixed PL/EN comments | Production users get native language; comments capture domain terminology accurately ("stały najemca" has no clean English equivalent) | Less approachable for international contributors. (For this project, that's not a real concern.) |
+| Hardcoded location data in `index.html` | Frontend renders zero-latency on first paint, no extra API call to fetch the room graph | Changing rooms requires a code edit + deploy. Acceptable since the property portfolio changes maybe twice a year. |
+| Manual `render()` instead of a framework | Predictable, debuggable with `console.log(state)`, no library updates breaking the app | I had to write helpers (debounced events, sticky scroll restore, focus management) that React/Vue give for free |
+
+---
+
+## Roadmap
+
+**Next up:**
+- **SMS module** — booking confirmations to guests via Twilio/SMSAPI, with templates per booking type
+- **Invoice PDF generation** — currently invoices are uploaded; auto-generate from booking data
+
+**Considered and rejected (for now):**
+- **Multi-tenant SaaS version** — would require ripping out the JSON storage and adding proper auth/billing/per-tenant isolation. Not worth the rewrite cost when there's one user.
+- **React/Vue rewrite** — would buy ergonomics but cost the zero-build-step property that makes deployment trivial. Maybe at 10k+ lines, not yet.
+- **Mobile app** — the responsive web works on phones well enough. Native app is months of work for marginal UX gain.
+- **Real-time multi-user collaboration** — current model is "one operator at a time" and that matches how the business actually runs. WebSocket-based live updates would be a fun feature but solve a problem nobody has.
+
+---
+
 ## Status
 
-Used in production by a real business across 9 properties / 126 rooms since 2025. Active development continues — current roadmap includes an SMS module for booking confirmations.
+Used in production by a real business across 9 properties / 126 rooms since 2025.
 
 ---
 

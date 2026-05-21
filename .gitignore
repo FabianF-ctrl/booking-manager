@@ -1,5 +1,11 @@
 # ===== App data — NEVER commit (contains bookings, invoices, hashed passwords) =====
-data/
+# Only the root-level data/ folder is ignored — demo/data/ stays tracked.
+/data/
+
+# Backup created by demo/start.sh during a demo session
+/data.real-backup/
+demo/.index.html.real
+
 *.db
 *.sqlite
 

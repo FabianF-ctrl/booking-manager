@@ -1,0 +1,71 @@
+{
+  "101__2026-05": {
+    "electricity": 180,
+    "gas": 95,
+    "water": 65,
+    "others": [
+      { "label": "Internet", "amount": 45 }
+    ],
+    "note": "Standardowy okres rozliczeniowy"
+  },
+  "101__2026-04": {
+    "electricity": 165,
+    "gas": 110,
+    "water": 70,
+    "others": [
+      { "label": "Internet", "amount": 45 }
+    ],
+    "note": ""
+  },
+  "207__2026-05": {
+    "electricity": 220,
+    "gas": 80,
+    "water": 95,
+    "others": [
+      { "label": "Internet", "amount": 50 },
+      { "label": "Sprzątanie końcowe", "amount": 120 }
+    ],
+    "note": ""
+  },
+  "301__2026-05": {
+    "electricity": 145,
+    "gas": 70,
+    "water": 60,
+    "others": [],
+    "note": ""
+  },
+  "405__2026-05": {
+    "electricity": 195,
+    "gas": 85,
+    "water": 75,
+    "others": [
+      { "label": "Naprawy", "amount": 230 }
+    ],
+    "note": "Wymiana kranu w łazience"
+  },
+  "601__2026-05": {
+    "electricity": 175,
+    "gas": 90,
+    "water": 70,
+    "others": [
+      { "label": "Internet", "amount": 45 }
+    ],
+    "note": ""
+  },
+  "705__2026-05": {
+    "electricity": 210,
+    "gas": 100,
+    "water": 85,
+    "others": [
+      { "label": "Internet", "amount": 45 }
+    ],
+    "note": "Stały najemca — wyższe zużycie"
+  },
+  "901__2026-05": {
+    "electricity": 165,
+    "gas": 75,
+    "water": 60,
+    "others": [],
+    "note": ""
+  }
+}

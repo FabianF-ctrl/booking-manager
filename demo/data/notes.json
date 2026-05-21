@@ -1,0 +1,34 @@
+[
+  {
+    "id": "demo-n01",
+    "type": "booking",
+    "bookingId": "demo-b01",
+    "text": "Gość prosił o cichy pokój — przeniesiony na piętro.",
+    "createdBy": "admin",
+    "createdAt": "2026-05-18T09:00:00.000000"
+  },
+  {
+    "id": "demo-n02",
+    "type": "booking",
+    "bookingId": "demo-b02",
+    "text": "Firma płaci na koniec miesiąca, faktura zbiorcza za wszystkich pracowników.",
+    "createdBy": "admin",
+    "createdAt": "2026-05-17T11:30:00.000000"
+  },
+  {
+    "id": "demo-n03",
+    "type": "general",
+    "bookingId": null,
+    "text": "Pamiętać o przeglądzie kotłów we wszystkich obiektach do końca miesiąca.",
+    "createdBy": "admin",
+    "createdAt": "2026-05-20T08:15:00.000000"
+  },
+  {
+    "id": "demo-n04",
+    "type": "booking",
+    "bookingId": "demo-b08",
+    "text": "Mieszany tryb rozliczenia — Robert per pokój, pozostali per pracownik z różnymi stawkami.",
+    "createdBy": "admin",
+    "createdAt": "2026-05-15T14:00:00.000000"
+  }
+]

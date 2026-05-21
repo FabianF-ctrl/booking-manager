@@ -1,0 +1,283 @@
+[
+  {
+    "id": "demo-b01",
+    "locId": 1,
+    "roomId": "101",
+    "from": "2026-05-18",
+    "to": "2026-05-25",
+    "bufferDays": 1,
+    "bookingType": "individual",
+    "companyName": null,
+    "guests": [
+      { "name": "Jan Kowalski", "phone": "+48 600 100 200", "isAdult": true }
+    ],
+    "payment": {
+      "method": "invoice",
+      "timing": "postpaid",
+      "amountPaid": "0"
+    },
+    "priceAtBooking": { "basePrice": 120, "extraPerAdult": 0, "extraPerChild": 0 },
+    "actualDays": ["2026-05-18", "2026-05-19", "2026-05-20", "2026-05-21"],
+    "createdBy": "admin",
+    "createdAt": "2026-05-15T10:14:22.000000"
+  },
+  {
+    "id": "demo-b02",
+    "locId": 2,
+    "roomId": "207",
+    "from": "2026-05-17",
+    "to": "2026-05-26",
+    "bufferDays": 0,
+    "bookingType": "company",
+    "companyName": "Demo Logistyka Sp. z o.o.",
+    "billingMode": "employee",
+    "guests": [
+      { "name": "Tomasz Lewandowski", "phone": "+48 600 100 201", "isAdult": true, "billingMode": "employee", "dailyRate": "65" },
+      { "name": "Krzysztof Zieliński", "phone": "+48 600 100 202", "isAdult": true, "billingMode": "employee", "dailyRate": "65" },
+      { "name": "Marek Wiśniewski",    "phone": "+48 600 100 203", "isAdult": true, "billingMode": "employee", "dailyRate": "65" },
+      { "name": "Adam Nowak",          "phone": "+48 600 100 204", "isAdult": true, "billingMode": "employee", "dailyRate": "65" }
+    ],
+    "payment": {
+      "method": "transfer",
+      "timing": "postpaid",
+      "amountPaid": "0"
+    },
+    "priceAtBooking": { "basePrice": 0, "extraPerAdult": 0, "extraPerChild": 0 },
+    "actualDays": [],
+    "createdBy": "admin",
+    "createdAt": "2026-05-12T09:00:00.000000"
+  },
+  {
+    "id": "demo-b03",
+    "locId": 3,
+    "roomId": "301",
+    "from": "2026-05-28",
+    "to": "2026-06-04",
+    "bufferDays": 0,
+    "bookingType": "individual",
+    "companyName": null,
+    "guests": [
+      { "name": "Anna Nowak", "phone": "+48 600 100 205", "isAdult": true }
+    ],
+    "payment": {
+      "method": "cash",
+      "timing": "prepaid",
+      "amountPaid": "560"
+    },
+    "priceAtBooking": { "basePrice": 80, "extraPerAdult": 0, "extraPerChild": 0 },
+    "actualDays": [],
+    "createdBy": "admin",
+    "createdAt": "2026-05-19T14:22:11.000000"
+  },
+  {
+    "id": "demo-b04",
+    "locId": 6,
+    "roomId": "601",
+    "from": "2026-05-05",
+    "to": "2026-05-12",
+    "bufferDays": 0,
+    "bookingType": "individual",
+    "companyName": null,
+    "guests": [
+      { "name": "Piotr Wiśniewski", "phone": "+48 600 100 206", "isAdult": true }
+    ],
+    "payment": {
+      "method": "transfer",
+      "timing": "postpaid",
+      "amountPaid": "770"
+    },
+    "priceAtBooking": { "basePrice": 110, "extraPerAdult": 0, "extraPerChild": 0 },
+    "actualDays": ["2026-05-05","2026-05-06","2026-05-07","2026-05-08","2026-05-09","2026-05-10","2026-05-11"],
+    "createdBy": "admin",
+    "createdAt": "2026-05-02T11:30:00.000000"
+  },
+  {
+    "id": "demo-b05",
+    "locId": 7,
+    "roomId": "705",
+    "from": "2026-05-01",
+    "to": "2026-12-31",
+    "bufferDays": 0,
+    "bookingType": "individual",
+    "companyName": null,
+    "isPermanent": true,
+    "permanentStart": "2026-05-01",
+    "permanentEnd": null,
+    "guests": [
+      { "name": "Maria Wójcik", "phone": "+48 600 100 207", "isAdult": true, "isPermanent": true }
+    ],
+    "payment": {
+      "method": "transfer",
+      "timing": "postpaid",
+      "amountPaid": "0"
+    },
+    "priceAtBooking": { "basePrice": 90, "extraPerAdult": 0, "extraPerChild": 0 },
+    "actualDays": [],
+    "createdBy": "admin",
+    "createdAt": "2026-04-28T16:00:00.000000"
+  },
+  {
+    "id": "demo-b06-r1",
+    "recurringGroupId": "demo-rec-001",
+    "recurringIndex": 1,
+    "recurringTotal": 4,
+    "locId": 9,
+    "roomId": "901",
+    "from": "2026-05-04",
+    "to": "2026-05-08",
+    "bufferDays": 0,
+    "bookingType": "company",
+    "companyName": "Demo Konsulting Sp. z o.o.",
+    "billingMode": "room",
+    "guests": [
+      { "name": "Magdalena Szymańska", "phone": "+48 600 100 208", "isAdult": true },
+      { "name": "Paweł Kamiński",      "phone": "+48 600 100 209", "isAdult": true }
+    ],
+    "payment": { "method": "invoice", "timing": "postpaid", "amountPaid": "480" },
+    "priceAtBooking": { "basePrice": 120, "extraPerAdult": 0, "extraPerChild": 0 },
+    "actualDays": ["2026-05-04","2026-05-05","2026-05-06","2026-05-07"],
+    "createdBy": "admin",
+    "createdAt": "2026-04-30T08:00:00.000000"
+  },
+  {
+    "id": "demo-b06-r2",
+    "recurringGroupId": "demo-rec-001",
+    "recurringIndex": 2,
+    "recurringTotal": 4,
+    "locId": 9,
+    "roomId": "901",
+    "from": "2026-05-11",
+    "to": "2026-05-15",
+    "bufferDays": 0,
+    "bookingType": "company",
+    "companyName": "Demo Konsulting Sp. z o.o.",
+    "billingMode": "room",
+    "guests": [
+      { "name": "Magdalena Szymańska", "phone": "+48 600 100 208", "isAdult": true },
+      { "name": "Paweł Kamiński",      "phone": "+48 600 100 209", "isAdult": true }
+    ],
+    "payment": { "method": "invoice", "timing": "postpaid", "amountPaid": "480" },
+    "priceAtBooking": { "basePrice": 120, "extraPerAdult": 0, "extraPerChild": 0 },
+    "actualDays": ["2026-05-11","2026-05-12","2026-05-13","2026-05-14"],
+    "createdBy": "admin",
+    "createdAt": "2026-04-30T08:00:00.000000"
+  },
+  {
+    "id": "demo-b06-r3",
+    "recurringGroupId": "demo-rec-001",
+    "recurringIndex": 3,
+    "recurringTotal": 4,
+    "locId": 9,
+    "roomId": "901",
+    "from": "2026-05-18",
+    "to": "2026-05-22",
+    "bufferDays": 0,
+    "bookingType": "company",
+    "companyName": "Demo Konsulting Sp. z o.o.",
+    "billingMode": "room",
+    "guests": [
+      { "name": "Magdalena Szymańska", "phone": "+48 600 100 208", "isAdult": true },
+      { "name": "Paweł Kamiński",      "phone": "+48 600 100 209", "isAdult": true }
+    ],
+    "payment": { "method": "invoice", "timing": "postpaid", "amountPaid": "0" },
+    "priceAtBooking": { "basePrice": 120, "extraPerAdult": 0, "extraPerChild": 0 },
+    "actualDays": ["2026-05-18","2026-05-19","2026-05-20","2026-05-21"],
+    "createdBy": "admin",
+    "createdAt": "2026-04-30T08:00:00.000000"
+  },
+  {
+    "id": "demo-b06-r4",
+    "recurringGroupId": "demo-rec-001",
+    "recurringIndex": 4,
+    "recurringTotal": 4,
+    "locId": 9,
+    "roomId": "901",
+    "from": "2026-05-25",
+    "to": "2026-05-29",
+    "bufferDays": 0,
+    "bookingType": "company",
+    "companyName": "Demo Konsulting Sp. z o.o.",
+    "billingMode": "room",
+    "guests": [
+      { "name": "Magdalena Szymańska", "phone": "+48 600 100 208", "isAdult": true },
+      { "name": "Paweł Kamiński",      "phone": "+48 600 100 209", "isAdult": true }
+    ],
+    "payment": { "method": "invoice", "timing": "postpaid", "amountPaid": "0" },
+    "priceAtBooking": { "basePrice": 120, "extraPerAdult": 0, "extraPerChild": 0 },
+    "actualDays": [],
+    "createdBy": "admin",
+    "createdAt": "2026-04-30T08:00:00.000000"
+  },
+  {
+    "id": "demo-b07",
+    "locId": 1,
+    "roomId": "105",
+    "from": "2026-05-22",
+    "to": "2026-05-29",
+    "bufferDays": 0,
+    "bookingType": "individual",
+    "companyName": null,
+    "guests": [
+      { "name": "Katarzyna Dąbrowska", "phone": "+48 600 100 210", "isAdult": true }
+    ],
+    "payment": {
+      "method": "cash",
+      "timing": "prepaid",
+      "amountPaid": "1500"
+    },
+    "priceAtBooking": { "basePrice": 100, "extraPerAdult": 0, "extraPerChild": 0 },
+    "customPrice": 1500,
+    "actualDays": [],
+    "createdBy": "admin",
+    "createdAt": "2026-05-19T17:45:00.000000"
+  },
+  {
+    "id": "demo-b08",
+    "locId": 4,
+    "roomId": "405",
+    "from": "2026-05-15",
+    "to": "2026-05-22",
+    "bufferDays": 0,
+    "bookingType": "company",
+    "companyName": "TechBudowa S.A.",
+    "billingMode": "room",
+    "guests": [
+      { "name": "Robert Mazur",     "phone": "+48 600 100 211", "isAdult": true, "billingMode": "room" },
+      { "name": "Łukasz Kaczmarek", "phone": "+48 600 100 212", "isAdult": true, "billingMode": "employee", "dailyRate": "75" },
+      { "name": "Damian Pawlak",    "phone": "+48 600 100 213", "isAdult": true, "billingMode": "employee", "dailyRate": "70" }
+    ],
+    "payment": {
+      "method": "invoice",
+      "timing": "postpaid",
+      "amountPaid": "0"
+    },
+    "priceAtBooking": { "basePrice": 130, "extraPerAdult": 0, "extraPerChild": 0 },
+    "actualDays": ["2026-05-15","2026-05-16","2026-05-17","2026-05-18","2026-05-19","2026-05-20","2026-05-21"],
+    "createdBy": "admin",
+    "createdAt": "2026-05-12T13:00:00.000000"
+  },
+  {
+    "id": "demo-b09",
+    "locId": 8,
+    "roomId": "801",
+    "from": "2026-06-01",
+    "to": "2026-06-15",
+    "bufferDays": 0,
+    "bookingType": "company",
+    "companyName": "Demo Wholesale Sp. z o.o.",
+    "billingMode": "employee",
+    "guests": [
+      { "name": "Aleksandra Sikora", "phone": "+48 600 100 214", "isAdult": true, "billingMode": "employee", "dailyRate": "60" },
+      { "name": "Bartosz Krawczyk",  "phone": "+48 600 100 215", "isAdult": true, "billingMode": "employee", "dailyRate": "60" }
+    ],
+    "payment": {
+      "method": "invoice",
+      "timing": "postpaid",
+      "amountPaid": "0"
+    },
+    "priceAtBooking": { "basePrice": 0, "extraPerAdult": 0, "extraPerChild": 0 },
+    "actualDays": [],
+    "createdBy": "admin",
+    "createdAt": "2026-05-20T10:00:00.000000"
+  }
+]
