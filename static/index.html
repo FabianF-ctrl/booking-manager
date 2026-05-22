@@ -1238,7 +1238,39 @@ function nw(n) { return n===1 ? "noc" : n<5 ? "noce" : "nocy"; }
 function npokoi(n) { return n===1 ? "pokój" : n<5 ? "pokoje" : "pokoi"; }
 function nrez(n) { return n===1 ? "rezerwacja" : n<5 ? "rezerwacje" : "rezerwacji"; }
 function nl(n) { return n===1 ? "łóżko" : (n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20)) ? "łóżka" : "łóżek"; }
+function nm(n) { return n===1 ? "miesiąc" : (n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20)) ? "miesiące" : "miesięcy"; }
 function currentPeriod() { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}`; }
+
+// Format zakresu dla rezerwacji — uwzględnia stałego najemcę z otwartym końcem.
+// Stały najemca z permanentEnd=null → "od X · stały najemca"
+// Stały najemca zakończony → "od X · do Y (zakończony)"
+// Zwykła rezerwacja → "X → Y"
+function fmtBookingPeriod(b) {
+  if (!b) return "—";
+  const isPerm = b.isPermanent && b.bookingType !== "company";
+  if (isPerm) {
+    const start = b.permanentStart || b.from;
+    if (b.permanentEnd) {
+      return `od ${fmtDate(start)} · do ${fmtDate(b.permanentEnd)} (zakończony)`;
+    }
+    return `od ${fmtDate(start)} · do odwołania`;
+  }
+  return `${fmtDate(b.from)} → ${fmtDate(b.to)}`;
+}
+
+// "Zab: X → Y" / "Stały najemca: od X · do odwołania" — używaj w raportach i room detail.
+function fmtBookingPeriodLabeled(b) {
+  if (!b) return "—";
+  const isPerm = b.isPermanent && b.bookingType !== "company";
+  if (isPerm) {
+    const start = b.permanentStart || b.from;
+    if (b.permanentEnd) {
+      return `Stały najemca: od ${fmtDate(start)} · do ${fmtDate(b.permanentEnd)}`;
+    }
+    return `Stały najemca: od ${fmtDate(start)} · do odwołania`;
+  }
+  return `Zab: ${fmtDate(b.from)} → ${fmtDate(b.to)}`;
+}
 
 // ============================================================
 // BOOKING HELPERS
@@ -2168,17 +2200,26 @@ function buildStatusLocCard(loc, from, to) {
       return overlapping.map(b => {
         const who = b.bookingType==="company" ? b.companyName : (b.guests[0]?.name || "—");
         const ae = getActualEnd(b); const isExtended = ae && parseDate(ae) > parseDate(b.to);
+        const isPermRow = b.isPermanent && b.bookingType !== "company";
+        const dateLabel = isPermRow
+          ? (b.permanentEnd
+            ? `od ${fmtDate(b.permanentStart || b.from)} · do ${fmtDate(b.permanentEnd)}`
+            : `od ${fmtDate(b.permanentStart || b.from)} · do odwołania`)
+          : `${fmtDate(b.from)} → ${fmtDate(b.to)}`;
+        const statusBadge = isPermRow && !b.permanentEnd
+          ? `<span class="badge" style="background:var(--green);color:#fff;display:inline-flex;align-items:center;gap:4px">${ICONS.house(11)} Stały najemca</span>`
+          : `<span class="badge badge-occupied">Zajęty${isExtended?'<span class="ext-badge">+</span>':''}</span>`;
         return `
           <div class="status-room-row status-room-clickable" data-room-detail="${room.id}" data-room-loc="${loc.id}" title="Kliknij aby zobaczyć szczegóły">
             <div>
               <div class="status-room-name">${esc(room.name)}</div>
               <div class="status-room-who">
                 <span class="who-name ${b.bookingType==="company"?"who-company":"who-individual"}">${esc(who)}</span>
-                <span class="who-dates">${fmtDate(b.from)} → ${fmtDate(b.to)}</span>
+                <span class="who-dates">${dateLabel}</span>
               </div>
             </div>
             <div class="status-badge-col">
-              <span class="badge badge-occupied">Zajęty${isExtended?'<span class="ext-badge">+</span>':''}</span>
+              ${statusBadge}
               <span class="ibadge ${b.bookingType==="company"?"ibadge-co":"ibadge-in"}">${b.bookingType==="company"?"Firma":"Indyw."}</span>
             </div>
           </div>`;
@@ -2320,7 +2361,16 @@ function buildRoomDetailModal() {
       ? `<span style="display:inline-flex;align-items:center;gap:5px">${methodIcons[b.payment.method]} ${methodNames[b.payment.method]}</span>`
       : "—";
     const timingLabel = { prepaid:"przed pobytem", postpaid:"po pobycie" }[b.payment?.timing] || "";
-    const paid = parseFloat(b.payment?.amountPaid || 0);
+    // Wpłacono — dla stałego najemcy: paidMonths (lub wszystko jeśli prepaid). Inaczej: explicit amountPaid.
+    const isPermForPay = b.isPermanent && b.bookingType !== "company";
+    let paid;
+    if (isPermForPay) {
+      const bpForPay = (b.priceAtBooking?.basePrice ?? room?.basePrice) || 0;
+      paid = getPermanentPaidRevenue(b, bpForPay, b.from, null, null, b.payment?.timing);
+    } else {
+      const _p = parseFloat(b.payment?.amountPaid);
+      paid = isNaN(_p) ? 0 : _p;
+    }
     const remaining = Math.max(0, (actualTotal ?? total) - paid);
     const payColor = paid >= (actualTotal ?? total) ? "var(--green)" : paid > 0 ? "var(--orange)" : "var(--red)";
 
@@ -2404,11 +2454,13 @@ function buildRoomDetailModal() {
         </div>
 
         <div class="room-booking-row">
-          <span style="display:inline-flex;align-items:center;gap:6px">${ICONS.calendar(12)} Rezerwacja</span>
-          <span>${fmtDate(b.from)} → ${fmtDate(b.to)} · <strong>${reservedNights} ${nw(reservedNights)}</strong></span>
+          <span style="display:inline-flex;align-items:center;gap:6px">${ICONS.calendar(12)} ${b.isPermanent && b.bookingType !== "company" ? "Stały najemca" : "Rezerwacja"}</span>
+          <span>${b.isPermanent && b.bookingType !== "company"
+            ? `od ${fmtDate(b.permanentStart || b.from)} · ${b.permanentEnd ? `do ${fmtDate(b.permanentEnd)}` : `<strong style="color:var(--green)">do odwołania</strong>`} · <strong>${getPermanentMonths(b, b.from, null, null)} ${nm(getPermanentMonths(b, b.from, null, null))} aktywności</strong>`
+            : `${fmtDate(b.from)} → ${fmtDate(b.to)} · <strong>${reservedNights} ${nw(reservedNights)}</strong>`}</span>
         </div>
         ${actualDaysSummary}
-        ${b.bufferDays ? `<div class="room-booking-row"><span>Bufor</span><span>${b.bufferDays} ${nw(b.bufferDays)} po wyjeździe</span></div>` : ""}
+        ${b.bufferDays && !(b.isPermanent && b.bookingType !== "company") ? `<div class="room-booking-row"><span>Bufor</span><span>${b.bufferDays} ${nw(b.bufferDays)} po wyjeździe</span></div>` : ""}
 
         <div style="border-top:1px solid var(--border);margin:8px 0"></div>
         ${guestRows}
@@ -2487,9 +2539,16 @@ function buildStatusDetail(locId, from, to) {
       const reservedNights = diffDays(b.from, b.to);
       const actualN = getActualNights(b);
       const ae = getActualEnd(b); const isExtended = ae && parseDate(ae) > parseDate(b.to);
-      const badge = `<span class="badge badge-occupied">Zajęty${isExtended?'<span class="ext-badge">+</span>':''}</span>`;
-      const dateInfo = `${fmtDate(b.from)} → ${fmtDate(b.to)} · ${reservedNights} ${nw(reservedNights)}`;
-      const actualInfo = actualN !== reservedNights ? ` · faktycznie: ${actualN} ${nw(actualN)}` : "";
+      const isPermanentRow = b.isPermanent && b.bookingType !== "company";
+      const badge = isPermanentRow && !b.permanentEnd
+        ? `<span class="badge" style="background:var(--green);color:#fff;display:inline-flex;align-items:center;gap:4px">${ICONS.house(11)} Stały najemca</span>`
+        : `<span class="badge badge-occupied">Zajęty${isExtended?'<span class="ext-badge">+</span>':''}</span>`;
+      const dateInfo = isPermanentRow
+        ? (b.permanentEnd
+          ? `od ${fmtDate(b.permanentStart || b.from)} · do ${fmtDate(b.permanentEnd)}`
+          : `od ${fmtDate(b.permanentStart || b.from)} · do odwołania`)
+        : `${fmtDate(b.from)} → ${fmtDate(b.to)} · ${reservedNights} ${nw(reservedNights)}`;
+      const actualInfo = !isPermanentRow && actualN !== reservedNights ? ` · faktycznie: ${actualN} ${nw(actualN)}` : "";
       return `
         <div class="status-detail-row status-room-clickable" data-room-detail="${room.id}" data-room-loc="${loc.id}" title="Kliknij aby zobaczyć szczegóły">
           <div class="status-room-nm">${esc(room.name)}</div>
@@ -3031,8 +3090,17 @@ function buildReportRow(b, loc, periodRange) {
           <div class="report-guest">${esc(who||"—")}${isExtended?'<span class="ext-badge">Przedłużony</span>':''}${permStatusBadge}</div>
         </div>
         <div>
-          <div class="report-dates-cell">Zab: ${fmtDate(b.from)} → ${fmtDate(b.to)} (${reservedNights} ${nw(reservedNights)})</div>
-          ${!isPerm && actualNights !== reservedNights ? `<div class="report-dates-cell" style="color:var(--orange)">Fakt: ${actualNights} ${nw(actualNights)} zaznaczonych</div>` : ""}
+          ${isPerm
+            ? `<div class="report-dates-cell" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                 <span style="display:inline-flex;align-items:center;gap:4px;color:var(--green);font-weight:600">${ICONS.house(11)} Stały najemca</span>
+                 <span>od ${fmtDate(b.permanentStart || b.from)}</span>
+                 ${b.permanentEnd
+                   ? `<span>· do ${fmtDate(b.permanentEnd)}</span>`
+                   : `<span style="color:var(--green);font-weight:600">· do odwołania</span>`}
+               </div>
+               ${activeMonthsInPeriod.length > 0 ? `<div class="report-dates-cell" style="color:var(--text2)">${activeMonthsInPeriod.length} ${nm(activeMonthsInPeriod.length)} ${periodRange ? "w okresie" : "aktywności"}</div>` : ""}`
+            : `<div class="report-dates-cell">Zab: ${fmtDate(b.from)} → ${fmtDate(b.to)} (${reservedNights} ${nw(reservedNights)})</div>
+               ${actualNights !== reservedNights ? `<div class="report-dates-cell" style="color:var(--orange)">Fakt: ${actualNights} ${nw(actualNights)} zaznaczonych</div>` : ""}`}
           ${permMonthlyHint}
         </div>
         <div>
@@ -3214,24 +3282,48 @@ function buildCharts() {
   ];
 
   // ── KPI computation ──────────────────────────────────────────
+  // Dla stałego najemcy: liczymy nights = miesiące, ale wyświetlamy je osobno (żeby
+  // "61 nocy" nie było mylące dla permanent z monthly rate).
   let kpiRevenue = 0, kpiNights = 0, kpiBookings = 0, kpiPaid = 0;
+  let kpiPermMonths = 0, kpiPermBookings = 0;
   const kpiBuckets = {}; // YYYY-MM → revenue
   const kpiFromD = parseDate(chartFrom), kpiToD = parseDate(chartTo);
+  const chartFromExcl = chartFrom;
+  // chartTo jest inclusive w UI → przekształć na exclusive end (dzień+1) dla period range
+  const chartToExcl = toStr(addDays(parseDate(chartTo), 1));
   const roomSet = new Set();
   savedBookings.forEach(b => {
     if (selLoc !== "all" && b.locId !== parseInt(selLoc)) return;
-    const bFrom = parseDate(b.from);
-    if (bFrom < kpiFromD || bFrom > kpiToD) return;
+    // Dla permanent: weź pod uwagę overlap z chart range (nie tylko b.from)
+    const isPerm = b.isPermanent && b.bookingType !== "company";
+    if (isPerm) {
+      const pStart = b.permanentStart || b.from;
+      const pEnd = b.permanentEnd || endOfCurrentMonthExclusive();
+      if (pStart >= chartToExcl || pEnd <= chartFromExcl) return;
+    } else {
+      const bFromD = parseDate(b.from);
+      if (bFromD < kpiFromD || bFromD > kpiToD) return;
+    }
     const loc = DATA.locations.find(l=>l.id===b.locId);
     const room = loc?.rooms.find(r=>r.id===b.roomId);
     const nights = getActualNights(b);
-    const rev = calcBookingTotal(b, room, nights);
+    const rev = calcBookingTotal(b, room, nights, { from: chartFromExcl, to: chartToExcl });
     kpiRevenue += rev;
-    kpiNights += nights;
     kpiBookings++;
-    kpiPaid += parseFloat(b.payment?.amountPaid || 0);
+    if (isPerm) {
+      kpiPermBookings++;
+      kpiPermMonths += getPermanentMonths(b, b.from, chartFromExcl, chartToExcl);
+      const bp = (b.priceAtBooking?.basePrice ?? room?.basePrice) || 0;
+      kpiPaid += getPermanentPaidRevenue(b, bp, b.from, chartFromExcl, chartToExcl, b.payment?.timing);
+    } else {
+      kpiNights += nights;
+      const _p = parseFloat(b.payment?.amountPaid);
+      if (!isNaN(_p)) kpiPaid += _p;
+    }
     roomSet.add(b.roomId);
-    const key = `${bFrom.getFullYear()}-${String(bFrom.getMonth()+1).padStart(2,"0")}`;
+    const bFromForBucket = isPerm ? (b.permanentStart || b.from) : b.from;
+    const dForBucket = parseDate(bFromForBucket);
+    const key = `${dForBucket.getFullYear()}-${String(dForBucket.getMonth()+1).padStart(2,"0")}`;
     kpiBuckets[key] = (kpiBuckets[key] || 0) + rev;
   });
   const kpiMonthCount = Object.keys(kpiBuckets).length || 1;
@@ -3245,7 +3337,7 @@ function buildCharts() {
       <div class="sum-card hero">
         <div class="lbl">Przychód w okresie</div>
         <div class="val">${kpiRevenue.toLocaleString()} zł</div>
-        <div class="sub">${kpiBookings} ${nrez(kpiBookings)} · ${kpiNights} ${nw(kpiNights)} · ${kpiAvg.toLocaleString()} zł/miesiąc</div>
+        <div class="sub">${kpiBookings} ${nrez(kpiBookings)}${kpiNights > 0 ? ` · ${kpiNights} ${nw(kpiNights)}` : ""}${kpiPermBookings > 0 ? ` · ${kpiPermBookings} ${kpiPermBookings===1?"stały najemca":kpiPermBookings<5?"stali najemcy":"stałych najemców"} (${kpiPermMonths} ${nm(kpiPermMonths)})` : ""} · ${kpiAvg.toLocaleString()} zł/miesiąc</div>
       </div>
       <div class="sum-card">
         <div class="lbl">Wpłacono</div>
@@ -6456,9 +6548,14 @@ function generatePrintReport(fromDate, toDate) {
     const room = loc?.rooms.find(r => r.id === b.roomId);
     const t = calcBookingTotal(b, room, getActualNights(b), periodRange);
     totRevenue += t;
-    const p = parseFloat(b.payment?.amountPaid);
-    if (!isNaN(p)) totPaid += p;
-    else if (b.payment?.timing === "prepaid") totPaid += t;
+    const isPermPrint = b.isPermanent && b.bookingType !== "company";
+    if (isPermPrint) {
+      const bp = (b.priceAtBooking?.basePrice ?? room?.basePrice) || 0;
+      totPaid += getPermanentPaidRevenue(b, bp, b.from, periodRange.from, periodRange.to, b.payment?.timing);
+    } else {
+      const p = parseFloat(b.payment?.amountPaid);
+      if (!isNaN(p)) totPaid += p;
+    }
   });
   // Media w okresie (uwzględniamy okresy YYYY-MM nakładające się z zakresem)
   Object.entries(roomMedia).forEach(([key, m]) => {
@@ -6482,9 +6579,14 @@ function generatePrintReport(fromDate, toDate) {
     const room = loc.rooms.find(r => r.id === b.roomId);
     const t = calcBookingTotal(b, room, getActualNights(b), periodRange);
     byLoc[loc.id].revenue += t;
-    const p = parseFloat(b.payment?.amountPaid);
-    if (!isNaN(p)) byLoc[loc.id].paid += p;
-    // Bez auto-prepaid — tylko explicit amountPaid liczy.
+    const isPermLoc = b.isPermanent && b.bookingType !== "company";
+    if (isPermLoc) {
+      const bp = (b.priceAtBooking?.basePrice ?? room?.basePrice) || 0;
+      byLoc[loc.id].paid += getPermanentPaidRevenue(b, bp, b.from, periodRange.from, periodRange.to, b.payment?.timing);
+    } else {
+      const p = parseFloat(b.payment?.amountPaid);
+      if (!isNaN(p)) byLoc[loc.id].paid += p;
+    }
   });
 
   const fmtZl = (n) => `${Math.round(n).toLocaleString("pl-PL")} zł`;
@@ -6535,12 +6637,21 @@ function generatePrintReport(fromDate, toDate) {
             const loc = DATA.locations.find(l => l.id === b.locId);
             const room = loc?.rooms.find(r => r.id === b.roomId);
             const t = calcBookingTotal(b, room, getActualNights(b), periodRange);
-            const p = parseFloat(b.payment?.amountPaid);
-            const paid = !isNaN(p) ? p : (b.payment?.timing === "prepaid" ? t : 0);
+            const isPermRow = b.isPermanent && b.bookingType !== "company";
+            let paid;
+            if (isPermRow) {
+              const bp = (b.priceAtBooking?.basePrice ?? room?.basePrice) || 0;
+              paid = getPermanentPaidRevenue(b, bp, b.from, periodRange.from, periodRange.to, b.payment?.timing);
+            } else {
+              const p = parseFloat(b.payment?.amountPaid);
+              paid = !isNaN(p) ? p : 0;
+            }
             const who = b.bookingType === "company"
               ? `${b.companyName || "—"} (${b.guests?.length || 0} os.)`
               : (b.guests?.map(g => g.name).filter(Boolean).join(", ") || "—");
-            const dates = `${fmtDate(b.from)} → ${fmtDate(b.to)}`;
+            const dates = isPermRow
+              ? `od ${fmtDate(b.permanentStart || b.from)} · ${b.permanentEnd ? `do ${fmtDate(b.permanentEnd)}` : "do odwołania"}`
+              : `${fmtDate(b.from)} → ${fmtDate(b.to)}`;
             const isPerm = b.isPermanent || b.guests?.some(g => g.isPermanent);
             return `
               <tr>
@@ -6688,7 +6799,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v2.2 · ${new Date().getFullYear()}
+          HospesAI · v2.3 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
