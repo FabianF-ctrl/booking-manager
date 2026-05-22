@@ -2537,7 +2537,6 @@ function buildStatusDetail(locId, from, to) {
 function buildReports() {
   // Collect available years from bookings
   const allYears = [...new Set(savedBookings.map(b => b.from?.slice(0,4)).filter(Boolean))].sort().reverse();
-  const MONTH_NAMES = ["Styczeń","Luty","Marzec","Kwiecień","Maj","Czerwiec","Lipiec","Sierpień","Wrzesień","Październik","Listopad","Grudzień"];
 
   const filterBar = `
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:12px 16px;margin-bottom:14px;display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
@@ -2552,7 +2551,7 @@ function buildReports() {
         <label>Miesiąc</label>
         <select id="reportsMonth" style="padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-size:13px;color:var(--text);font-family:inherit;outline:none" ${!state.reportsYear?"disabled":""}>
           <option value="">Wszystkie miesiące</option>
-          ${MONTH_NAMES.map((n,i)=>`<option value="${String(i+1).padStart(2,'0')}" ${state.reportsMonth===String(i+1).padStart(2,'0')?"selected":""}>${n}</option>`).join("")}
+          ${MONTHS.map((n,i)=>`<option value="${String(i+1).padStart(2,'0')}" ${state.reportsMonth===String(i+1).padStart(2,'0')?"selected":""}>${n}</option>`).join("")}
         </select>
       </div>
       <div class="search-wrap" style="max-width:240px;flex:1">
@@ -2621,7 +2620,7 @@ function buildReports() {
 
   const filteredByPeriod = uniqueBookings.filter(bookingMatchesPeriod);
 
-  const periodLabel = fy ? (fm ? `${MONTH_NAMES[parseInt(fm)-1]} ${fy}` : `rok ${fy}`) : "wszystkie okresy";
+  const periodLabel = fy ? (fm ? `${MONTHS[parseInt(fm)-1]} ${fy}` : `rok ${fy}`) : "wszystkie okresy";
 
   if (filteredByPeriod.length===0) return `
     <div class="reports-toolbar"><div class="reports-title" style="display:flex;align-items:center;gap:8px">${ICONS.fileText(22)} Raporty i finanse</div></div>
@@ -2671,7 +2670,7 @@ function buildReports() {
   let lastPaymentDateLabel = "";
   if (lastPaymentDate) {
     const [py, pm] = lastPaymentDate.split("-").map(Number);
-    lastPaymentDateLabel = `${MONTH_NAMES[pm-1]} ${py}`;
+    lastPaymentDateLabel = `${MONTHS[pm-1]} ${py}`;
   }
 
   let html = `
@@ -4786,7 +4785,7 @@ function buildEditModal() {
                         return `<button class="paid-month-btn" data-paid-month="${ym}" ${isPrepaid?"disabled":""}
                           style="padding:8px 4px;font-size:11px;font-weight:700;border:1px solid var(--border);border-radius:var(--radius);background:${bg};color:${color};cursor:${cursor};font-family:inherit;display:flex;flex-direction:column;align-items:center;gap:2px"
                           title="${isPaid?'Zapłacone':isOverdue?'ZALEGŁOŚĆ':isFuture?'Przyszły miesiąc':'Niezapłacone (bieżący)'}">
-                          <span>${MONTH_NAMES[m-1].slice(0,3)}</span>
+                          <span>${MONTHS[m-1].slice(0,3)}</span>
                           <span style="font-size:9px;font-weight:500;opacity:0.85">${isPaid?'✓':isOverdue?'!':''}</span>
                         </button>`;
                       }).join("")}
