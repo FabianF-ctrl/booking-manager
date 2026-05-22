@@ -1,0 +1,21 @@
+# Template: skopiuj jako tools/leak_patterns_local.txt i wpisz prawdziwe wartości.
+#
+#   cp tools/leak_patterns_local.example.txt tools/leak_patterns_local.txt
+#   # → edytuj
+#
+# Plik tools/leak_patterns_local.txt jest gitignored — bezpiecznie wpisuj tam
+# IP, hasła, domeny, cokolwiek co NIE może trafić do publicznego repo.
+#
+# Format: jeden pattern per linia, # comments OK.
+# Pattern jest matchowany case-insensitive, substring match.
+
+# Przykład: IP servera produkcyjnego
+# 192.168.1.100
+
+# Przykład: historyczne hasła plaintext (usunięte z kodu, ale mogą się
+# pojawić w commit messages / debug notes)
+# OLD_ADMIN_PASS_2023
+# legacy_db_password
+
+# Przykład: domena organizacji
+# example-real-org.com

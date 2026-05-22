@@ -1,0 +1,11 @@
+#!/bin/bash
+# commit-msg hook: skanuje commit message za leak patterns
+# Source: tools/check_leak.py
+#
+# Aktywowane przez: git config core.hooksPath .githooks
+# Setup: ./tools/setup-hooks.sh
+# Bypass (NIE zalecane): git commit --no-verify
+
+set -e
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+exec python3 "$SCRIPT_DIR/tools/check_leak.py" "$1"

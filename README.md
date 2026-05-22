@@ -89,6 +89,9 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
+# Activate git hooks (prevents accidental commits with personal data)
+./tools/setup-hooks.sh
+
 # Create the first admin user (creates data/users.json with bcrypt hash, chmod 600)
 ./users add admin "your-password" --role admin
 
@@ -96,6 +99,21 @@ pip install -r requirements.txt
 ./start.sh
 # → http://localhost:8000
 ```
+
+### Git hooks (preventative leak protection)
+
+This repo uses `.githooks/` (committed) instead of default `.git/hooks/`. After running `./tools/setup-hooks.sh`:
+
+- **commit-msg** — scans commit message body; blocks commit if it detects
+  location names, company names from `data/bookings.json`, the production server IP, or
+  historical plaintext passwords
+- **pre-commit** — runs `demo/patch_locations.py check` + scans the staged diff
+
+Patterns are sourced from gitignored `static/locations.local.js` and `data/bookings.json` —
+ZERO configuration if you already have prod data. Fresh clone without these files = hooks
+fall back to a hardcoded list (IP, passwords).
+
+Bypass at your own risk: `git commit --no-verify`.
 
 ### Adding more users
 ```bash

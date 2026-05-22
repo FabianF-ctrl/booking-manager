@@ -1,0 +1,25 @@
+#!/bin/bash
+# pre-commit hook: skanuje staged content za leak patterns + uruchamia patch_locations.py check
+#
+# Aktywowane przez: git config core.hooksPath .githooks
+# Setup: ./tools/setup-hooks.sh
+# Bypass (NIE zalecane): git commit --no-verify
+
+set -e
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# 1. Stary leak detector (sprawdza wszystkie staged files vs locations.local.js)
+if [ -f "$SCRIPT_DIR/demo/patch_locations.py" ] && [ -f "$SCRIPT_DIR/static/locations.local.js" ]; then
+    if ! python3 "$SCRIPT_DIR/demo/patch_locations.py" check 2>&1; then
+        echo ""
+        echo "❌ pre-commit zablokowany przez demo/patch_locations.py check"
+        exit 1
+    fi
+fi
+
+# 2. Nowy generic leak detector — skanuje staged diff (sam diff, nie pełne pliki)
+if ! python3 "$SCRIPT_DIR/tools/check_leak.py" --staged; then
+    exit 1
+fi
+
+exit 0

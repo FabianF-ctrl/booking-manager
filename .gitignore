@@ -7,6 +7,11 @@
 # without it the app falls back to the fictional baseline in static/index.html.
 /static/locations.local.js
 
+# Local leak-detector patterns — IP, historyczne hasła, domeny org.
+# Gitignored bo zawiera prawdziwe sekrety. Template w tools/leak_patterns_local.example.txt.
+# Setup: cp tools/leak_patterns_local.example.txt tools/leak_patterns_local.txt
+/tools/leak_patterns_local.txt
+
 # Backups created by demo/start.sh during a demo session
 /data.real-backup/
 /static/locations.local.js.demo-backup
