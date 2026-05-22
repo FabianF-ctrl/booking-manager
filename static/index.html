@@ -4179,6 +4179,61 @@ function buildHelp() {
           <li>Eksport CSV — przycisk u góry zakładki Raporty</li>
         </ul>
       `)}
+      ${section(ICONS.calculator ? ICONS.calculator(16) : ICONS.fileText(16), "Jak to jest liczone — pełna ściągawka matematyczna", `
+        <p style="margin-bottom:10px">Zebrane wzory używane przez raporty. Wszystkie liczone <strong>na żywo</strong> przy każdym otwarciu — żadnych zapisanych "totali" do desynchronizacji.</p>
+
+        <div style="background:var(--surface);padding:10px 12px;border-radius:6px;border-left:3px solid var(--blue);margin-bottom:12px">
+          <strong style="color:var(--blue)">PRZYCHÓD (per rezerwacja)</strong>
+          <ul style="margin:6px 0 0;padding-left:20px;font-size:12px">
+            <li><strong>Indywidualna</strong>: <code>(basePrice + extraPerAdult × (dorośli−1) + extraPerChild × dzieci) × nocy</code></li>
+            <li><strong>Firmowa (per pracownik)</strong>: <code>pricePerEmployee × liczba_pracowników_w_pokoju × nocy</code></li>
+            <li><strong>Stały najemca (monthly rate)</strong>: <code>monthlyRate × miesiące_aktywności</code>. Pełny miesiąc = pełna stawka. Niepełny (start lub koniec w środku) = <code>monthlyRate × dni_w_tym_miesiącu / dni_w_miesiącu</code>, <strong>zaokrąglone do groszy</strong>. Bieżący miesiąc aktywnego najemcy = zawsze pełny (rent płaci się za cały miesiąc).</li>
+            <li><strong>Custom price (nadpisana cena)</strong>: stała kwota, ignoruje powyższe formuły. Dla nie-stałych pro-rata do okresu filtru (cena × clipped_nights / total_nights).</li>
+          </ul>
+        </div>
+
+        <div style="background:var(--surface);padding:10px 12px;border-radius:6px;border-left:3px solid var(--green);margin-bottom:12px">
+          <strong style="color:var(--green)">WPŁACONO (per rezerwacja)</strong>
+          <ul style="margin:6px 0 0;padding-left:20px;font-size:12px">
+            <li><strong>Indywidualna / firmowa</strong>: <code>amountPaid</code> (kwota wpisana ręcznie w polu "Kwota wpłacona")</li>
+            <li><strong>Stały najemca prepaid</strong>: zakłada że <strong>wszystkie aktywne miesiące są zapłacone</strong> (na konto z góry). Wpłata = przychód automatycznie.</li>
+            <li><strong>Stały najemca postpaid</strong>: tylko miesiące zaznaczone jako "paidMonths" w modalu edycji (kolorowy grid kafelków). Wpłata = suma <code>monthlyRate × proporcja_dni</code> dla zaznaczonych.</li>
+          </ul>
+        </div>
+
+        <div style="background:var(--surface);padding:10px 12px;border-radius:6px;border-left:3px solid var(--orange);margin-bottom:12px">
+          <strong style="color:var(--orange)">MEDIA (prąd / gaz / woda / inne)</strong>
+          <p style="margin:6px 0;font-size:12px">Wpisywane <strong>per pokój per miesiąc</strong> w sekcji Media w Raportach. Suma = <code>electricity + gas + water + Σ(others.amount)</code>.</p>
+          <p style="margin:6px 0;font-size:12px;color:var(--red);font-weight:600">⚠ Media NIE obciążają najemcy. To wyłącznie koszt operacyjny obiektu.</p>
+          <ul style="margin:6px 0 0;padding-left:20px;font-size:12px">
+            <li>Wpływa na: <strong>Zysk netto = Przychód − Media</strong></li>
+            <li>NIE wpływa na: <strong>"Do pobrania" / "Wpłacono"</strong> — to są wyłącznie pieniądze należne / wpłacone PRZEZ najemcę</li>
+            <li>Filtr okresu klipuje media: tylko miesiące nakładające się z filtrem są wliczane</li>
+          </ul>
+        </div>
+
+        <div style="background:var(--surface);padding:10px 12px;border-radius:6px;border-left:3px solid var(--text2);margin-bottom:12px">
+          <strong>FAKTURY (PDF/JPG) — zakładka Faktury</strong>
+          <p style="margin:6px 0;font-size:12px">Osobne <strong>archiwum dokumentów</strong> (faktury VAT, paragony). Wgrywasz pliki dla rezerwacji albo per pokój/miesiąc.</p>
+          <p style="margin:6px 0;font-size:12px">NIE wpływa na żadną kalkulację — to tylko storage dla audytu / dokumentacji. Kwoty z faktur wpisujesz osobno w sekcji Media.</p>
+        </div>
+
+        <div style="background:var(--surface);padding:10px 12px;border-radius:6px;border-left:3px solid var(--blue)">
+          <strong style="color:var(--blue)">RAPORTY — sumy globalne i per obiekt</strong>
+          <ul style="margin:6px 0 0;padding-left:20px;font-size:12px">
+            <li><strong>Przychód</strong> = Σ przychodów rezerwacji aktywnych w okresie (overlap test). Permanent klipowany do okresu.</li>
+            <li><strong>Wpłacono</strong> = Σ wpłat (per rezerwacja, też klipowany dla permanenta)</li>
+            <li><strong>Do pobrania</strong> = max(0, Przychód − Wpłacono)</li>
+            <li><strong>Zysk netto</strong> = Przychód − Media (media osobno, NIE odejmowane od wpłat)</li>
+            <li><strong>Filtr miesiąca</strong>: <code>booking.from &lt; end AND booking.to &gt; start</code> (overlap). Permanent: <code>permStart &lt; end AND permEnd &gt; start</code>.</li>
+            <li><strong>Pulpit "Przychód ten/poprzedni miesiąc"</strong>: ta sama logika co Raporty z filtrem aktualnego/poprzedniego miesiąca.</li>
+          </ul>
+        </div>
+
+        <div style="margin-top:14px;padding:10px 12px;background:var(--orange-light);border:1px solid var(--orange-border);border-radius:6px;font-size:12px;color:var(--text)">
+          <strong>⚠ Zaległości po pobycie</strong> (Pulpit + reports row badge): wykryte gdy <strong>postpaid</strong> + pobyt zakończony (<code>b.to ≤ dziś</code>) + <code>amountPaid &lt; przychód</code>. Dla stałego najemcy: <strong>postpaid</strong> + przeszłe miesiące poza paidMonths, LUB najemca zakończony i nie wszystkie active months opłacone.
+        </div>
+      `)}
       ${section(ICONS.settings(16), "Hasła i użytkownicy", `
         <p>Zarządzanie z linii komend (na serwerze lub lokalnie):</p>
         <pre style="background:var(--surface);padding:8px 10px;border-radius:6px;font-variant-numeric:tabular-nums;font-size:11px;margin:8px 0;overflow-x:auto"><code>./users list                                  # lista
