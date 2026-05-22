@@ -1660,6 +1660,42 @@ function countCalendarMonths(start, endExclusive) {
   return Math.max(0, (lastDay.getFullYear() - s.getFullYear()) * 12 + (lastDay.getMonth() - s.getMonth()) + 1);
 }
 
+// Pro-rata cena za jeden konkretny miesiąc YYYY-MM przy najemie ze stawką miesięczną.
+// Jeśli najemca obejmuje cały miesiąc kalendarzowy → pełna stawka.
+// Jeśli częściowy (zaczął/zakończył w środku miesiąca) → monthlyRate × dni_użyte / dni_w_miesiącu.
+// Wynik zaokrąglony do 2 miejsc po przecinku (PLN/grosze).
+//
+// pStartStr inclusive (YYYY-MM-DD), pEndStr exclusive (YYYY-MM-DD).
+// Dla aktywnego najemcy pEnd = endOfCurrentMonthExclusive() → bieżący miesiąc liczy się
+// jako pełny (rent płaci się za cały miesiąc, nie pro-rata na dziś).
+function prorataMonthPrice(monthlyRate, ym, pStartStr, pEndStr) {
+  if (!monthlyRate || monthlyRate <= 0 || !ym || !pStartStr || !pEndStr) return 0;
+  const [y, m] = ym.split("-").map(Number);
+  const monthStart = toStr(new Date(y, m - 1, 1));
+  const monthEndExcl = toStr(new Date(y, m, 1));
+  const daysInMonth = diffDays(monthStart, monthEndExcl);
+  const usedStart = pStartStr > monthStart ? pStartStr : monthStart;
+  const usedEnd = pEndStr < monthEndExcl ? pEndStr : monthEndExcl;
+  if (usedStart >= usedEnd) return 0;
+  const daysUsed = diffDays(usedStart, usedEnd);
+  if (daysUsed >= daysInMonth) return monthlyRate;
+  // Zaokrąglenie do 2 miejsc — standard dla PLN (grosze).
+  return Math.round(monthlyRate * daysUsed / daysInMonth * 100) / 100;
+}
+
+// Helper: zwraca [usedDays, daysInMonth] dla danego YYYY-MM oraz zakresu [pStart, pEnd).
+// Używane w UI do pokazania szczegółów typu "15/30 dni".
+function prorataMonthInfo(ym, pStartStr, pEndStr) {
+  const [y, m] = ym.split("-").map(Number);
+  const monthStart = toStr(new Date(y, m - 1, 1));
+  const monthEndExcl = toStr(new Date(y, m, 1));
+  const daysInMonth = diffDays(monthStart, monthEndExcl);
+  const usedStart = pStartStr > monthStart ? pStartStr : monthStart;
+  const usedEnd = pEndStr < monthEndExcl ? pEndStr : monthEndExcl;
+  const daysUsed = usedStart < usedEnd ? diffDays(usedStart, usedEnd) : 0;
+  return { daysUsed, daysInMonth, isPartial: daysUsed > 0 && daysUsed < daysInMonth };
+}
+
 // Ile miesięcy stałego najemcy mieści się w [rangeFrom, rangeTo) (opcjonalne).
 // Bez range — pełna liczba miesięcy od permanentStart do permanentEnd (lub end-of-current-month).
 function getPermanentMonths(entity, fallbackFrom, rangeFrom, rangeTo) {
@@ -1699,14 +1735,16 @@ function getPermanentPaidRevenue(entity, defaultDailyRate, fallbackFrom, rangeFr
   if (paidMonths.length === 0) return 0;
 
   const monthlyRate = parseFloat(entity.permanentMonthlyRate);
+  const pStart = entity.permanentStart || fallbackFrom;
+  const pEnd = entity.permanentEnd || endOfCurrentMonthExclusive();
   if (!isNaN(monthlyRate) && monthlyRate > 0) {
-    return monthlyRate * paidMonths.length;
+    // Pro-rata — każdy zapłacony miesiąc liczy się jako pełna stawka lub proporcjonalnie
+    // (jeśli najemca obejmuje tylko część tego miesiąca).
+    return paidMonths.reduce((sum, ym) => sum + prorataMonthPrice(monthlyRate, ym, pStart, pEnd), 0);
   }
   // Per-day mode — zsumuj dni dla zapłaconych miesięcy
   const customDaily = parseFloat(entity.dailyRate);
   const rate = (!isNaN(customDaily) && customDaily >= 0) ? customDaily : defaultDailyRate;
-  const pStart = entity.permanentStart || fallbackFrom;
-  const pEnd = entity.permanentEnd || endOfCurrentMonthExclusive();
   let totalDays = 0;
   for (const ym of paidMonths) {
     const [y, m] = ym.split('-').map(Number);
@@ -1737,7 +1775,13 @@ function getPermanentOverdueMonths(entity, fallbackFrom, payTiming) {
 function getPermanentRevenue(entity, defaultDailyRate, fallbackFrom, rangeFrom, rangeTo) {
   const monthly = parseFloat(entity.permanentMonthlyRate);
   if (!isNaN(monthly) && monthly > 0) {
-    return monthly * getPermanentMonths(entity, fallbackFrom, rangeFrom, rangeTo);
+    // Pro-rata: dla każdego miesiąca aktywności (w okresie raportu) zlicz proporcjonalnie
+    // do faktycznej liczby dni mieszkania. Pierwszy/ostatni miesiąc często są częściowe.
+    const activeMonths = getPermanentActiveMonths(entity, fallbackFrom, rangeFrom, rangeTo);
+    if (activeMonths.length === 0) return 0;
+    const pStart = entity.permanentStart || fallbackFrom;
+    const pEnd = entity.permanentEnd || endOfCurrentMonthExclusive();
+    return activeMonths.reduce((sum, ym) => sum + prorataMonthPrice(monthly, ym, pStart, pEnd), 0);
   }
   const customDaily = parseFloat(entity.dailyRate);
   const rate = (!isNaN(customDaily) && customDaily >= 0) ? customDaily : defaultDailyRate;
@@ -1769,7 +1813,12 @@ function getPaymentWarning(b) {
     if (missing.length === 0) return null;
 
     const rate = parseFloat(b.permanentMonthlyRate);
-    const owed = (!isNaN(rate) && rate > 0) ? rate * missing.length : 0;
+    // Pro-rata: każdy zaległy miesiąc po cenie odpowiadającej jego części aktywnej.
+    const pStart = b.permanentStart || b.from;
+    const pEnd = b.permanentEnd || endOfCurrentMonthExclusive();
+    const owed = (!isNaN(rate) && rate > 0)
+      ? missing.reduce((s, ym) => s + prorataMonthPrice(rate, ym, pStart, pEnd), 0)
+      : 0;
     const paidCount = isEnded ? activeMonths.length - unpaidActive.length : paidArr.filter(m => activeMonths.includes(m)).length;
     const monthsLabel = missing.slice(0, 6).join(", ") + (missing.length > 6 ? `, … (+${missing.length - 6})` : "");
     return {
@@ -4945,6 +4994,9 @@ function buildEditModal() {
                 const overdue = activeMonths.filter(ym => ym < currentYm && !paidMonths.has(ym) && b.payment?.timing !== "prepaid");
                 const isPrepaid = b.payment?.timing === "prepaid";
 
+                // Pro-rata context dla każdego miesiąca — używamy edytowanych dat (em.permanentEnd etc.)
+                const previewPStart = b.permanentStart || em.from || b.from;
+                const previewPEnd = (em.permanentEnd !== undefined ? em.permanentEnd : b.permanentEnd) || endOfCurrentMonthExclusive();
                 const monthGrid = Object.entries(byYear).map(([y, months]) => `
                   <div style="margin-bottom:10px">
                     <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:6px">${y}</div>
@@ -4956,18 +5008,32 @@ function buildEditModal() {
                         const bg = isPaid ? "var(--green)" : (isOverdue ? "var(--red)" : (isFuture ? "var(--surface2)" : "var(--surface3)"));
                         const color = (isPaid || isOverdue) ? "#fff" : "var(--text2)";
                         const cursor = isPrepaid ? "default" : "pointer";
+                        // Pro-rata szczegóły dla tego miesiąca
+                        const info = prorataMonthInfo(ym, previewPStart, previewPEnd);
+                        const amt = hasMonthly ? prorataMonthPrice(monthly, ym, previewPStart, previewPEnd) : 0;
+                        const subLabel = !hasMonthly
+                          ? ""
+                          : (info.isPartial
+                            ? `${info.daysUsed}/${info.daysInMonth}d · zł${amt}`
+                            : `zł${amt}`);
                         return `<button class="paid-month-btn" data-paid-month="${ym}" ${isPrepaid?"disabled":""}
-                          style="padding:8px 4px;font-size:11px;font-weight:700;border:1px solid var(--border);border-radius:var(--radius);background:${bg};color:${color};cursor:${cursor};font-family:inherit;display:flex;flex-direction:column;align-items:center;gap:2px"
-                          title="${isPaid?'Zapłacone':isOverdue?'ZALEGŁOŚĆ':isFuture?'Przyszły miesiąc':'Niezapłacone (bieżący)'}">
-                          <span>${MONTHS[m-1].slice(0,3)}</span>
-                          <span style="font-size:9px;font-weight:500;opacity:0.85">${isPaid?'✓':isOverdue?'!':''}</span>
+                          style="padding:8px 4px;font-size:11px;font-weight:700;border:1px solid var(--border);border-radius:var(--radius);background:${bg};color:${color};cursor:${cursor};font-family:inherit;display:flex;flex-direction:column;align-items:center;gap:2px;min-height:48px"
+                          title="${isPaid?'Zapłacone':isOverdue?'ZALEGŁOŚĆ':isFuture?'Przyszły miesiąc':'Niezapłacone (bieżący)'}${hasMonthly && info.isPartial ? ` · pro-rata ${info.daysUsed}/${info.daysInMonth} dni` : ''}">
+                          <span>${MONTHS[m-1].slice(0,3)}${isPaid?' ✓':isOverdue?' !':''}</span>
+                          ${subLabel ? `<span style="font-size:9px;font-weight:500;opacity:0.85;font-variant-numeric:tabular-nums">${subLabel}</span>` : ""}
                         </button>`;
                       }).join("")}
                     </div>
                   </div>
                 `).join("");
 
-                const totalPaidAmt = (isPrepaid ? activeMonths.length : [...paidMonths].filter(m => activeMonths.includes(m)).length) * (hasMonthly ? monthly : 0);
+                // Suma wpłat — sumuj pro-rata cen za zapłacone miesiące (a nie count × stawka).
+                const selectedMonths = isPrepaid
+                  ? activeMonths
+                  : activeMonths.filter(m => paidMonths.has(m));
+                const totalPaidAmt = hasMonthly
+                  ? selectedMonths.reduce((s, ym) => s + prorataMonthPrice(monthly, ym, previewPStart, previewPEnd), 0)
+                  : 0;
 
                 return `
                 <div class="divider"></div>
