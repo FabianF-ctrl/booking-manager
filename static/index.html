@@ -1714,8 +1714,12 @@ function getPermanentActiveMonths(entity, fallbackFrom, rangeFrom, rangeTo) {
   const to   = rangeTo   && rangeTo   < pEnd   ? rangeTo   : pEnd;
   if (!from || !to || from >= to) return [];
   const months = [];
-  let curr = new Date(from);
-  const endD = new Date(to);
+  // BUG FIX: używamy parseDate (local midnight) nie new Date(string) który parsuje UTC.
+  // W TZ != UTC: new Date("2026-04-01") to lokalnie "2026-04-01 02:00",
+  // ale `new Date(2026, 4, 1)` to lokalna północ. Niezgodność powoduje ghost-iterację
+  // (np. May 1 0:00 UTC < May 1 0:00 lokalnie = TRUE w Polsce → fałszywy maj).
+  let curr = parseDate(from);
+  const endD = parseDate(to);
   while (curr < endD) {
     months.push(`${curr.getFullYear()}-${String(curr.getMonth()+1).padStart(2,'0')}`);
     curr = new Date(curr.getFullYear(), curr.getMonth()+1, 1);
@@ -2031,27 +2035,47 @@ function buildDashboard() {
     s + l.rooms.filter(r => getRoomStatusToday(r.id).status === "occupied").length, 0);
   const occupancyPct = totalRooms > 0 ? Math.round(occupiedToday / totalRooms * 100) : 0;
 
-  const thisMonthRevenue = savedBookings
-    .filter(b => b.from >= monthStart && b.from <= monthEnd)
-    .reduce((s, b) => {
-      const loc = DATA.locations.find(l=>l.id===b.locId);
-      const room = loc?.rooms.find(r=>r.id===b.roomId);
-      return s + calcBookingTotal(b, room, diffDays(b.from,b.to));
-    }, 0);
-
-  const prevMonthRevenue = savedBookings
-    .filter(b => b.from >= prevMonthStart && b.from <= prevMonthEnd)
-    .reduce((s, b) => {
-      const loc = DATA.locations.find(l=>l.id===b.locId);
-      const room = loc?.rooms.find(r=>r.id===b.roomId);
-      return s + calcBookingTotal(b, room, diffDays(b.from,b.to));
-    }, 0);
-
-  const unpaid = savedBookings.filter(b => !b.payment?.timing || b.payment?.timing === "on-arrival");
-  const unpaidTotal = unpaid.reduce((s, b) => {
+  // Overlap test + clipping do okresu (jak w Raportach):
+  // - permanent: aktywny w [monthStart, monthEnd+1) gdy permanentStart < end AND (permanentEnd || endOfCurrentMonth) > start
+  // - zwykła rezerwacja: b.from < end AND b.to > start
+  // calcBookingTotal z periodRange klipuje nights/miesiące do tego okresu.
+  const monthStartExcl = monthStart; // YYYY-MM-01 inclusive
+  const monthEndExcl = toStr(addDays(parseDate(monthEnd), 1)); // first of next month exclusive
+  const prevMonthEndExcl = toStr(addDays(parseDate(prevMonthEnd), 1));
+  const thisMonthBookings = savedBookings.filter(b => {
+    if (b.isPermanent && b.bookingType !== "company") {
+      const ps = b.permanentStart || b.from;
+      const pe = b.permanentEnd || endOfCurrentMonthExclusive();
+      return ps < monthEndExcl && pe > monthStartExcl;
+    }
+    return b.from < monthEndExcl && b.to > monthStartExcl;
+  });
+  const thisMonthRevenue = thisMonthBookings.reduce((s, b) => {
     const loc = DATA.locations.find(l=>l.id===b.locId);
     const room = loc?.rooms.find(r=>r.id===b.roomId);
-    return s + calcBookingTotal(b, room, diffDays(b.from,b.to));
+    return s + calcBookingTotal(b, room, diffDays(b.from,b.to), { from: monthStartExcl, to: monthEndExcl });
+  }, 0);
+
+  const prevMonthBookings = savedBookings.filter(b => {
+    if (b.isPermanent && b.bookingType !== "company") {
+      const ps = b.permanentStart || b.from;
+      const pe = b.permanentEnd || endOfCurrentMonthExclusive();
+      return ps < prevMonthEndExcl && pe > prevMonthStart;
+    }
+    return b.from < prevMonthEndExcl && b.to > prevMonthStart;
+  });
+  const prevMonthRevenue = prevMonthBookings.reduce((s, b) => {
+    const loc = DATA.locations.find(l=>l.id===b.locId);
+    const room = loc?.rooms.find(r=>r.id===b.roomId);
+    return s + calcBookingTotal(b, room, diffDays(b.from,b.to), { from: prevMonthStart, to: prevMonthEndExcl });
+  }, 0);
+
+  // "Zaległości po pobycie" — rezerwacje postpaid zakończone z brakiem / niepełną wpłatą.
+  // Używamy tej samej logiki co warning system w edit modalu (getPaymentWarning).
+  const unpaid = savedBookings.filter(b => getPaymentWarning(b) !== null);
+  const unpaidTotal = unpaid.reduce((s, b) => {
+    const w = getPaymentWarning(b);
+    return s + (w?.owed || 0);
   }, 0);
 
   // Upcoming 7 days: checkouts and checkins
@@ -2147,14 +2171,14 @@ function buildDashboard() {
           <div style="font-size:11px;color:var(--text3);margin-top:4px">${revDeltaHtml || "Brak danych poprzedniego miesiąca"}</div>
         </div>
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px 18px">
-          <div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;margin-bottom:6px">Bez potwierdzenia płatności</div>
-          <div style="font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;color:${unpaid.length>0?"var(--orange)":"var(--green)"}">${unpaid.length}</div>
-          <div style="font-size:11px;color:var(--text3);margin-top:4px">${unpaid.length > 0 ? `zł${unpaidTotal.toLocaleString()} do pobrania` : "Wszystkie płatności OK"}</div>
+          <div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;margin-bottom:6px">Zaległości po pobycie</div>
+          <div style="font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;color:${unpaid.length>0?"var(--red)":"var(--green)"}">${unpaid.length}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:4px">${unpaid.length > 0 ? `zł${unpaidTotal.toLocaleString()} do ściągnięcia` : "Wszystkie pobyty rozliczone"}</div>
         </div>
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px 18px">
           <div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;margin-bottom:6px">Przychód poprzedni miesiąc</div>
           <div style="font-size:26px;font-weight:700;font-variant-numeric:tabular-nums">zł${prevMonthRevenue.toLocaleString()}</div>
-          <div style="font-size:11px;color:var(--text3);margin-top:4px">${savedBookings.filter(b=>b.from>=prevMonthStart&&b.from<=prevMonthEnd).length} rezerwacji</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:4px">${prevMonthBookings.length} ${nrez(prevMonthBookings.length)}</div>
         </div>
       </div>
 
