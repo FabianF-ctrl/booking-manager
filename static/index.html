@@ -1743,6 +1743,73 @@ function getPermanentRevenue(entity, defaultDailyRate, fallbackFrom, rangeFrom, 
   const rate = (!isNaN(customDaily) && customDaily >= 0) ? customDaily : defaultDailyRate;
   return rate * getPermanentNights(entity, fallbackFrom, rangeFrom, rangeTo);
 }
+
+// ============================================================
+// PAYMENT WARNING — wykryj zaległości "po pobycie" do podświetlenia w UI / confirm-dialogu
+// ============================================================
+// Zwraca null jeśli wszystko OK, lub { level: "warning"|"danger", title, message, owed, paid, total }.
+// Wykrywa dwa scenariusze:
+// 1) Stały najemca indywidualny + postpaid: są miesiące przeszłe nieopłacone, LUB
+//    najemca zakończony (permanentEnd) i nie wszystkie miesiące są oznaczone jako zapłacone.
+// 2) Zwykła rezerwacja + postpaid: pobyt już się zakończył (b.to <= today) i amountPaid < total.
+function getPaymentWarning(b) {
+  if (!b) return null;
+  if (b.payment?.timing !== "postpaid") return null;
+
+  const isPerm = b.isPermanent && b.bookingType !== "company";
+  if (isPerm) {
+    const overdueMonths = getPermanentOverdueMonths(b, b.from, b.payment?.timing);
+    const activeMonths = getPermanentActiveMonths(b, b.from, null, null);
+    const paidArr = Array.isArray(b.paidMonths) ? b.paidMonths : [];
+    const isEnded = !!b.permanentEnd;
+    const unpaidActive = activeMonths.filter(m => !paidArr.includes(m));
+    // Jeśli zakończony — patrzymy na WSZYSTKIE active months, nie tylko przeszłe.
+    // Jeśli aktywny — patrzymy tylko na przeszłe (overdue, bieżący jeszcze trwa).
+    const missing = isEnded ? unpaidActive : overdueMonths;
+    if (missing.length === 0) return null;
+
+    const rate = parseFloat(b.permanentMonthlyRate);
+    const owed = (!isNaN(rate) && rate > 0) ? rate * missing.length : 0;
+    const paidCount = isEnded ? activeMonths.length - unpaidActive.length : paidArr.filter(m => activeMonths.includes(m)).length;
+    const monthsLabel = missing.slice(0, 6).join(", ") + (missing.length > 6 ? `, … (+${missing.length - 6})` : "");
+    return {
+      level: missing.length > activeMonths.length / 2 ? "danger" : "warning",
+      title: isEnded ? "Najemca zakończony — są zaległe miesiące" : "Zaległe miesiące",
+      message: `Brak wpłaty za ${missing.length} ${nm(missing.length)}: ${monthsLabel}.${owed > 0 ? ` Do zapłaty: zł${owed.toLocaleString()}.` : ""}`,
+      owed,
+      paid: 0,
+      total: owed,
+      missingMonths: missing,
+      isPermanent: true
+    };
+  }
+
+  // Zwykła rezerwacja postpaid
+  const today = todayStr();
+  const bookingEnded = b.to && b.to <= today;
+  if (!bookingEnded) return null;
+
+  const loc = DATA.locations.find(l => l.id === b.locId);
+  const room = loc?.rooms.find(r => r.id === b.roomId);
+  const total = calcBookingTotal(b, room, getActualNights(b));
+  if (total <= 0) return null;
+  const p = parseFloat(b.payment?.amountPaid);
+  const paid = !isNaN(p) ? p : 0;
+  const owed = total - paid;
+  if (owed <= 0.01) return null;
+
+  return {
+    level: paid > 0 ? "warning" : "danger",
+    title: paid === 0 ? "Pobyt zakończony, brak wpłaty" : "Pobyt zakończony, niepełna wpłata",
+    message: paid === 0
+      ? `Pobyt zakończył się ${fmtDate(b.to)} — nie odnotowano żadnej wpłaty. Do zapłaty: zł${total.toLocaleString()}.`
+      : `Pobyt zakończył się ${fmtDate(b.to)}. Wpłacono zł${paid.toLocaleString()} z zł${total.toLocaleString()}. Brakuje: zł${owed.toLocaleString()}.`,
+    owed,
+    paid,
+    total,
+    isPermanent: false
+  };
+}
 function getActualNights(b) {
   if (b.isPermanent) return getPermanentNights(b, b.from);
   if (b.actualDays && b.actualDays.length > 0) return b.actualDays.length;
@@ -2442,6 +2509,13 @@ function buildRoomDetailModal() {
       </div>` : ""}
     ` : "";
 
+    const detailWarn = getPaymentWarning(b);
+    const detailWarnBanner = detailWarn ? `
+      <div style="background:${detailWarn.level === "danger" ? "var(--red-light, #fee)" : "var(--orange-light)"};color:${detailWarn.level === "danger" ? "var(--red)" : "var(--orange)"};border:1.5px solid ${detailWarn.level === "danger" ? "var(--red)" : "var(--orange-border)"};border-radius:var(--radius);padding:8px 10px;margin-top:8px;display:flex;align-items:flex-start;gap:8px;font-size:11px">
+        <span style="flex-shrink:0;margin-top:1px">${ICONS.alertTriangle(13)}</span>
+        <div style="flex:1"><strong>${esc(detailWarn.title)}.</strong> ${esc(detailWarn.message)}</div>
+      </div>` : "";
+
     return `
       <div class="room-booking-card" id="rdc-${b.id}" style="border-left:3px solid ${cardAccent}">
         <div class="room-booking-card-hdr">
@@ -2452,6 +2526,7 @@ function buildRoomDetailModal() {
             <span class="ibadge ${isCompany?"ibadge-co":"ibadge-in"}">${isCompany?"Firma":"Indyw."}</span>
           </div>
         </div>
+        ${detailWarnBanner}
 
         <div class="room-booking-row">
           <span style="display:inline-flex;align-items:center;gap:6px">${ICONS.calendar(12)} ${b.isPermanent && b.bookingType !== "company" ? "Stały najemca" : "Rezerwacja"}</span>
@@ -3082,12 +3157,19 @@ function buildReportRow(b, loc, periodRange) {
         ? `<span style="display:inline-flex;align-items:center;gap:3px;background:var(--orange-light);color:var(--orange);border:1px solid var(--orange-border);font-size:10px;font-weight:600;padding:2px 7px;border-radius:99px;margin-left:6px" title="${paidInPeriod.length}/${activeMonthsInPeriod.length} miesięcy zapłaconych w okresie">${paidInPeriod.length}/${activeMonthsInPeriod.length} mies.</span>`
         : "")));
 
+  // Zaległość po pobycie dla zwykłych (nie-permanent) rezerwacji postpaid:
+  // pobyt zakończony + amountPaid < total → czerwony badge.
+  const postpaidWarn = !isPerm ? getPaymentWarning(b) : null;
+  const postpaidBadge = postpaidWarn
+    ? `<span style="display:inline-flex;align-items:center;gap:3px;background:var(--red);color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:99px;margin-left:6px" title="${esc(postpaidWarn.message)}">${ICONS.alertTriangle(10)} ${postpaidWarn.paid > 0 ? "Niepełna wpłata" : "Brak wpłaty"}</span>`
+    : "";
+
   return `
     <div>
       <div class="report-row">
         <div>
           <div style="font-size:11px;font-weight:700;color:var(--orange);letter-spacing:0.3px;margin-bottom:2px">${esc(roomLabel)}</div>
-          <div class="report-guest">${esc(who||"—")}${isExtended?'<span class="ext-badge">Przedłużony</span>':''}${permStatusBadge}</div>
+          <div class="report-guest">${esc(who||"—")}${isExtended?'<span class="ext-badge">Przedłużony</span>':''}${permStatusBadge}${postpaidBadge}</div>
         </div>
         <div>
           ${isPerm
@@ -5070,6 +5152,41 @@ function buildEditModal() {
 
           <div class="divider"></div>
           <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;display:flex;align-items:center;gap:6px">${ICONS.banknote(13)} Płatność</div>
+          ${(() => {
+            // Preview warning — używamy bieżącego stanu em + b żeby pokazać warning live
+            // zanim user zapisze. Funkcja getPaymentWarning sprawdza postpaid + zaległości.
+            const previewB = {
+              ...b,
+              from: em.from, to: em.to,
+              actualDays: em.actualDays && em.actualDays.length > 0 ? em.actualDays : (b.actualDays || []),
+              payment: {
+                method: em.payMethod || b.payment?.method,
+                timing: em.payTiming || b.payment?.timing,
+                amountPaid: em.amountPaid !== undefined ? em.amountPaid : b.payment?.amountPaid
+              },
+              isPermanent: (em.isPermanent !== undefined ? em.isPermanent : b.isPermanent),
+              permanentStart: b.permanentStart,
+              permanentEnd: em.permanentEnd !== undefined ? (em.permanentEnd || null) : b.permanentEnd,
+              permanentMonthlyRate: em.permanentMonthlyRate !== undefined
+                ? (em.permanentMonthlyRate === "" ? undefined : parseFloat(em.permanentMonthlyRate))
+                : b.permanentMonthlyRate,
+              paidMonths: em.paidMonths !== undefined ? em.paidMonths : (b.paidMonths || [])
+            };
+            const warn = getPaymentWarning(previewB);
+            if (!warn) return "";
+            const isDanger = warn.level === "danger";
+            const bg = isDanger ? "var(--red-light, #fee)" : "var(--orange-light)";
+            const fg = isDanger ? "var(--red)" : "var(--orange)";
+            const bd = isDanger ? "var(--red)" : "var(--orange-border)";
+            return `
+              <div id="paymentWarningBanner" style="background:${bg};color:${fg};border:1.5px solid ${bd};border-radius:var(--radius);padding:10px 12px;margin-bottom:12px;display:flex;align-items:flex-start;gap:10px;font-size:12px">
+                <span style="flex-shrink:0;margin-top:1px">${ICONS.alertTriangle(16)}</span>
+                <div style="flex:1">
+                  <div style="font-weight:700;margin-bottom:3px">${esc(warn.title)}</div>
+                  <div style="line-height:1.4">${esc(warn.message)}</div>
+                </div>
+              </div>`;
+          })()}
           <div class="edit-field">
             <label>Metoda płatności</label>
             <select id="editPayMethod">
@@ -6091,11 +6208,12 @@ function attachEditEvents() {
   });
 
   // Select fields — no re-render needed
-  document.getElementById("editPayMethod")?.addEventListener("change", e => { state.editModal.payMethod=e.target.value; });
-  document.getElementById("editPayTiming")?.addEventListener("change", e => { state.editModal.payTiming=e.target.value; });
+  document.getElementById("editPayMethod")?.addEventListener("change", e => { state.editModal.payMethod=e.target.value; render(); });
+  document.getElementById("editPayTiming")?.addEventListener("change", e => { state.editModal.payTiming=e.target.value; render(); });
 
-  // Amount paid — no re-render, just update state
+  // Amount paid — input updates state, blur re-renders (żeby pokazać/ukryć warning bez "skakania" focusa)
   document.getElementById("editAmountPaid")?.addEventListener("input", e => { state.editModal.amountPaid=e.target.value; });
+  document.getElementById("editAmountPaid")?.addEventListener("blur", () => { render(); });
   document.querySelectorAll("[data-edit-guest-mode]").forEach(sel => {
     sel.addEventListener("change", e => {
       const idx = parseInt(e.target.dataset.editGuestMode);
@@ -7017,6 +7135,18 @@ async function saveEditAPI() {
     else delete updated.permanentMonthlyRate;
   }
   delete updated.actualFrom; delete updated.actualTo;
+
+  // Warning przed zapisem — postpaid + zaległość. Daje userowi szansę zaktualizować wpłatę.
+  // Pomijamy tę osłonę gdy user już w obecnym save'ie potwierdził (state.editModal._warnAck).
+  if (!state.editModal._warnAck) {
+    const warn = getPaymentWarning(updated);
+    if (warn) {
+      const msg = `${warn.title}\n\n${warn.message}\n\nZapisać mimo to?\n(Anuluj = wróć i zaktualizuj wpłatę / odznacz "Po pobycie")`;
+      if (!confirm(msg)) return;
+      state.editModal._warnAck = true; // żeby drugi save nie pytał znowu w tej samej sesji modalu
+    }
+  }
+
   try {
     const saved = await apiPut("/api/bookings/" + b.id, updated);
     const idx = savedBookings.findIndex(x=>x.id===b.id);
