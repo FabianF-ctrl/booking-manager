@@ -4851,7 +4851,15 @@ function buildEditModal() {
           ${b.bookingType==="company" && (em.guests||b.guests||[]).length > 0 ? `
           <div class="edit-field">
             <label>Tryb rozliczenia i stawka — per pracownik</label>
-            ${(em.guests||b.guests).map((g, idx) => {
+            ${(() => {
+              // Multi-room: pokazujemy TYLKO pracowników przypisanych do tego pokoju.
+              // Single-room (lub legacy bez assignedRoom): pokazujemy wszystkich.
+              const fullList = em.guests || b.guests;
+              const hasAssignments = fullList.some(g => g.assignedRoom);
+              const visible = hasAssignments
+                ? fullList.map((g, idx) => ({ g, idx })).filter(({ g }) => g.assignedRoom === b.roomId)
+                : fullList.map((g, idx) => ({ g, idx }));
+              return visible.map(({ g, idx }) => {
               const r  = DATA.locations.flatMap(l=>l.rooms).find(x => x.id === b.roomId);
               const bp = r?.basePrice || 0;
               const ppe = r?.pricePerEmployee || 0;
@@ -4910,7 +4918,21 @@ function buildEditModal() {
                 <div style="font-size:10px;color:var(--text3);font-style:italic">${hasGMonthly ? `Każdy miesiąc = zł${gMonthlyNum} (niezależnie od liczby dni).` : `Liczone za dobę. Wpisz miesięczną żeby przejść na stałą stawkę.`}</div>`;
                 })() : ""}
               </div>`;
-            }).join("")}
+            }).join("");
+            })()}
+            ${(() => {
+              // Info-banner gdy multi-room i pokazujemy tylko 1 pokój
+              const fullList = em.guests || b.guests;
+              const hasAssignments = fullList.some(g => g.assignedRoom);
+              if (!hasAssignments) return "";
+              const inRoomCount = fullList.filter(g => g.assignedRoom === b.roomId).length;
+              const otherCount = fullList.length - inRoomCount;
+              if (otherCount === 0) return "";
+              return `<div style="font-size:11px;color:var(--text2);padding:8px 10px;background:var(--blue-light);border:1px solid var(--blue-mid);border-radius:var(--radius);display:flex;gap:6px;align-items:flex-start">
+                <span style="flex-shrink:0;margin-top:1px">${ICONS.info(12)}</span>
+                <div>Edytujesz tylko pracowników przypisanych do tego pokoju (${inRoomCount}). Pozostałe ${otherCount} ${otherCount===1?'osoba':otherCount<5?'osoby':'osób'} z innych pokoi tej samej rezerwacji firmowej edytuj w osobnych zakładkach (każdy pokój = osobna rezerwacja).</div>
+              </div>`;
+            })()}
           </div>` : ""}
           <div class="edit-field">
             <label>Cena finalna (zł) — nadpisanie, pusty = z cennika</label>
