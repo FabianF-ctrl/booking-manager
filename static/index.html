@@ -4794,6 +4794,29 @@ function buildBookingForm(loc) {
 
     <div class="guests-hdr">
       <span class="guests-lbl">${isCompany?"Pracownicy":"Goście"}</span>
+      ${(() => {
+        // Inline indykator obok nagłówka — żeby user widział status od razu przy edycji
+        // listy gości (nie musi scrollować do footer banner'a).
+        if (isCompany) {
+          // Firmowa: pokaż "X nieprzypisanych" jeśli są tacy
+          if (selectedRooms.length > 1) {
+            const unassigned = state.guests.filter(g => !g.assignedRoom).length;
+            if (unassigned > 0) {
+              return `<span style="font-size:11px;color:var(--orange);background:var(--orange-light);border:1px solid var(--orange-border);padding:2px 8px;border-radius:99px;margin-left:8px;font-weight:600">⚠️ ${unassigned} bez przypisania</span>`;
+            }
+          }
+          return `<span style="font-size:11px;color:var(--text3);background:var(--surface2);padding:2px 8px;border-radius:99px;margin-left:8px">${state.guests.length} ${state.guests.length===1?"prac.":"prac."}</span>`;
+        }
+        // Indywidualna: pokaż kapacytet vs liczba osób
+        if (!room) return "";
+        const physCap = room.capacity || 0;
+        const need = state.guests.length;
+        if (need <= physCap) {
+          return `<span style="font-size:11px;color:var(--text3);background:var(--surface2);padding:2px 8px;border-radius:99px;margin-left:8px">${need}/${physCap} ${need===1?"osoba":need<5?"osoby":"osób"}</span>`;
+        }
+        const over = need - physCap;
+        return `<span style="font-size:11px;color:var(--orange);background:var(--orange-light);border:1px solid var(--orange-border);padding:2px 8px;border-radius:99px;margin-left:8px;font-weight:600">⚠️ ${need}/${physCap} — o ${over} za dużo</span>`;
+      })()}
       <button class="add-guest-btn" id="addGuestBtn">+ Dodaj ${isCompany?"pracownika":"gościa"}</button>
     </div>
 
@@ -7292,7 +7315,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.3 · ${new Date().getFullYear()}
+          HospesAI · v3.4 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
