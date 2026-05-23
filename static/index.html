@@ -4662,6 +4662,17 @@ function buildBookingForm(loc) {
   const guestCount = state.guests.length;
   const selectedRooms = (state.selectedRooms && state.selectedRooms.length > 0) ? state.selectedRooms : (state.selectedRoom ? [state.selectedRoom] : []);
 
+  // v3.10 — Auto-przypisanie dla firmowej z 1 pokojem.
+  // Gdy jest tylko 1 pokój, "przypisanie" jest implicit (wszyscy idą do tego pokoju).
+  // Bez tego: dropdown ma 1 opcję, user musi klikać manualnie, a inline badge / footer warning
+  // nigdy nie odpalał (warunek selectedRooms.length > 1) → niespójność: 4/5/6 pracownik bez
+  // przypisania, ale brak sygnału. Z auto-assign: wszyscy mają assignedRoom, over-cap nadal
+  // sygnalizuje gdy guests > beds. Multi-room (2+) pozostawia manualne przypisanie.
+  if (isCompany && selectedRooms.length === 1) {
+    const onlyRoom = selectedRooms[0];
+    state.guests.forEach(g => { if (!g.assignedRoom) g.assignedRoom = onlyRoom; });
+  }
+
   // Szacunkowa cena: dla firmowej sumujemy per pracownik
   const customPriceNum = state.customPrice !== "" ? parseFloat(state.customPrice) : NaN;
   const hasCustom = !isNaN(customPriceNum) && customPriceNum >= 0;
@@ -7392,7 +7403,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.9 · ${new Date().getFullYear()}
+          HospesAI · v3.10 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
