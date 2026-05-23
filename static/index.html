@@ -1118,6 +1118,7 @@ let state = {
   roomDetailModal: null, // { roomId, locId }
   billingMode: "room",   // "room" | "employee" — tryb rozliczenia firmowego
   customPrice: "",        // nadpisanie ceny finalnej, pusty = brak
+  individualPpe: "",      // cena za osobę / doba dla indywidualnej (pusty = liczyć z basePrice + extras)
   isPermanent: false,     // stały najemca (rezerwacja indywidualna open-ended)
   permanentMonthlyRate: "", // stawka miesięczna stałego najemcy (pusty = liczyć za dobę z cennika)
   printReport: null,      // { from, to } — gdy ustawione, render pokazuje modal wyboru zakresu
@@ -4215,7 +4216,8 @@ function buildHelp() {
         <div style="background:var(--surface);padding:10px 12px;border-radius:6px;border-left:3px solid var(--blue);margin-bottom:12px">
           <strong style="color:var(--blue)">PRZYCHÓD (per rezerwacja)</strong>
           <ul style="margin:6px 0 0;padding-left:20px;font-size:12px">
-            <li><strong>Indywidualna</strong>: <code>(basePrice + extraPerAdult × (dorośli−1) + extraPerChild × dzieci) × nocy</code></li>
+            <li><strong>Indywidualna (domyślnie)</strong>: <code>(basePrice + extraPerAdult × (dorośli−1) + extraPerChild × dzieci) × nocy</code></li>
+            <li><strong>Indywidualna z "Cena za osobę / doba"</strong>: <code>pricePerOsoba × liczba_gości × nocy</code> — opcjonalne pole w formularzu rezerwacji (i w edycji), nadpisuje basePrice + extras</li>
             <li><strong>Firmowa (per pracownik)</strong>: <code>pricePerEmployee × liczba_pracowników_w_pokoju × nocy</code></li>
             <li><strong>Stały najemca (monthly rate)</strong>: <code>monthlyRate × miesiące_aktywności</code>. Pełny miesiąc = pełna stawka. Niepełny (start lub koniec w środku) = <code>monthlyRate × dni_w_tym_miesiącu / dni_w_miesiącu</code>, <strong>zaokrąglone do groszy</strong>. Bieżący miesiąc aktywnego najemcy = zawsze pełny (rent płaci się za cały miesiąc).</li>
             <li><strong>Custom price (nadpisana cena)</strong>: stała kwota, ignoruje powyższe formuły. Dla nie-stałych pro-rata do okresu filtru (cena × clipped_nights / total_nights).</li>
@@ -4651,9 +4653,15 @@ function buildBookingForm(loc) {
   // Szacunkowa cena: dla firmowej sumujemy per pracownik
   const customPriceNum = state.customPrice !== "" ? parseFloat(state.customPrice) : NaN;
   const hasCustom = !isNaN(customPriceNum) && customPriceNum >= 0;
+  // Indywidualna z cena/osoba/doba: opcjonalny override
+  const indivPpeNum = (!isCompany && !state.isPermanent && state.individualPpe !== "")
+    ? parseFloat(state.individualPpe) : NaN;
+  const hasIndivPpe = !isNaN(indivPpeNum) && indivPpeNum > 0;
   let total;
   if (hasCustom) {
     total = customPriceNum * Math.max(1, selectedRooms.length);
+  } else if (hasIndivPpe) {
+    total = indivPpeNum * guestCount * nights;
   } else if (isCompany) {
     // Per-pracownik "Za osobę": rate = g.dailyRate (jeśli ustawiona) albo pricePerEmployee z cennika pokoju.
     // billingMode="room" zostawiamy jako legacy fallback do basePrice dla starych rezerwacji.
@@ -4681,6 +4689,8 @@ function buildBookingForm(loc) {
   let breakdownTxt = "";
   if (hasCustom) {
     breakdownTxt = selectedRooms.length > 1 ? `zł${customPriceNum} × ${selectedRooms.length} pokoi (cena nadpisana per pokój)` : `cena nadpisana: zł${customPriceNum}`;
+  } else if (hasIndivPpe) {
+    breakdownTxt = `zł${indivPpeNum}/osoba/doba × ${guestCount} ${guestCount===1?"os.":"os."} × ${nights} ${nw(nights)}`;
   } else if (isCompany) {
     const roomCount = state.guests.filter(g => g.billingMode !== "employee").length;
     const empCount  = state.guests.filter(g => g.billingMode === "employee").length;
@@ -4706,6 +4716,17 @@ function buildBookingForm(loc) {
     </div>
 
     ${overCap ? `<div class="cap-warning">⚠️ Pojemność pokoju: ${room.capacity} os. Lista ma ${guestCount}.</div>` : ""}
+
+    ${!isCompany && !state.isPermanent ? `
+    <div class="buffer-field">
+      <label>Cena za osobę / dobę (opcjonalne)</label>
+      <input type="number" id="individualPpeInput" min="0" step="0.01" value="${esc(state.individualPpe)}" placeholder="np. 50 — zostaw puste żeby liczyć z cennika (basePrice + dorośli/dzieci)" />
+      <div class="buffer-hint">${parseFloat(state.individualPpe) > 0
+        ? `Każdy gość liczy się jako <strong>zł${parseFloat(state.individualPpe)}/doba</strong> × ${guestCount} ${guestCount===1?"os.":"os."} × ${nights} ${nw(nights)} = <strong>zł${(parseFloat(state.individualPpe) * guestCount * nights).toLocaleString()}</strong>. Zastępuje basePrice + extra dorośli/dzieci.`
+        : `Zostaw puste żeby użyć cennika pokoju (basePrice + zł${room?.extraPerAdult||0} za każdego dodatkowego dorosłego + zł${room?.extraPerChild||0} za dziecko).`}
+      </div>
+    </div>
+    ` : ""}
 
     <div class="buffer-field">
       <label>Nadpisz cenę finalną (opcjonalne)</label>
@@ -5310,6 +5331,24 @@ function buildEditModal() {
               value="${em.customPrice !== undefined ? esc(em.customPrice) : (b.customPrice != null ? b.customPrice : "")}"
               placeholder="np. 1200" />
           </div>
+
+          ${b.bookingType !== "company" && !(em.isPermanent ?? b.isPermanent) ? (() => {
+            // Cena/osoba/doba dla indywidualnej (nie-permanent)
+            const currentPpe = em.individualPpe !== undefined
+              ? em.individualPpe
+              : (b.billingMode === "employee" && b.priceAtBooking?.pricePerEmployee ? b.priceAtBooking.pricePerEmployee : "");
+            return `<div class="edit-field">
+              <label>Cena za osobę / dobę (zł) — opcjonalne, pusty = basePrice + extras</label>
+              <input type="number" id="editIndividualPpe" min="0" step="0.01"
+                value="${esc(currentPpe)}"
+                placeholder="np. 50 — zostaw puste żeby liczyć z cennika" />
+              <div style="font-size:10px;color:var(--text3);font-style:italic;margin-top:4px">
+                ${parseFloat(currentPpe) > 0
+                  ? `Każdy gość liczy się jako zł${parseFloat(currentPpe)}/doba × liczba gości × noce.`
+                  : `Bez wartości używany cennik pokoju (basePrice + dodatki za dorośli/dzieci).`}
+              </div>
+            </div>`;
+          })() : ""}
 
           ${b.bookingType !== "company" ? `
           <div class="edit-field" style="padding:10px 12px;background:${(em.isPermanent ?? b.isPermanent)?"var(--green-light)":"var(--surface2)"};border:1px solid ${(em.isPermanent ?? b.isPermanent)?"var(--green-mid)":"var(--border)"};border-radius:var(--radius)">
@@ -6325,6 +6364,10 @@ function attachEvents() {
     document.getElementById("customPriceInput")?.addEventListener("input", e => {
       state.customPrice = e.target.value;
     });
+    document.getElementById("individualPpeInput")?.addEventListener("input", e => {
+      state.individualPpe = e.target.value;
+    });
+    document.getElementById("individualPpeInput")?.addEventListener("change", () => render());
     document.getElementById("customPriceInput")?.addEventListener("change", () => render());
 
     document.querySelectorAll(".pm-btn").forEach(btn => {
@@ -6479,6 +6522,8 @@ function attachEditEvents() {
   });
   document.getElementById("editPermanentMonthlyRate")?.addEventListener("change", () => render());
   document.getElementById("editCustomPrice")?.addEventListener("input", e => { state.editModal.customPrice = e.target.value; });
+  document.getElementById("editIndividualPpe")?.addEventListener("input", e => { state.editModal.individualPpe = e.target.value; });
+  document.getElementById("editIndividualPpe")?.addEventListener("blur", () => render());
 
   // Paid months toggle dla stałego najemcy indywidualnego
   document.querySelectorAll(".paid-month-btn[data-paid-month]").forEach(btn => {
@@ -6670,6 +6715,7 @@ function openModal(locId) {
   state.viewMonth = new Date();
   state.billingMode = "room";
   state.customPrice = "";
+  state.individualPpe = "";
   state.isPermanent = false;
   state.permanentMonthlyRate = "";
   state.calEndWasPlaceholder = false;
@@ -6680,6 +6726,7 @@ function closeModal() {
   state.modal = null;
   state.billingMode = "room";
   state.customPrice = "";
+  state.individualPpe = "";
   render();
 }
 
@@ -7113,7 +7160,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v2.7 · ${new Date().getFullYear()}
+          HospesAI · v2.8 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
@@ -7177,6 +7224,10 @@ async function confirmBookingAPI() {
   const customPriceNum = state.customPrice !== "" ? parseFloat(state.customPrice) : NaN;
   const hasCustom = !isNaN(customPriceNum) && customPriceNum >= 0;
   const indivPermanent = !isCompany && !!state.isPermanent;
+  // Indywidualna: opcjonalna cena za osobę/dobę. Jeśli > 0 i nie permanent — używamy employee mode.
+  const indivPpeNum = (!isCompany && !indivPermanent && state.individualPpe !== "")
+    ? parseFloat(state.individualPpe) : NaN;
+  const hasIndivPpe = !isNaN(indivPpeNum) && indivPpeNum > 0;
 
   const makeObj = (roomId) => {
     const room = loc.rooms.find(r => r.id === roomId);
@@ -7184,7 +7235,8 @@ async function confirmBookingAPI() {
       basePrice: room.basePrice,
       extraPerAdult: room.extraPerAdult,
       extraPerChild: room.extraPerChild,
-      pricePerEmployee: room.pricePerEmployee || 0,
+      // Indywidualna z pricePerPerson: override domyślnej wartości z pokoju
+      pricePerEmployee: hasIndivPpe ? indivPpeNum : (room.pricePerEmployee || 0),
     } : null;
     // Multi-room company: rozdziel orphans round-robin po pojemnościach.
     let baseCopy = state.guests.map(g=>({...g})).filter(g => isCompany || g.name.trim());
@@ -7207,8 +7259,10 @@ async function confirmBookingAPI() {
       bedsUsed = Math.max(1, guestsCopy.length);
     }
     const inRoomGuests = isCompany ? guestsCopy.filter(g => g.assignedRoom === roomId) : guestsCopy;
-    const billingMode = (isCompany && inRoomGuests.length > 0 && inRoomGuests.every(g => g.billingMode === "employee"))
-      ? "employee" : "room";
+    const billingMode = hasIndivPpe
+      ? "employee"  // Indywidualna z pricePerPerson — używaj employee mode (ppe × N × nights)
+      : ((isCompany && inRoomGuests.length > 0 && inRoomGuests.every(g => g.billingMode === "employee"))
+        ? "employee" : "room");
     const isPerm = indivPermanent || (isCompany && inRoomGuests.length > 0 && inRoomGuests.every(g => g.isPermanent));
     const permanentMonthly = indivPermanent ? parseFloat(state.permanentMonthlyRate) : NaN;
     const hasPermMonthly = !isNaN(permanentMonthly) && permanentMonthly > 0;
@@ -7319,6 +7373,21 @@ async function saveEditAPI() {
     const n = em.customPrice === "" ? NaN : parseFloat(em.customPrice);
     if (!isNaN(n) && n >= 0) updated.customPrice = n;
     else delete updated.customPrice;
+  }
+  // Indywidualna: cena za osobę/doba override
+  if (em.individualPpe !== undefined && updated.bookingType !== "company" && !updated.isPermanent) {
+    const n = em.individualPpe === "" ? NaN : parseFloat(em.individualPpe);
+    if (!isNaN(n) && n > 0) {
+      // Włącz employee mode + zapisz ppe w priceAtBooking
+      updated.billingMode = "employee";
+      updated.priceAtBooking = { ...(updated.priceAtBooking || {}), pricePerEmployee: n };
+    } else {
+      // Wyczyść: wróć do room mode + zerów ppe (basePrice + extras znów działa)
+      updated.billingMode = "room";
+      if (updated.priceAtBooking) {
+        updated.priceAtBooking = { ...updated.priceAtBooking, pricePerEmployee: 0 };
+      }
+    }
   }
   // PaidMonths dla stałego najemcy indywidualnego
   if (em.paidMonths !== undefined) {
