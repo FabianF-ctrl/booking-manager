@@ -4916,60 +4916,74 @@ function buildFooter() {
 
   // KAPACYTET — sprawdź wolne łóżka w wybranym okresie:
   // - Firmowa: blokuje (czerwony banner, disable confirm)
-  // - Indywidualna: tylko ostrzega (pomarańczowy banner, nadal można rezerwować —
-  //   prawdziwa rodzina może być większa niż "oficjalna" capacity pokoju)
+  // - Indywidualna (też stały najemca): tylko ostrzega (pomarańczowy banner, nadal można
+  //   rezerwować — rodzina może być większa niż "oficjalna" capacity pokoju)
   let capacityWarning = "";
   let withinCapacity = true;  // tylko firmowa blokuje
-  if (state.calStart && state.calEnd && selectedRooms.length > 0) {
+  // Dla permanent calEnd to placeholder (calStart+1) — używamy go jako fallback range,
+  // ale dodatkowo zawsze porównujemy do room.capacity (fizyczny limit pokoju).
+  if (state.calStart && selectedRooms.length > 0) {
     if (!isCompany) {
-      // Indywidualna — soft warning na dole, NIE blokuje
+      // Indywidualna (zwykła + stały najemca) — soft warning na dole
       const roomId = selectedRooms[0];
-      const free = getFreeBeds(roomId, state.calStart, state.calEnd);
+      const loc = DATA.locations.find(l => l.rooms.some(r => r.id === roomId));
+      const r = loc?.rooms.find(x => x.id === roomId);
+      const physCap = r?.capacity || 0;
+      // Free beds w wybranym okresie (jeśli calEnd nieustawiony, użyj calStart+1 jako placeholder).
+      const endForCheck = state.calEnd || toStr(addDays(parseDate(state.calStart), 1));
+      const freeInPeriod = getFreeBeds(roomId, state.calStart, endForCheck);
+      // Effective free = min z period-check i fizycznej pojemności (capacity to twardy limit
+      // niezależnie od dat). Dla NEW booking bez konfliktów free=capacity zwykle.
+      const free = Math.min(freeInPeriod, physCap);
       const need = state.guests.length;
       if (need > free) {
+        const isPermFlow = !!state.isPermanent;
         capacityWarning = `<div style="font-size:12px;color:var(--orange);padding:10px 12px;background:var(--orange-light);border:1.5px solid var(--orange-border);border-radius:var(--radius);margin-bottom:10px;display:flex;gap:8px;align-items:flex-start">
           <span style="flex-shrink:0;margin-top:1px">${ICONS.alertTriangle(15)}</span>
           <div>
-            <strong>Uwaga — przekroczona pojemność pokoju.</strong><br>
-            Wpisanych gości: <strong>${need}</strong>, wolnych łóżek w tym terminie: <strong>${free}</strong>.
-            ${need - free === 1 ? `Jest o ${need-free} osobę za dużo` : `Jest o ${need-free} osoby za dużo`}.<br>
+            <strong>Uwaga — przekroczona pojemność pokoju${isPermFlow ? " (stały najemca)" : ""}.</strong><br>
+            Wpisanych ${isPermFlow ? "najemców" : "gości"}: <strong>${need}</strong>, wolnych łóżek: <strong>${free}</strong> (fizyczna pojemność pokoju: ${physCap}).
+            ${need - free === 1 ? ` Jest o ${need-free} osobę za dużo` : ` Jest o ${need-free} osoby za dużo`}.<br>
             <span style="color:var(--text2);font-style:italic">Możesz kontynuować mimo to (np. rodzina śpi razem w jednym łóżku) — system tylko ostrzega. Później możesz to edytować w Raportach.</span>
           </div>
         </div>`;
       }
-    } else if (selectedRooms.length > 1) {
-      // Firmowa multi-room — per pokój, czerwone + blokuje
-      const perRoom = {};
-      state.guests.forEach(g => {
-        if (g.assignedRoom) perRoom[g.assignedRoom] = (perRoom[g.assignedRoom] || 0) + 1;
-      });
-      const overRooms = [];
-      for (const rid of selectedRooms) {
-        const free = getFreeBeds(rid, state.calStart, state.calEnd);
-        const assigned = perRoom[rid] || 0;
-        if (assigned > free) {
-          const loc = DATA.locations.find(l => l.rooms.some(r => r.id === rid));
-          const r = loc?.rooms.find(x => x.id === rid);
-          overRooms.push({ name: r?.name || rid, assigned, free });
+    } else if (state.calEnd) {
+      // Firmowa — wymaga calEnd (zawsze ustawione w firmowym flow)
+      if (selectedRooms.length > 1) {
+        // Multi-room — per pokój
+        const perRoom = {};
+        state.guests.forEach(g => {
+          if (g.assignedRoom) perRoom[g.assignedRoom] = (perRoom[g.assignedRoom] || 0) + 1;
+        });
+        const overRooms = [];
+        for (const rid of selectedRooms) {
+          const free = getFreeBeds(rid, state.calStart, state.calEnd);
+          const assigned = perRoom[rid] || 0;
+          if (assigned > free) {
+            const loc = DATA.locations.find(l => l.rooms.some(r => r.id === rid));
+            const r = loc?.rooms.find(x => x.id === rid);
+            overRooms.push({ name: r?.name || rid, assigned, free });
+          }
         }
-      }
-      if (overRooms.length > 0) {
-        withinCapacity = false;
-        capacityWarning = `<div style="font-size:12px;color:var(--red);padding:10px 12px;background:var(--red-light);border:1.5px solid var(--red);border-radius:var(--radius);margin-bottom:10px;display:flex;gap:8px;align-items:flex-start">
-          <span style="flex-shrink:0;margin-top:1px">${ICONS.alertTriangle(15)}</span>
-          <div><strong>Brak miejsc w pokojach:</strong> ${overRooms.map(o => `${esc(o.name)} (${o.assigned} prac., ${o.free} wolnych)`).join(", ")}. Przenieś pracowników albo wybierz inny pokój.</div>
-        </div>`;
-      }
-    } else {
-      // Firmowa single-room — sumarycznie
-      const roomId = selectedRooms[0];
-      const free = getFreeBeds(roomId, state.calStart, state.calEnd);
-      if (state.guests.length > free) {
-        withinCapacity = false;
-        capacityWarning = `<div style="font-size:12px;color:var(--red);padding:10px 12px;background:var(--red-light);border:1.5px solid var(--red);border-radius:var(--radius);margin-bottom:10px;display:flex;gap:8px;align-items:flex-start">
-          <span style="flex-shrink:0;margin-top:1px">${ICONS.alertTriangle(15)}</span>
-          <div><strong>Brak miejsc w pokoju:</strong> ${state.guests.length} pracowników, ${free} ${free===1?"wolne łóżko":free<5?"wolne łóżka":"wolnych łóżek"}. Wybierz większy pokój albo wróć i dodaj kolejny.</div>
-        </div>`;
+        if (overRooms.length > 0) {
+          withinCapacity = false;
+          capacityWarning = `<div style="font-size:12px;color:var(--red);padding:10px 12px;background:var(--red-light);border:1.5px solid var(--red);border-radius:var(--radius);margin-bottom:10px;display:flex;gap:8px;align-items:flex-start">
+            <span style="flex-shrink:0;margin-top:1px">${ICONS.alertTriangle(15)}</span>
+            <div><strong>Brak miejsc w pokojach:</strong> ${overRooms.map(o => `${esc(o.name)} (${o.assigned} prac., ${o.free} wolnych)`).join(", ")}. Przenieś pracowników albo wybierz inny pokój.</div>
+          </div>`;
+        }
+      } else {
+        // Firmowa single-room
+        const roomId = selectedRooms[0];
+        const free = getFreeBeds(roomId, state.calStart, state.calEnd);
+        if (state.guests.length > free) {
+          withinCapacity = false;
+          capacityWarning = `<div style="font-size:12px;color:var(--red);padding:10px 12px;background:var(--red-light);border:1.5px solid var(--red);border-radius:var(--radius);margin-bottom:10px;display:flex;gap:8px;align-items:flex-start">
+            <span style="flex-shrink:0;margin-top:1px">${ICONS.alertTriangle(15)}</span>
+            <div><strong>Brak miejsc w pokoju:</strong> ${state.guests.length} pracowników, ${free} ${free===1?"wolne łóżko":free<5?"wolne łóżka":"wolnych łóżek"}. Wybierz większy pokój albo wróć i dodaj kolejny.</div>
+          </div>`;
+        }
       }
     }
   }
@@ -7278,7 +7292,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.2 · ${new Date().getFullYear()}
+          HospesAI · v3.3 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
