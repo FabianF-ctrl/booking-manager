@@ -4700,8 +4700,6 @@ function buildBookingForm(loc) {
   } else {
     total = calcTotal(room, nights, state.guests);
   }
-  const overCap = room && !isCompany && guestCount > room.capacity;
-
   // Krótki opis przeliczenia
   let breakdownTxt = "";
   if (hasCustom) {
@@ -4731,8 +4729,6 @@ function buildBookingForm(loc) {
       </div>
       <div class="price-val">zł${total.toLocaleString()}</div>
     </div>
-
-    ${overCap ? `<div class="cap-warning">⚠️ Pojemność pokoju: ${room.capacity} os. Lista ma ${guestCount}.</div>` : ""}
 
     <div class="buffer-field">
       <label>Nadpisz cenę finalną (opcjonalne)</label>
@@ -4919,25 +4915,30 @@ function buildFooter() {
   }
 
   // KAPACYTET — sprawdź wolne łóżka w wybranym okresie:
-  // - Indywidualna / single-room company: gości <= freeBeds(jedyny pokój)
-  // - Multi-room company: każdy pokój sprawdzony osobno (assignedRoom > freeBeds) + suma
-  let capacityError = "";
-  let withinCapacity = true;
+  // - Firmowa: blokuje (czerwony banner, disable confirm)
+  // - Indywidualna: tylko ostrzega (pomarańczowy banner, nadal można rezerwować —
+  //   prawdziwa rodzina może być większa niż "oficjalna" capacity pokoju)
+  let capacityWarning = "";
+  let withinCapacity = true;  // tylko firmowa blokuje
   if (state.calStart && state.calEnd && selectedRooms.length > 0) {
-    if (!isCompany || selectedRooms.length === 1) {
-      // Indywidualna LUB firmowa 1 pokój
+    if (!isCompany) {
+      // Indywidualna — soft warning na dole, NIE blokuje
       const roomId = selectedRooms[0];
       const free = getFreeBeds(roomId, state.calStart, state.calEnd);
-      const need = isCompany ? state.guests.length : state.guests.length;  // każda osoba = 1 łóżko
+      const need = state.guests.length;
       if (need > free) {
-        withinCapacity = false;
-        capacityError = `<div style="font-size:11px;color:var(--red);padding:8px 10px;background:var(--red-light, #fee);border:1px solid var(--red);border-radius:var(--radius);margin-bottom:8px;display:flex;gap:6px;align-items:flex-start">
-          <span style="flex-shrink:0;margin-top:1px">${ICONS.alertTriangle(13)}</span>
-          <div><strong>Brak miejsc w pokoju:</strong> ${state.guests.length} ${state.guests.length===1?"osoba":"osób"} ale tylko ${free} ${free===1?"wolne łóżko":free<5?"wolne łóżka":"wolnych łóżek"} w wybranym terminie. Usuń ${need-free} ${need-free===1?"osobę":"osoby"} albo wybierz większy pokój / inną datę.</div>
+        capacityWarning = `<div style="font-size:12px;color:var(--orange);padding:10px 12px;background:var(--orange-light);border:1.5px solid var(--orange-border);border-radius:var(--radius);margin-bottom:10px;display:flex;gap:8px;align-items:flex-start">
+          <span style="flex-shrink:0;margin-top:1px">${ICONS.alertTriangle(15)}</span>
+          <div>
+            <strong>Uwaga — przekroczona pojemność pokoju.</strong><br>
+            Wpisanych gości: <strong>${need}</strong>, wolnych łóżek w tym terminie: <strong>${free}</strong>.
+            ${need - free === 1 ? `Jest o ${need-free} osobę za dużo` : `Jest o ${need-free} osoby za dużo`}.<br>
+            <span style="color:var(--text2);font-style:italic">Możesz kontynuować mimo to (np. rodzina śpi razem w jednym łóżku) — system tylko ostrzega. Później możesz to edytować w Raportach.</span>
+          </div>
         </div>`;
       }
-    } else {
-      // Firmowa multi-room — per pokój
+    } else if (selectedRooms.length > 1) {
+      // Firmowa multi-room — per pokój, czerwone + blokuje
       const perRoom = {};
       state.guests.forEach(g => {
         if (g.assignedRoom) perRoom[g.assignedRoom] = (perRoom[g.assignedRoom] || 0) + 1;
@@ -4954,9 +4955,20 @@ function buildFooter() {
       }
       if (overRooms.length > 0) {
         withinCapacity = false;
-        capacityError = `<div style="font-size:11px;color:var(--red);padding:8px 10px;background:var(--red-light, #fee);border:1px solid var(--red);border-radius:var(--radius);margin-bottom:8px;display:flex;gap:6px;align-items:flex-start">
-          <span style="flex-shrink:0;margin-top:1px">${ICONS.alertTriangle(13)}</span>
+        capacityWarning = `<div style="font-size:12px;color:var(--red);padding:10px 12px;background:var(--red-light);border:1.5px solid var(--red);border-radius:var(--radius);margin-bottom:10px;display:flex;gap:8px;align-items:flex-start">
+          <span style="flex-shrink:0;margin-top:1px">${ICONS.alertTriangle(15)}</span>
           <div><strong>Brak miejsc w pokojach:</strong> ${overRooms.map(o => `${esc(o.name)} (${o.assigned} prac., ${o.free} wolnych)`).join(", ")}. Przenieś pracowników albo wybierz inny pokój.</div>
+        </div>`;
+      }
+    } else {
+      // Firmowa single-room — sumarycznie
+      const roomId = selectedRooms[0];
+      const free = getFreeBeds(roomId, state.calStart, state.calEnd);
+      if (state.guests.length > free) {
+        withinCapacity = false;
+        capacityWarning = `<div style="font-size:12px;color:var(--red);padding:10px 12px;background:var(--red-light);border:1.5px solid var(--red);border-radius:var(--radius);margin-bottom:10px;display:flex;gap:8px;align-items:flex-start">
+          <span style="flex-shrink:0;margin-top:1px">${ICONS.alertTriangle(15)}</span>
+          <div><strong>Brak miejsc w pokoju:</strong> ${state.guests.length} pracowników, ${free} ${free===1?"wolne łóżko":free<5?"wolne łóżka":"wolnych łóżek"}. Wybierz większy pokój albo wróć i dodaj kolejny.</div>
         </div>`;
       }
     }
@@ -4965,7 +4977,7 @@ function buildFooter() {
   const canConfirm = hasName && allAssigned && withinCapacity;
   return `
     ${assignmentError}
-    ${capacityError}
+    ${capacityWarning}
     <div class="modal-footer">
       <button class="btn-back" id="backBtn">← Wróć</button>
       <button class="btn-confirm" id="confirmBtn" ${!canConfirm?"disabled":""}>Potwierdź rezerwację</button>
@@ -6664,8 +6676,15 @@ function attachEditEvents() {
       const free = getFreeBeds(b.roomId, em.from, em.to, em.bookingId);
       const need = bedsUsedByBooking(b);
       if (free < need) {
-        document.getElementById("editConflict").textContent = `⚠️ Brak miejsc: ta rezerwacja zajmuje ${need} ${nl(need)}, a w nowym terminie wolne tylko ${free}.`;
-        return;
+        if (b.bookingType === "company") {
+          document.getElementById("editConflict").textContent = `⚠️ Brak miejsc: ta rezerwacja zajmuje ${need} ${nl(need)}, a w nowym terminie wolne tylko ${free}.`;
+          return;
+        }
+        // Individual — soft confirm
+        if (!state.editModal._overcapAck && !confirm(
+          `⚠️ Uwaga — przekroczona pojemność pokoju.\n\nTa rezerwacja zajmuje ${need} ${nl(need)}, a w nowym terminie wolne tylko ${free}.\n\nZapisać mimo to?`
+        )) return;
+        state.editModal._overcapAck = true;
       }
     }
     b.from = em.from; b.to = em.to; b.bufferDays = em.bufferDays;
@@ -7259,7 +7278,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.1 · ${new Date().getFullYear()}
+          HospesAI · v3.2 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
@@ -7406,9 +7425,18 @@ async function saveEditAPI() {
   {
     const free = getFreeBeds(b.roomId, em.from, em.to, em.bookingId);
     const need = bedsUsedByBooking(b);
+    // Firmowa: blokujemy. Indywidualna: tylko ostrzegamy w confirm dialog,
+    // user może świadomie zapisać nadkomplet (np. rodzina, dziecko śpi z rodzicami).
     if (free < need) {
-      document.getElementById("editConflict").textContent = `⚠️ Brak miejsc: ta rezerwacja zajmuje ${need} ${nl(need)}, a w nowym terminie wolne tylko ${free}.`;
-      return;
+      if (b.bookingType === "company") {
+        document.getElementById("editConflict").textContent = `⚠️ Brak miejsc: ta rezerwacja zajmuje ${need} ${nl(need)}, a w nowym terminie wolne tylko ${free}.`;
+        return;
+      }
+      // Individual — soft warning + confirm
+      if (!state.editModal._overcapAck && !confirm(
+        `⚠️ Uwaga — przekroczona pojemność pokoju.\n\nTa rezerwacja zajmuje ${need} ${nl(need)}, a w nowym terminie wolne tylko ${free}.\n\nZapisać mimo to? (np. rodzina śpi razem)`
+      )) return;
+      state.editModal._overcapAck = true;
     }
   }
   const updated = {
