@@ -4547,7 +4547,7 @@ function buildCalendar(loc) {
     const isCompany = state.bookingType === "company";
     if (av.ok) {
       // For company: multi-select checkboxes; for individual: single select buttons
-      const selectedRooms = state.selectedRooms || (state.selectedRoom ? [state.selectedRoom] : []);
+      const selectedRooms = (state.selectedRooms && state.selectedRooms.length > 0) ? state.selectedRooms : (state.selectedRoom ? [state.selectedRoom] : []);
       // Suma WOLNYCH łóżek w wybranych pokojach (nie capacity — bo łóżka mogą być częściowo zajęte przez inne rezerwacje)
       const totalFreeBeds = selectedRooms.reduce((sum, rid) => {
         const r = av.available.find(x => x.id === rid);
@@ -4660,7 +4660,7 @@ function buildBookingForm(loc) {
   const isCompany = state.bookingType==="company";
   const p = state.payment;
   const guestCount = state.guests.length;
-  const selectedRooms = state.selectedRooms || (state.selectedRoom ? [state.selectedRoom] : []);
+  const selectedRooms = (state.selectedRooms && state.selectedRooms.length > 0) ? state.selectedRooms : (state.selectedRoom ? [state.selectedRoom] : []);
 
   // Szacunkowa cena: dla firmowej sumujemy per pracownik
   const customPriceNum = state.customPrice !== "" ? parseFloat(state.customPrice) : NaN;
@@ -4920,7 +4920,7 @@ function buildBookingForm(loc) {
 
 function buildFooter() {
   const isCompany = state.bookingType==="company";
-  const selectedRooms = state.selectedRooms || (state.selectedRoom ? [state.selectedRoom] : []);
+  const selectedRooms = (state.selectedRooms && state.selectedRooms.length > 0) ? state.selectedRooms : (state.selectedRoom ? [state.selectedRoom] : []);
   const hasName = isCompany ? state.guests.length > 0 : state.guests.some(g=>g.name.trim().length>0);
   // Walidacja firmy multi-room: każdy pracownik musi mieć assignedRoom
   // (single-room: nie wymagamy — wiadomo gdzie idzie)
@@ -6470,7 +6470,7 @@ function attachEvents() {
           // confirm nawet gdy ktoś z gości był bez przypisania (firmowa multi-room) →
           // user mógł kliknąć "Potwierdź" bez przypisania pracowników.
           const isCompany = state.bookingType==="company";
-          const selRooms = state.selectedRooms || (state.selectedRoom ? [state.selectedRoom] : []);
+          const selRooms = (state.selectedRooms && state.selectedRooms.length > 0) ? state.selectedRooms : (state.selectedRoom ? [state.selectedRoom] : []);
           const hasName = isCompany ? state.guests.length > 0 : state.guests.some(g=>g.name.trim().length>0);
           let allAssigned = true;
           if (isCompany && selRooms.length > 1) {
@@ -6888,7 +6888,9 @@ function openModal(locId) {
   state.bookingType = null;
   state.companyName = "";
   state.calStart = null; state.calEnd = null;
-  state.availResult = null; state.selectedRoom = null;
+  state.availResult = null;
+  state.selectedRoom = null;
+  state.selectedRooms = [];  // FIX v3.6: bez tego stałe było [] z poprzedniej sesji
   state.guests = [];
   state.bufferDays = 0;
   state.payment = { method:null, timing:null };
@@ -6912,7 +6914,7 @@ function confirmBooking() {
   bookingCounter++;
   const loc = DATA.locations.find(l => l.id === state.modal);
   const isCompany = state.bookingType === "company";
-  const selectedRooms = state.selectedRooms || (state.selectedRoom ? [state.selectedRoom] : []);
+  const selectedRooms = (state.selectedRooms && state.selectedRooms.length > 0) ? state.selectedRooms : (state.selectedRoom ? [state.selectedRoom] : []);
 
   const customPriceNum = state.customPrice !== "" ? parseFloat(state.customPrice) : NaN;
   const hasCustom = !isNaN(customPriceNum) && customPriceNum >= 0;
@@ -7338,7 +7340,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.5 · ${new Date().getFullYear()}
+          HospesAI · v3.6 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
@@ -7397,7 +7399,7 @@ async function loadAllData() {
 async function confirmBookingAPI() {
   const loc = DATA.locations.find(l => l.id === state.modal);
   const isCompany = state.bookingType === "company";
-  const selectedRooms = state.selectedRooms || (state.selectedRoom ? [state.selectedRoom] : []);
+  const selectedRooms = (state.selectedRooms && state.selectedRooms.length > 0) ? state.selectedRooms : (state.selectedRoom ? [state.selectedRoom] : []);
 
   const customPriceNum = state.customPrice !== "" ? parseFloat(state.customPrice) : NaN;
   const hasCustom = !isNaN(customPriceNum) && customPriceNum >= 0;
