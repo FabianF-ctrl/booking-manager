@@ -1728,11 +1728,26 @@ function getPermanentActiveMonths(entity, fallbackFrom, rangeFrom, rangeTo) {
 }
 
 // Kwota zapłacona przez stałego najemcę za miesiące mieszczące się w okresie.
-// Jeśli payment.timing === "prepaid" — zakłada że wszystkie aktywne miesiące są zapłacone.
-// Inaczej: liczy z entity.paidMonths przecięte z aktywnymi miesiącami.
+// Trzy źródła w kolejności priorytetu:
+// 1. entity.payment.amountPaid — jeśli > 0, traktuj jako manual override (kwota rozdzielana pro-rata
+//    między okresy aktywności). User-friendly dla "po prostu wpisz ile zapłacił".
+// 2. payment.timing === "prepaid" — zakłada że wszystkie aktywne miesiące są zapłacone.
+// 3. entity.paidMonths — granularny picker per miesiąc.
 function getPermanentPaidRevenue(entity, defaultDailyRate, fallbackFrom, rangeFrom, rangeTo, payTiming) {
   const activeMonths = getPermanentActiveMonths(entity, fallbackFrom, rangeFrom, rangeTo);
   if (activeMonths.length === 0) return 0;
+
+  // PRIORYTET 1: manual override z amountPaid (rozdzielany pro-rata)
+  const explicit = parseFloat(entity?.payment?.amountPaid);
+  if (!isNaN(explicit) && explicit > 0) {
+    const totalExpected = getPermanentRevenue(entity, defaultDailyRate, fallbackFrom, null, null);
+    if (totalExpected <= 0) return 0;
+    const periodExpected = getPermanentRevenue(entity, defaultDailyRate, fallbackFrom, rangeFrom, rangeTo);
+    const ratio = Math.min(1, explicit / totalExpected);
+    return periodExpected * ratio;
+  }
+
+  // PRIORYTET 2/3: prepaid auto-fill albo granular paidMonths
   const paidMonths = (payTiming === "prepaid")
     ? activeMonths.slice()
     : (Array.isArray(entity.paidMonths) ? entity.paidMonths.filter(m => activeMonths.includes(m)) : []);
@@ -1806,6 +1821,21 @@ function getPaymentWarning(b) {
 
   const isPerm = b.isPermanent && b.bookingType !== "company";
   if (isPerm) {
+    // Manual override z amountPaid ma najwyższy priorytet — jeśli user typnął
+    // konkretną kwotę, sprawdzamy ją vs total expected.
+    const totalExpected = getPermanentRevenue(b, (b.priceAtBooking?.basePrice ?? 0), b.from, null, null);
+    const explicit = parseFloat(b?.payment?.amountPaid);
+    if (!isNaN(explicit) && explicit > 0) {
+      if (totalExpected <= 0 || explicit >= totalExpected - 0.01) return null; // fully paid
+      const owed = totalExpected - explicit;
+      return {
+        level: explicit > 0 ? "warning" : "danger",
+        title: "Niepełna wpłata stałego najemcy",
+        message: `Wpłacono zł${explicit.toLocaleString()} z zł${totalExpected.toLocaleString()}. Brakuje: zł${owed.toLocaleString()}.`,
+        owed, paid: explicit, total: totalExpected, isPermanent: true
+      };
+    }
+
     const overdueMonths = getPermanentOverdueMonths(b, b.from, b.payment?.timing);
     const activeMonths = getPermanentActiveMonths(b, b.from, null, null);
     const paidArr = Array.isArray(b.paidMonths) ? b.paidMonths : [];
@@ -4196,9 +4226,17 @@ function buildHelp() {
           <strong style="color:var(--green)">WPŁACONO (per rezerwacja)</strong>
           <ul style="margin:6px 0 0;padding-left:20px;font-size:12px">
             <li><strong>Indywidualna / firmowa</strong>: <code>amountPaid</code> (kwota wpisana ręcznie w polu "Kwota wpłacona")</li>
-            <li><strong>Stały najemca prepaid</strong>: zakłada że <strong>wszystkie aktywne miesiące są zapłacone</strong> (na konto z góry). Wpłata = przychód automatycznie.</li>
-            <li><strong>Stały najemca postpaid</strong>: tylko miesiące zaznaczone jako "paidMonths" w modalu edycji (kolorowy grid kafelków). Wpłata = suma <code>monthlyRate × proporcja_dni</code> dla zaznaczonych.</li>
+            <li><strong>Stały najemca</strong> — system bierze pod uwagę 3 źródła w kolejności priorytetu:
+              <ol style="margin:4px 0 0;padding-left:20px">
+                <li><code>amountPaid</code> (manualna kwota) — jeśli wpisano > 0, traktowane jako <strong>override</strong>. Kwota jest rozdzielana pro-rata między okresy aktywności. Wystarczy wpisać "42000" jeśli najemca zapłacił całą sumę z góry.</li>
+                <li><code>timing="prepaid"</code> bez amountPaid → wszystkie aktywne miesiące zapłacone</li>
+                <li><code>timing="postpaid"</code> bez amountPaid → tylko miesiące zaznaczone w gridzie "paidMonths" (granular per-month)</li>
+              </ol>
+            </li>
           </ul>
+          <div style="margin-top:6px;padding:6px 8px;background:var(--blue-light);border-radius:4px;font-size:11px;color:var(--blue)">
+            💡 Jeśli najemca płaci nieregularnie i chcesz precyzyjnie śledzić które miesiące — zostaw "Kwota wpłacona" puste i klikaj miesiące w gridzie. Jeśli zapłacił wszystko na raz — po prostu wpisz kwotę.
+          </div>
         </div>
 
         <div style="background:var(--surface);padding:10px 12px;border-radius:6px;border-left:3px solid var(--orange);margin-bottom:12px">
@@ -5129,6 +5167,19 @@ function buildEditModal() {
                     <button class="cal-nav-btn" id="paidMonthsNone" style="font-size:11px;padding:5px 12px;color:var(--red);border-color:var(--red)">Wyczyść</button>
                   </div>` : ""}
                   ${hasMonthly ? `<div style="font-size:11px;color:var(--text2);margin-bottom:4px;font-weight:600">Suma wpłat za widoczne miesiące: zł${totalPaidAmt.toLocaleString()}</div>` : ""}
+                  ${(() => {
+                    // Wskazówka jeśli user wpisał amountPaid (override mode)
+                    const ap = parseFloat(em.amountPaid !== undefined ? em.amountPaid : (b.payment?.amountPaid || ""));
+                    if (!isNaN(ap) && ap > 0) {
+                      const totalExp = hasMonthly ? activeMonths.length * monthly : 0; // approx
+                      const status = ap >= totalExp - 0.01 ? "pokrywa pełną kwotę" : `pokrywa ${Math.round(ap/totalExp*100)}% (brakuje zł${(totalExp-ap).toLocaleString()})`;
+                      return `<div style="padding:8px 10px;background:var(--blue-light);border:1px solid var(--blue-mid);border-radius:6px;margin-top:6px;font-size:11px;color:var(--blue)">
+                        ${ICONS.info(11)} <strong>Wpłacono</strong> z pola płatności = zł${ap.toLocaleString()} (${status}).
+                        Zaznaczenia miesięcy poniżej są ignorowane gdy kwota jest wpisana w "Kwota wpłacona".
+                      </div>`;
+                    }
+                    return "";
+                  })()}
                 `}`;
               }
               // Dla firmowego ze wszystkimi permanent guests — zostaw banner (per-guest paidMonths to follow-up)
@@ -7062,7 +7113,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v2.6 · ${new Date().getFullYear()}
+          HospesAI · v2.7 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
