@@ -1572,17 +1572,14 @@ function calcBookingTotal(b, room, nights, periodRange) {
 
   // Indywidualna (nie-stały najemca)
   // Per-guest mode — jeśli choć jeden gość ma explicit dailyRate, sumujemy per osoba.
-  // Brakujące rates fallback na basePrice (dorosły) lub extraPerChild (dziecko).
+  // Brak fallbacku z cennika: gość bez wpisanej stawki = 0 (force explicit, no hidden math).
   const guestsList = b?.guests || [];
   const hasGuestRates = guestsList.some(g => g.dailyRate != null && g.dailyRate !== "" && !isNaN(parseFloat(g.dailyRate)));
   if (hasGuestRates) {
-    const extraChild = prices.extraPerChild != null ? prices.extraPerChild : (room.extraPerChild || 0);
     let total = 0;
     for (const g of guestsList) {
       const custom = parseFloat(g.dailyRate);
-      const rate = (!isNaN(custom) && custom >= 0)
-        ? custom
-        : (g.isAdult ? basePrice : extraChild);
+      const rate = (!isNaN(custom) && custom >= 0) ? custom : 0;
       total += rate * nights;
     }
     return total;
@@ -4232,7 +4229,7 @@ function buildHelp() {
           <strong style="color:var(--blue)">PRZYCHÓD (per rezerwacja)</strong>
           <ul style="margin:6px 0 0;padding-left:20px;font-size:12px">
             <li><strong>Indywidualna (domyślnie, classic)</strong>: <code>(basePrice + extraPerAdult × (dorośli−1) + extraPerChild × dzieci) × nocy</code></li>
-            <li><strong>Indywidualna per-gość</strong> (gdy choć jeden gość ma <em>Cena/osoba/doba</em> wypełnione w karcie gościa): każdy gość liczony osobno = <code>Σ (rate_gościa × nocy)</code>. Goście bez ręcznej stawki mają fallback z cennika: dorosły → <code>basePrice</code>, dziecko → <code>extraPerChild</code>. <strong>Działa też dla dzieci</strong> — ostrzeżenie informuje że nadpisuje cennik dziecięcy.</li>
+            <li><strong>Indywidualna per-gość</strong> (gdy choć jeden gość ma <em>Cena/osoba/doba</em> wypełnione w karcie gościa): każdy gość liczony osobno = <code>Σ (rate_gościa × nocy)</code>. <strong>Brak fallbacku</strong> — goście z pustą stawką liczą się jako <code>0 zł</code>. Wymusza explicit wpisanie wszystkich stawek (no hidden math). UI zaznacza puste pola na czerwono gdy tryb per-gość aktywny.</li>
             <li><strong>Firmowa (per pracownik)</strong>: <code>pricePerEmployee × liczba_pracowników_w_pokoju × nocy</code> (z możliwością nadpisania per osoba)</li>
             <li><strong>Stały najemca (monthly rate)</strong>: <code>monthlyRate × miesiące_aktywności</code>. Pełny miesiąc = pełna stawka. Niepełny (start lub koniec w środku) = <code>monthlyRate × dni_w_tym_miesiącu / dni_w_miesiącu</code>, <strong>zaokrąglone do groszy</strong>. Bieżący miesiąc aktywnego najemcy = zawsze pełny (rent płaci się za cały miesiąc).</li>
             <li><strong>Custom price (nadpisana cena)</strong>: stała kwota, ignoruje powyższe formuły. Dla nie-stałych pro-rata do okresu filtru (cena × clipped_nights / total_nights).</li>
@@ -4675,12 +4672,11 @@ function buildBookingForm(loc) {
   if (hasCustom) {
     total = customPriceNum * Math.max(1, selectedRooms.length);
   } else if (hasGuestRatesIndiv) {
+    // Per-gość: brak fallbacku, puste = 0
     total = 0;
     for (const g of state.guests) {
       const custom = parseFloat(g.dailyRate);
-      const rate = (!isNaN(custom) && custom >= 0)
-        ? custom
-        : (g.isAdult ? (room?.basePrice || 0) : (room?.extraPerChild || 0));
+      const rate = (!isNaN(custom) && custom >= 0) ? custom : 0;
       total += rate * nights;
     }
   } else if (isCompany) {
@@ -4878,19 +4874,24 @@ function buildBookingForm(loc) {
             const isChild = !g.isAdult;
             const defaultRate = isChild ? (room?.extraPerChild || 0) : (room?.basePrice || 0);
             const hasRate = g.dailyRate != null && g.dailyRate !== "" && !isNaN(parseFloat(g.dailyRate));
+            // Sprawdź czy inni goście mają wpisane — jeśli tak, jesteśmy w per-gość mode
+            const anyOtherHasRate = state.guests.some((og, oi) => oi !== i && og.dailyRate != null && og.dailyRate !== "" && !isNaN(parseFloat(og.dailyRate)));
+            const inPerGuestMode = hasRate || anyOtherHasRate;
             return `
             <div class="field-wrap" style="margin-top:8px">
               <label>Cena / osobę / doba (zł) — opcjonalne</label>
               <input type="number" data-guest="${i}" data-field="dailyRate" min="0" step="0.01"
                 value="${hasRate ? esc(g.dailyRate) : ""}"
-                placeholder="${defaultRate || 0} (z cennika ${isChild ? 'dla dziecka' : 'dla dorosłego'})"
-                style="padding:7px 9px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-size:12px;color:var(--text);font-variant-numeric:tabular-nums;outline:none;width:100%" />
-              <div style="font-size:10px;color:${isChild && hasRate ? "var(--orange)" : "var(--text3)"};font-style:italic;margin-top:4px">
+                placeholder="np. ${defaultRate || 50}"
+                style="padding:7px 9px;border:1px solid ${inPerGuestMode && !hasRate ? "var(--red)" : "var(--border)"};border-radius:var(--radius);background:${inPerGuestMode && !hasRate ? "var(--red-light, #fee)" : "var(--surface2)"};font-size:12px;color:var(--text);font-variant-numeric:tabular-nums;outline:none;width:100%" />
+              <div style="font-size:10px;color:${inPerGuestMode && !hasRate ? "var(--red)" : (isChild && hasRate ? "var(--orange)" : "var(--text3)")};font-style:italic;margin-top:4px">
                 ${hasRate
                   ? (isChild
-                    ? `⚠️ Stawka ręczna dla <strong>dziecka</strong>: zł${esc(g.dailyRate)}/doba × ${nights} ${nw(nights)} = zł${(parseFloat(g.dailyRate)*nights).toLocaleString()}. Nadpisuje cennik dziecięcy (zł${defaultRate}).`
+                    ? `⚠️ Stawka ręczna dla <strong>dziecka</strong>: zł${esc(g.dailyRate)}/doba × ${nights} ${nw(nights)} = zł${(parseFloat(g.dailyRate)*nights).toLocaleString()}. Nadpisuje cennik dziecięcy.`
                     : `Stawka ręczna: zł${esc(g.dailyRate)}/doba × ${nights} ${nw(nights)} = zł${(parseFloat(g.dailyRate)*nights).toLocaleString()}.`)
-                  : `Puste = liczone z cennika (basePrice + extraPerAdult/Child). Wpisz kwotę żeby przełączyć całą rezerwację na <strong>tryb per-gość</strong> — wtedy każdy gość liczony osobno.`}
+                  : (inPerGuestMode
+                    ? `❌ <strong>UWAGA</strong>: inny gość ma wpisaną stawkę → cała rezerwacja w trybie per-gość. Ten gość bez wpisanej stawki liczy się jako <strong>0 zł</strong>. Wpisz stawkę albo wyczyść pola innym gościom.`
+                    : `Puste = liczone z cennika (basePrice + extraPerAdult/Child). Wpisanie kwoty <strong>komukolwiek</strong> przełącza całą rezerwację na tryb per-gość — wtedy puste pola = 0 zł.`)}
               </div>
             </div>`;
           })()}
@@ -5356,18 +5357,23 @@ function buildEditModal() {
             })()}
           </div>` : ""}
 
-          ${b.bookingType !== "company" && !(em.isPermanent ?? b.isPermanent) ? `
+          ${b.bookingType !== "company" && !(em.isPermanent ?? b.isPermanent) ? (() => {
+            const guestsList = em.guests || b.guests || [];
+            // Check if any guest has explicit rate (= per-gość mode active)
+            const anyHasRate = guestsList.some(g => g.dailyRate != null && g.dailyRate !== "" && !isNaN(parseFloat(g.dailyRate)));
+            const r = DATA.locations.flatMap(l=>l.rooms).find(x => x.id === b.roomId);
+            const bp = r?.basePrice || 0;
+            const extraChild = r?.extraPerChild || 0;
+            return `
           <div class="edit-field">
-            <label>Stawka per gość — opcjonalne (puste = liczyć z cennika basePrice + extras)</label>
-            ${(em.guests || b.guests || []).map((g, idx) => {
-              const r = DATA.locations.flatMap(l=>l.rooms).find(x => x.id === b.roomId);
-              const bp = r?.basePrice || 0;
-              const extraChild = r?.extraPerChild || 0;
+            <label>Stawka per gość — opcjonalne</label>
+            ${guestsList.map((g, idx) => {
               const isChild = !g.isAdult;
               const defaultRate = isChild ? extraChild : bp;
               const hasRate = g.dailyRate != null && g.dailyRate !== "" && !isNaN(parseFloat(g.dailyRate));
+              const isZeroInPerGuestMode = anyHasRate && !hasRate;
               return `
-              <div style="display:flex;flex-direction:column;gap:4px;padding:8px;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:6px;background:var(--surface2)">
+              <div style="display:flex;flex-direction:column;gap:4px;padding:8px;border:1px solid ${isZeroInPerGuestMode ? "var(--red)" : "var(--border)"};border-radius:var(--radius);margin-bottom:6px;background:${isZeroInPerGuestMode ? "var(--red-light, #fee)" : "var(--surface2)"}">
                 <div style="font-size:12px;font-weight:600">
                   ${esc(g.name || `Gość ${idx+1}`)}
                   ${isChild ? `<span style="font-size:10px;color:var(--orange);background:var(--orange-light);border:1px solid var(--orange-border);padding:1px 6px;border-radius:99px;margin-left:4px">dziecko</span>` : `<span style="font-size:10px;color:var(--text2);background:var(--surface);padding:1px 6px;border-radius:99px;margin-left:4px">dorosły</span>`}
@@ -5376,23 +5382,27 @@ function buildEditModal() {
                   <label style="font-size:11px;color:var(--text2);white-space:nowrap">Cena / osobę / doba (zł):</label>
                   <input type="number" data-edit-guest-rate="${idx}" min="0" step="0.01"
                     value="${hasRate ? esc(g.dailyRate) : ""}"
-                    placeholder="${defaultRate}"
+                    placeholder="np. ${defaultRate || 50}"
                     style="flex:1;min-width:100px;padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:12px;color:var(--text);font-variant-numeric:tabular-nums;outline:none" />
                 </div>
-                <div style="font-size:10px;color:${isChild && hasRate ? "var(--orange)" : "var(--text3)"};font-style:italic">
+                <div style="font-size:10px;color:${isZeroInPerGuestMode ? "var(--red)" : (isChild && hasRate ? "var(--orange)" : "var(--text3)")};font-style:italic">
                   ${hasRate
                     ? (isChild
-                      ? `⚠️ Stawka ręczna dla dziecka: zł${esc(g.dailyRate)}/doba. Nadpisuje cennik dziecięcy (zł${extraChild}).`
+                      ? `⚠️ Stawka ręczna dla dziecka: zł${esc(g.dailyRate)}/doba. Nadpisuje cennik dziecięcy.`
                       : `Stawka nadpisana indywidualnie.`)
-                    : `Domyślnie zł${defaultRate}/dobę z cennika pokoju (${isChild ? 'extraPerChild' : 'basePrice'}).`}
+                    : (isZeroInPerGuestMode
+                      ? `❌ Tryb per-gość aktywny (inny gość ma stawkę). Ten gość bez stawki = <strong>0 zł</strong>.`
+                      : `Puste = liczone z cennika (basePrice + extras). Wpisanie komukolwiek włącza tryb per-gość.`)}
                 </div>
               </div>`;
             }).join("")}
-            <div style="font-size:11px;color:var(--text2);padding:8px 10px;background:var(--blue-light);border:1px solid var(--blue-mid);border-radius:var(--radius);margin-top:4px">
-              ${ICONS.info(11)} Wpisanie kwoty u dowolnego gościa przełącza całą rezerwację na <strong>tryb per-gość</strong>: każda osoba liczona osobno (suma stawek × noce). Wszystkie puste = klasyczny model basePrice + extras.
+            <div style="font-size:11px;color:var(--text2);padding:8px 10px;background:${anyHasRate ? "var(--orange-light)" : "var(--blue-light)"};border:1px solid ${anyHasRate ? "var(--orange-border)" : "var(--blue-mid)"};border-radius:var(--radius);margin-top:4px">
+              ${ICONS.info(11)} ${anyHasRate
+                ? `<strong>Tryb per-gość AKTYWNY</strong>: każda osoba liczona osobno = Σ(stawka × noce). Puste pole = 0 zł (no fallback). Aby wrócić do classic basePrice+extras: wyczyść WSZYSTKIE stawki.`
+                : `<strong>Tryb classic AKTYWNY</strong>: basePrice + extraPerAdult × (dorośli−1) + extraPerChild × dzieci. Wpisanie stawki komukolwiek przełącza na per-gość.`}
             </div>
-          </div>
-          ` : ""}
+          </div>`;
+          })() : ""}
 
           <div class="edit-field">
             <label>Cena finalna (zł) — nadpisanie, pusty = z cennika</label>
@@ -7203,7 +7213,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v2.9 · ${new Date().getFullYear()}
+          HospesAI · v3.0 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
