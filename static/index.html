@@ -4927,9 +4927,14 @@ function buildFooter() {
   let assignmentError = "";
   let allAssigned = true;
   if (isCompany && selectedRooms.length > 1) {
+    // Gość jest "nieprzypisany" jeśli: a) brak assignedRoom, ALBO
+    // b) assignedRoom wskazuje na pokój spoza selectedRooms (stale po backBtn
+    //    + zmianie wyboru pokoi). Dropdown listuje tylko aktualne — więc
+    //    stary assignedRoom = "101" przy nowych selectedRooms ["103","104"]
+    //    nie pokazuje się jako wybór, ale w danych zostaje.
     const unassigned = state.guests
       .map((g, i) => ({ g, i }))
-      .filter(({ g }) => !g.assignedRoom);
+      .filter(({ g }) => !g.assignedRoom || !selectedRooms.includes(g.assignedRoom));
     if (unassigned.length > 0) {
       allAssigned = false;
       const names = unassigned.map(({ g, i }) => g.name.trim() || `Pracownik ${i+1}`).join(", ");
@@ -6439,6 +6444,10 @@ function attachEvents() {
           if (!state.selectedRooms.includes(rid)) state.selectedRooms.push(rid);
         } else {
           state.selectedRooms = state.selectedRooms.filter(r => r !== rid);
+          // Wyczyść stale assignedRoom dla gości przypisanych do odznaczonego pokoju
+          (state.guests || []).forEach(g => {
+            if (g.assignedRoom === rid) g.assignedRoom = "";
+          });
         }
         render();
         setTimeout(() => {
@@ -6462,7 +6471,14 @@ function attachEvents() {
 
   if (state.step==="booking") {
     document.getElementById("backBtn")?.addEventListener("click", () => {
-      state.step="calendar"; state.availResult=null; state.selectedRoom=null; state.selectedRooms=[]; render();
+      state.step="calendar";
+      state.availResult=null;
+      state.selectedRoom=null;
+      state.selectedRooms=[];
+      // Wyczyść assignedRoom u wszystkich gości — pokoje będą wybrane od nowa,
+      // stary assignedRoom byłby stale.
+      (state.guests || []).forEach(g => { g.assignedRoom = ""; });
+      render();
     });
     document.getElementById("addGuestBtn")?.addEventListener("click", () => {
       state.guests.push(newGuest()); render();
@@ -7376,7 +7392,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.8 · ${new Date().getFullYear()}
+          HospesAI · v3.9 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
