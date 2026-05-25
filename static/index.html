@@ -2284,6 +2284,38 @@ function buildDashboard() {
     return s + calcBookingTotal(b, room, diffDays(b.from,b.to), { from: prevMonthStart, to: prevMonthEndExcl });
   }, 0);
 
+  // v3.18 — dual zysk (planowany memoriałowo + zrealizowany kasowo) dla "tego miesiąca".
+  // Wpłacono: dla permanent → clipped do okresu via helper, dla zwykłej → pełna kwota
+  // (konsystentne z Raporty — jest tam edge case multi-month bookingu który będzie naprawiony razem).
+  const thisMonthPaid = thisMonthBookings.reduce((s, b) => {
+    const loc = DATA.locations.find(l=>l.id===b.locId);
+    const room = loc?.rooms.find(r=>r.id===b.roomId);
+    const isPerm = b.isPermanent && b.bookingType !== "company";
+    if (isPerm) {
+      const bp = (b.priceAtBooking?.basePrice ?? room?.basePrice) || 0;
+      return s + getPermanentPaidRevenue(b, bp, b.from, monthStartExcl, monthEndExcl, b.payment?.timing);
+    }
+    const p = parseFloat(b.payment?.amountPaid);
+    return s + (isNaN(p) ? 0 : p);
+  }, 0);
+  // Media w bieżącym miesiącu — wpisy roomMedia z period == YYYY-MM tego miesiąca
+  const monthPeriod = monthStart.slice(0, 7);
+  const prevMonthPeriod = prevMonthStart.slice(0, 7);
+  let thisMonthMedia = 0, prevMonthMedia = 0;
+  Object.entries(roomMedia).forEach(([key, m]) => {
+    const period = key.split("__")[1];
+    if (period === monthPeriod) thisMonthMedia += sumMediaObj(m);
+    if (period === prevMonthPeriod) prevMonthMedia += sumMediaObj(m);
+  });
+  const thisMonthProfit = thisMonthRevenue - thisMonthMedia;       // memoriał
+  const thisMonthProfitRealized = thisMonthPaid - thisMonthMedia;  // kasa
+  const prevMonthProfit = prevMonthRevenue - prevMonthMedia;       // do delty MoM
+  const profitDelta = prevMonthProfit > 0 ? ((thisMonthProfit - prevMonthProfit) / prevMonthProfit * 100).toFixed(1) : null;
+  const profitDeltaHtml = profitDelta !== null
+    ? `<span style="font-size:11px;font-weight:600;color:${profitDelta>=0?"var(--green)":"var(--red)"};margin-left:6px">${profitDelta>=0?"▲":"▼"}${Math.abs(profitDelta)}% vs poprzedni miesiąc</span>`
+    : "";
+  const realizedPct = thisMonthProfit > 0 ? Math.round((thisMonthProfitRealized / thisMonthProfit) * 100) : 0;
+
   // "Zaległości po pobycie" — rezerwacje postpaid zakończone z brakiem / niepełną wpłatą.
   // Używamy tej samej logiki co warning system w edit modalu (getPaymentWarning).
   const unpaid = savedBookings.filter(b => getPaymentWarning(b) !== null);
@@ -2380,9 +2412,9 @@ function buildDashboard() {
           <div style="font-size:11px;color:var(--text3);margin-top:4px">${occupancyPct}% obłożenia</div>
         </div>
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px 18px">
-          <div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;margin-bottom:6px">Przychód — ten miesiąc</div>
-          <div style="font-size:26px;font-weight:700;font-variant-numeric:tabular-nums">zł${thisMonthRevenue.toLocaleString()}</div>
-          <div style="font-size:11px;color:var(--text3);margin-top:4px">${revDeltaHtml || "Brak danych poprzedniego miesiąca"}</div>
+          <div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;margin-bottom:6px">Zysk planowany — ten miesiąc <span class="hero-tag">memoriałowo</span></div>
+          <div style="font-size:26px;font-weight:700;font-variant-numeric:tabular-nums">zł${thisMonthProfit.toLocaleString()}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:4px">Przychód zł${thisMonthRevenue.toLocaleString()} − Media zł${thisMonthMedia.toLocaleString()}${profitDeltaHtml}</div>
         </div>
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px 18px">
           <div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;margin-bottom:6px">Zaległości po pobycie</div>
@@ -2390,9 +2422,9 @@ function buildDashboard() {
           <div style="font-size:11px;color:var(--text3);margin-top:4px">${unpaid.length > 0 ? `zł${unpaidTotal.toLocaleString()} do ściągnięcia` : "Wszystkie pobyty rozliczone"}</div>
         </div>
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px 18px">
-          <div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;margin-bottom:6px">Przychód poprzedni miesiąc</div>
-          <div style="font-size:26px;font-weight:700;font-variant-numeric:tabular-nums">zł${prevMonthRevenue.toLocaleString()}</div>
-          <div style="font-size:11px;color:var(--text3);margin-top:4px">${prevMonthBookings.length} ${nrez(prevMonthBookings.length)}</div>
+          <div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;margin-bottom:6px">Zysk zrealizowany — ten miesiąc <span class="hero-tag">kasowo</span></div>
+          <div style="font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;color:${thisMonthProfitRealized<0?"var(--red)":"var(--blue)"}">zł${thisMonthProfitRealized.toLocaleString()}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:4px">Wpłacono zł${Math.round(thisMonthPaid).toLocaleString()} − Media zł${thisMonthMedia.toLocaleString()} · ${realizedPct}% planowanego</div>
         </div>
       </div>
 
@@ -3713,29 +3745,50 @@ function buildCharts() {
   const kpiBest = Object.entries(kpiBuckets).sort((a,b)=>b[1]-a[1])[0];
   const kpiRemaining = Math.max(0, kpiRevenue - kpiPaid);
 
-  // Hero "Przychód w okresie" + 3 mniejsze (jak w Raportach — spójność)
+  // v3.18 — Media w okresie wykresu, dla zysku planowanego/zrealizowanego
+  let kpiMedia = 0;
+  Object.entries(roomMedia).forEach(([key, m]) => {
+    const period = key.split("__")[1];
+    if (!period) return;
+    const pStart = period + "-01";
+    const [py, pm] = period.split("-").map(Number);
+    const pEnd = `${pm === 12 ? py+1 : py}-${String(pm === 12 ? 1 : pm+1).padStart(2,"0")}-01`;
+    if (pStart < chartToExcl && pEnd > chartFromExcl) kpiMedia += sumMediaObj(m);
+  });
+  const kpiProfitPlanned = kpiRevenue - kpiMedia;
+  const kpiProfitRealized = kpiPaid - kpiMedia;
+  const kpiPaidPct = kpiRevenue > 0 ? Math.round((kpiPaid/kpiRevenue)*100) : 0;
+
+  // Dual-hero (Zysk planowany + zrealizowany) + 3 detale (Przychód, Wpłacono, Do pobrania).
+  // Wcześniej: hero "Przychód w okresie" + 3 detale (Wpłacono / Do pobrania / Najlepszy mies).
+  // "Najlepszy miesiąc" usunięty — informacja zawarta w wykresie pod spodem.
   const kpiCards = hasData ? `
-    <div class="summary-strip hero-layout" style="margin-bottom:18px">
+    <div class="summary-strip dual-hero-layout" style="margin-bottom:18px">
       <div class="sum-card hero">
-        <div class="lbl">Przychód w okresie</div>
-        <div class="val">${kpiRevenue.toLocaleString()} zł</div>
-        <div class="sub">${kpiBookings} ${nrez(kpiBookings)}${kpiNights > 0 ? ` · ${kpiNights} ${nw(kpiNights)}` : ""}${kpiPermBookings > 0 ? ` · ${kpiPermBookings} ${kpiPermBookings===1?"stały najemca":kpiPermBookings<5?"stali najemcy":"stałych najemców"} (${kpiPermMonths} ${nm(kpiPermMonths)})` : ""} · ${kpiAvg.toLocaleString()} zł/miesiąc</div>
+        <div class="lbl">Zysk planowany w okresie <span class="hero-tag">memoriałowo</span></div>
+        <div class="val">${kpiProfitPlanned.toLocaleString()} zł</div>
+        <div class="sub">Przychód ${kpiRevenue.toLocaleString()} zł − Media ${kpiMedia.toLocaleString()} zł · ${kpiAvg.toLocaleString()} zł/mies śr.</div>
+      </div>
+      <div class="sum-card hero hero-cash">
+        <div class="lbl">Zysk zrealizowany w okresie <span class="hero-tag">kasowo</span></div>
+        <div class="val" style="color:${kpiProfitRealized<0?"var(--red)":"var(--blue)"}">${kpiProfitRealized.toLocaleString()} zł</div>
+        <div class="sub">Wpłacono ${Math.round(kpiPaid).toLocaleString()} zł − Media ${kpiMedia.toLocaleString()} zł</div>
+      </div>
+      <div class="sum-card">
+        <div class="lbl">Przychód</div>
+        <div class="val" style="color:var(--blue)">${kpiRevenue.toLocaleString()} zł</div>
+        <div class="sub">${kpiBookings} ${nrez(kpiBookings)}${kpiPermBookings > 0 ? ` · ${kpiPermBookings} ${kpiPermBookings===1?"stały":"stali"}` : ""}</div>
       </div>
       <div class="sum-card">
         <div class="lbl">Wpłacono</div>
-        <div class="val" style="color:var(--green)">${Math.round(kpiPaid).toLocaleString()} zł</div>
-        <div class="sub">${kpiRevenue > 0 ? Math.round((kpiPaid/kpiRevenue)*100) : 0}% przychodu</div>
+        <div class="val" style="color:${kpiPaid>=kpiRevenue?"var(--green)":"var(--text)"}">${Math.round(kpiPaid).toLocaleString()} zł</div>
+        <div class="sub">${kpiPaidPct}% przychodu</div>
       </div>
       <div class="sum-card">
         <div class="lbl">Do pobrania</div>
         <div class="val" style="color:${kpiRemaining>0?"var(--orange)":"var(--green)"}">${kpiRemaining.toLocaleString()} zł</div>
         <div class="sub">${kpiRemaining > 0 ? "do ściągnięcia" : "wszystko opłacone"}</div>
       </div>
-      ${kpiBest ? `<div class="sum-card">
-        <div class="lbl">Najlepszy miesiąc</div>
-        <div class="val" style="color:var(--blue)">${Math.round(kpiBest[1]).toLocaleString()} zł</div>
-        <div class="sub">${kpiBest[0]}</div>
-      </div>` : `<div class="sum-card"><div class="lbl">Średnio / miesiąc</div><div class="val">${kpiAvg.toLocaleString()} zł</div><div class="sub">na bazie ${kpiMonthCount} mies.</div></div>`}
     </div>` : "";
 
   let chartHtml = "";
@@ -7609,7 +7662,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.17 · ${new Date().getFullYear()}
+          HospesAI · v3.18 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
