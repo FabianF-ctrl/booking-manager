@@ -760,7 +760,12 @@ body {
 .field-wrap input {
   padding: 7px 9px; border: 1px solid var(--border); border-radius: var(--radius);
   background: var(--surface2); font-size: 13px; color: var(--text); font-family: inherit; font-variant-numeric: tabular-nums; outline: none; transition: border-color 0.12s;
+  /* width: 100% + min-width: 0 — input nie wystaje poza grid-cell na mobile.
+     Bez min-width: 0 input zachowuje intrinsic size (przeglądarki ~20 chars dla
+     type=tel), co rozpychało .field-row 2-col grid → pole telefonu wystawało w prawo. */
+  width: 100%; min-width: 0;
 }
+.field-row { min-width: 0; }
 .field-wrap input:focus { border-color: var(--blue); background: var(--surface); }
 .checkbox-row { display: flex; align-items: center; gap: 7px; font-size: 13px; cursor: pointer; margin-top: 6px; }
 .checkbox-row input[type=checkbox] { width: 15px; height: 15px; cursor: pointer; accent-color: var(--blue); }
@@ -7556,7 +7561,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.15 · ${new Date().getFullYear()}
+          HospesAI · v3.16 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
