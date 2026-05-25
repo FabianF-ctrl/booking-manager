@@ -263,16 +263,26 @@ body {
   /* Default summary-strip (3 cards w Raportach) — też 2x2 (hero pełen) */
   .summary-strip { grid-template-columns: 1fr 1fr; gap: 8px; }
 
-  /* ── Reports: loc-finance-totals (4 stats per location) → 2x2 ──
-     Hero "Zysk netto" pełen, 3 mniejsze (Przychód, Wpłacono, Do pobrania) 2+1.
-     Borders między stat-boxami też muszą się zachować w grid layoutcie. */
-  .loc-finance-totals { grid-template-columns: 1fr 1fr; }
-  .loc-finance-totals .loc-fin-stat.hero { grid-column: 1 / -1; border-right: none; border-bottom: 1px solid var(--border); }
-  /* W layoutcie 2-col co druga komórka traci right-border */
-  .loc-finance-totals .loc-fin-stat:nth-child(odd):not(.hero) { border-right: 1px solid var(--border); }
-  .loc-finance-totals .loc-fin-stat:nth-child(even) { border-right: none; }
+  /* ── Reports: loc-finance-totals → stack 1-col na mobile ──
+     5 kart (2 hero + 3 detale) — na 360px stack pionowy daje czytelny widok. */
+  .loc-finance-totals,
+  .loc-finance-totals.dual-hero-layout { grid-template-columns: 1fr; }
+  .loc-finance-totals .loc-fin-stat,
+  .loc-finance-totals .loc-fin-stat.hero,
+  .loc-finance-totals.dual-hero-layout .loc-fin-stat,
+  .loc-finance-totals.dual-hero-layout .loc-fin-stat.hero {
+    grid-column: 1 / -1;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .loc-finance-totals .loc-fin-stat:last-child { border-bottom: none; }
   .loc-finance-totals .loc-fin-stat .v { font-size: 14px; }
   .loc-finance-totals .loc-fin-stat.hero .v { font-size: 19px; }
+
+  /* Dual-hero summary-strip — też stack 1-col na mobile */
+  .summary-strip.dual-hero-layout { grid-template-columns: 1fr; }
+  .summary-strip.dual-hero-layout .sum-card,
+  .summary-strip.dual-hero-layout .sum-card.hero { grid-column: 1 / -1; }
 
   /* ── Reports: report-row (4-col grid 1fr 1fr 1fr auto) → stack pionowo ──
      Na mobile 4 kolumny dają ~80px każda — wszystko się ucinało, ostatnia
@@ -457,6 +467,31 @@ body {
 
 .summary-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
 .summary-strip.hero-layout { grid-template-columns: 1.4fr 1fr 1fr 1fr; }
+/* Dual-hero (Zysk planowany + zrealizowany + 3 detale) — 6-col grid, 2 rzędy:
+   - rząd 1: 2 hero spanują po 3 kol (każdy 50%)
+   - rząd 2: 3 detale spanują po 2 kol (każdy 33%) */
+.summary-strip.dual-hero-layout { grid-template-columns: repeat(6, 1fr); }
+.summary-strip.dual-hero-layout .sum-card.hero { grid-column: span 3; }
+.summary-strip.dual-hero-layout .sum-card:not(.hero) { grid-column: span 2; }
+.sum-card.hero-cash { background: linear-gradient(135deg, var(--blue-light) 0%, var(--surface) 100%); }
+.sum-card.hero-cash .lbl { color: var(--blue); }
+.sum-card.hero-cash .val { color: var(--blue); }
+.hero-tag {
+  display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 99px;
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px;
+  background: var(--surface2); color: var(--text3); border: 1px solid var(--border);
+  vertical-align: middle;
+}
+/* Per-location dual-hero: ten sam layout 6-col */
+.loc-finance-totals.dual-hero-layout { grid-template-columns: repeat(6, 1fr); }
+.loc-finance-totals.dual-hero-layout .loc-fin-stat.hero { grid-column: span 3; }
+.loc-finance-totals.dual-hero-layout .loc-fin-stat:not(.hero) { grid-column: span 2; }
+.loc-fin-stat.hero-cash { background: linear-gradient(135deg, var(--blue-light) 0%, var(--surface) 100%); }
+.loc-fin-stat.hero-cash .k { color: var(--blue); }
+.loc-fin-stat.hero-cash .v { color: var(--blue); }
+/* Borders w grid 2-row: prawej krawędzi nie dawać na last-in-row */
+.loc-finance-totals.dual-hero-layout .loc-fin-stat:nth-child(2) { border-right: none; }  /* hero-cash = ostatni w rzędzie 1 */
+.loc-finance-totals.dual-hero-layout .loc-fin-stat:nth-child(5) { border-right: none; }  /* Do pobrania = ostatni w rzędzie 2 */
 .sum-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease; }
 .sum-card:hover { transform: translateY(-2px); box-shadow: var(--shadow); border-color: var(--border2); }
 .sum-card.hero { background: linear-gradient(135deg, var(--green-light) 0%, var(--surface) 100%); border-color: var(--green-mid); }
@@ -3083,12 +3118,20 @@ function buildReports() {
         return Math.max(0, t - paid) > 0;
       }).length;
       const paidPct = totRevenue > 0 ? Math.round((totPaid / totRevenue) * 100) : 0;
+      // v3.17 — Dual profit hero: memoriałowy (Przychód−Media) + kasowy (Wpłacono−Media).
+      // User chciał odróżnić "ile zarobiłem księgowo" od "ile mam już na koncie".
+      const totProfitRealized = totPaid - totMedia;
       return `
-      <div class="summary-strip hero-layout">
+      <div class="summary-strip dual-hero-layout">
         <div class="sum-card hero">
-          <div class="lbl">Zysk netto</div>
+          <div class="lbl">Zysk planowany <span class="hero-tag">memoriałowo</span></div>
           <div class="val">zł${totProfit.toLocaleString()}</div>
           <div class="sub">Przychód zł${totRevenue.toLocaleString()} − Media zł${totMedia.toLocaleString()}</div>
+        </div>
+        <div class="sum-card hero hero-cash">
+          <div class="lbl">Zysk zrealizowany <span class="hero-tag">kasowo</span></div>
+          <div class="val" style="color:${totProfitRealized < 0 ? "var(--red)" : "var(--blue)"}">zł${totProfitRealized.toLocaleString()}</div>
+          <div class="sub">Wpłacono zł${totPaid.toLocaleString()} − Media zł${totMedia.toLocaleString()}</div>
         </div>
         <div class="sum-card">
           <div class="lbl">Przychód</div>
@@ -3158,11 +3201,16 @@ function buildReports() {
               <div class="loc-finance-sub">${bookings.length} ${nrez(bookings.length)}</div>
             </div>
           </div>
-          <div class="loc-finance-totals">
+          <div class="loc-finance-totals dual-hero-layout">
             <div class="loc-fin-stat hero">
-              <span class="k">Zysk netto</span>
+              <span class="k">Zysk planowany <span class="hero-tag">memoriałowo</span></span>
               <span class="v">zł${locProfit.toLocaleString()}</span>
               <span class="sub">Przychód zł${locRevenue.toLocaleString()} − Media zł${locMedia.toLocaleString()}</span>
+            </div>
+            <div class="loc-fin-stat hero hero-cash">
+              <span class="k">Zysk zrealizowany <span class="hero-tag">kasowo</span></span>
+              <span class="v" style="color:${(locPaid - locMedia) < 0 ? 'var(--red)' : 'var(--blue)'}">zł${(locPaid - locMedia).toLocaleString()}</span>
+              <span class="sub">Wpłacono zł${locPaid.toLocaleString()} − Media zł${locMedia.toLocaleString()}</span>
             </div>
             <div class="loc-fin-stat"><span class="k">Przychód</span><span class="v blue">zł${locRevenue.toLocaleString()}</span></div>
             <div class="loc-fin-stat"><span class="k">Wpłacono</span><span class="v ${locPaid>=locRevenue?"green":""}">zł${locPaid.toLocaleString()}</span></div>
@@ -7561,7 +7609,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.16 · ${new Date().getFullYear()}
+          HospesAI · v3.17 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
