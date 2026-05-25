@@ -190,36 +190,57 @@ body {
 @keyframes backdropFade { from { opacity: 0; } to { opacity: 1; } }
 
 @media (max-width: 720px) {
-  /* Sidebar staje się fixed drawer, slide-in z lewej */
+  /* Sidebar staje się fixed drawer, slide-in z lewej.
+     100dvh (dynamic viewport height) zamiast 100vh — fix dla iOS Safari,
+     gdzie 100vh = duża wysokość (z paskiem URL) i footer wypada poza ekran. */
   .sidebar {
     position: fixed; left: 0; top: 0;
-    width: 260px; height: 100vh;
+    width: 260px;
+    height: 100vh;       /* fallback dla starszych */
+    height: 100dvh;      /* nowoczesne — uwzględnia URL bar */
     transform: translateX(-100%);
     transition: transform 0.25s ease-out;
     box-shadow: 4px 0 16px rgba(0, 0, 0, 0.18);
-    z-index: 200;  /* nad backdropem (150) i topbarem (40) */
+    z-index: 200;
+    padding: 14px 10px max(12px, env(safe-area-inset-bottom));  /* bottom safe area dla iOS */
   }
   .sidebar.is-open { transform: translateX(0); }
   .sidebar-close { display: flex; align-items: center; justify-content: center; }
-  /* Sidebar-brand: padding-right żeby nie pod close button */
   .sidebar-brand { padding-right: 38px; }
-  /* Shell stays flex — main-area zajmuje całą szerokość bo sidebar jest fixed */
+  /* Shell pełny width — sidebar jest fixed, nie zajmuje miejsca w flow */
   .shell { flex-direction: row; }
-  .main-area { width: 100%; }
-  /* Hamburger button */
+  .main-area { width: 100%; min-width: 0; }
   .hamburger-btn { display: flex; }
-  /* Topbar — tighter padding, skompresować greeting */
+
+  /* Topbar */
   .topbar { padding: 0 12px; gap: 8px; }
   .topbar-greeting { font-size: 12px; gap: 4px; min-width: 0; overflow: hidden; }
-  .topbar-greeting-main { white-space: nowrap; }
-  .topbar-greeting-date { display: none; }  /* za długie na mobile */
-  /* Print report button schowany — drukowanie na telefonie i tak rzadkie */
-  .topbar #printReportBtn { display: none; }
-  /* Theme toggle button — icon-only, skraca tekst */
-  .topbar #themeToggle { font-size: 0; padding: 6px 8px; }
-  .topbar #themeToggle svg { width: 14px; height: 14px; }
+  .topbar-greeting-main { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .topbar-greeting-date { display: none; }
+  /* Icon-only buttons na mobile — label schowany przez .btn-lbl */
+  .topbar .icon-btn .btn-lbl { display: none; }
+  .topbar .icon-btn { padding: 6px 9px; gap: 0; }
+  .topbar .icon-btn svg { width: 16px; height: 16px; }
   /* Main content padding */
   .main { padding: 14px; }
+
+  /* ── Settings (cennik) — fix horizontal overflow ──
+     Tabela ma sztywne grid-template-columns (5/6 kolumn) z inline-style.
+     Wrapper .settings-table-wrap pozwala scrollować poziomo, a min-width na
+     dzieciach gwarantuje że kolumny zachowują czytelne rozmiary. */
+  .settings-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .settings-table-wrap > div { min-width: 580px; }
+
+  /* ── Invoices filters — ctrl-group select pełna szerokość ── */
+  .status-controls { gap: 6px; }
+  .status-controls .ctrl-group { min-width: 0; flex: 1 1 calc(50% - 6px); }
+  .status-controls .ctrl-group select,
+  .status-controls .ctrl-group input { width: 100%; box-sizing: border-box; }
+
+  /* ── AI tab — 2-column grid → 1-column na mobile ──
+     grid auto-fit minmax(380px) na 360px viewport NIE działa (380 > 360).
+     Force 1 column. */
+  [style*="repeat(auto-fit,minmax(380px"] { grid-template-columns: 1fr !important; }
 }
 
 /* ─── SECTION HEADER ─── */
@@ -2118,8 +2139,8 @@ function buildTopbar() {
           <span class="topbar-greeting-sep">·</span>
           <span class="topbar-greeting-date">${dateStr}</span>
         </div>`}
-      <button class="icon-btn" id="themeToggle">${isDark ? ICONS.sun()+" Jasny" : ICONS.moon()+" Ciemny"}</button>
-      <button class="icon-btn" id="printReportBtn">${ICONS.fileText()} Drukuj raport</button>
+      <button class="icon-btn" id="themeToggle">${isDark ? ICONS.sun() : ICONS.moon()}<span class="btn-lbl">${isDark ? "Jasny" : "Ciemny"}</span></button>
+      <button class="icon-btn" id="printReportBtn">${ICONS.fileText()}<span class="btn-lbl">Drukuj raport</span></button>
     </div>`;
 }
 
@@ -4445,7 +4466,7 @@ function buildSettings() {
             ${rooms.length} ${rooms.length===1?"pokój":rooms.length<5?"pokoje":"pokoi"}${missingCount > 0 ? ` · <span style="color:var(--orange)">${missingCount} bez ceny</span>` : ""}
           </span>
         </div>
-        ${collapsed ? "" : tableHead + tableRows + bulkBar}
+        ${collapsed ? "" : `<div class="settings-table-wrap">${tableHead + tableRows + bulkBar}</div>`}
       </div>`;
   };
 
@@ -7479,7 +7500,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.11 · ${new Date().getFullYear()}
+          HospesAI · v3.12 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
