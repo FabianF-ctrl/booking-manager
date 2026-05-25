@@ -190,19 +190,18 @@ body {
 @keyframes backdropFade { from { opacity: 0; } to { opacity: 1; } }
 
 @media (max-width: 720px) {
-  /* Sidebar staje się fixed drawer, slide-in z lewej.
-     100dvh (dynamic viewport height) zamiast 100vh — fix dla iOS Safari,
-     gdzie 100vh = duża wysokość (z paskiem URL) i footer wypada poza ekran. */
+  /* Sidebar drawer — top:0 + bottom:0 zamiast height. Bardziej odporne na zmiany
+     viewport (URL bar pokazuje/chowa się w iOS), background sięga zawsze do końca
+     ekranu. Wcześniej 100dvh działało ale ucinało footer w niektórych pozycjach
+     scrollowanego maina. */
   .sidebar {
-    position: fixed; left: 0; top: 0;
+    position: fixed; left: 0; top: 0; bottom: 0;
     width: 260px;
-    height: 100vh;       /* fallback dla starszych */
-    height: 100dvh;      /* nowoczesne — uwzględnia URL bar */
     transform: translateX(-100%);
     transition: transform 0.25s ease-out;
     box-shadow: 4px 0 16px rgba(0, 0, 0, 0.18);
     z-index: 200;
-    padding: 14px 10px max(12px, env(safe-area-inset-bottom));  /* bottom safe area dla iOS */
+    padding: 14px 10px max(12px, env(safe-area-inset-bottom));
   }
   .sidebar.is-open { transform: translateX(0); }
   .sidebar-close { display: flex; align-items: center; justify-content: center; }
@@ -241,6 +240,43 @@ body {
      grid auto-fit minmax(380px) na 360px viewport NIE działa (380 > 360).
      Force 1 column. */
   [style*="repeat(auto-fit,minmax(380px"] { grid-template-columns: 1fr !important; }
+
+  /* ── Charts: summary-strip hero-layout (4 cards) → 2x2 grid ──
+     Default: 1.4fr 1fr 1fr 1fr (4 cols). Na 360px to ~80px każda — nieczytelne.
+     Hero zostaje na pełną szerokość, pozostałe 3 robią 2+1. */
+  .summary-strip.hero-layout { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .summary-strip.hero-layout .sum-card.hero { grid-column: 1 / -1; }
+  /* Default summary-strip (3 cards w Raportach) — też 2x2 (hero pełen) */
+  .summary-strip { grid-template-columns: 1fr 1fr; gap: 8px; }
+
+  /* ── Reports: loc-finance-totals (4 stats per location) → 2x2 ──
+     Hero "Zysk netto" pełen, 3 mniejsze (Przychód, Wpłacono, Do pobrania) 2+1.
+     Borders między stat-boxami też muszą się zachować w grid layoutcie. */
+  .loc-finance-totals { grid-template-columns: 1fr 1fr; }
+  .loc-finance-totals .loc-fin-stat.hero { grid-column: 1 / -1; border-right: none; border-bottom: 1px solid var(--border); }
+  /* W layoutcie 2-col co druga komórka traci right-border */
+  .loc-finance-totals .loc-fin-stat:nth-child(odd):not(.hero) { border-right: 1px solid var(--border); }
+  .loc-finance-totals .loc-fin-stat:nth-child(even) { border-right: none; }
+  .loc-finance-totals .loc-fin-stat .v { font-size: 14px; }
+  .loc-finance-totals .loc-fin-stat.hero .v { font-size: 19px; }
+
+  /* ── Reports: report-row (4-col grid 1fr 1fr 1fr auto) → stack pionowo ──
+     Na mobile 4 kolumny dają ~80px każda — wszystko się ucinało, ostatnia
+     kolumna (kwota+edytuj) "uciekała w prawo". Stack 1-col z większym
+     pionowym gap'em. */
+  .report-row { grid-template-columns: 1fr; gap: 6px; padding: 12px 14px; }
+  .report-row > div:nth-child(3),
+  .report-row > div:nth-child(4) {
+    display: flex; align-items: center; justify-content: space-between;
+    border-top: 1px dashed var(--border); padding-top: 6px;
+  }
+  .report-amount { text-align: left; }
+
+  /* pay-strip already uses flex-wrap, just tighten gap na mobile */
+  .pay-strip { gap: 12px; padding: 8px 14px; }
+
+  /* ── Reports filter bar — ctrl-group items wrap nicely ── */
+  .reports-toolbar { gap: 6px; }
 }
 
 /* ─── SECTION HEADER ─── */
@@ -4443,19 +4479,25 @@ function buildSettings() {
         </div>`;
     }).join("");
 
-    // Pasek akcji bulk — 4 inputy + przycisk "Zastosuj"
+    // Pasek akcji bulk — grid 5-col MATCHUJĄCY tabelę (label + 4 inputy)
+    // + button "Zastosuj" jako osobny rząd full-width.
+    // Wcześniej był grid 6-col (auto na końcu dla button'a) — auto-col jadło szerokość
+    // przez co fr-units w bulkBar były węższe niż w tableHead → misalignment kolumn
+    // po horizontal scroll na mobile.
     const bulkBar = `
-      <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1.2fr auto;gap:8px;padding:10px 14px;background:var(--blue-light);border-top:1px dashed var(--border);align-items:center;font-size:11px">
-        <div style="font-size:11px;color:var(--blue);font-weight:600;display:flex;align-items:center;gap:5px">${ICONS.clipboardList(13)} Ustaw dla wszystkich pokoi tego obiektu →</div>
-        <input type="number" data-bulk-loc="${loc.id}" data-bulk-field="basePrice" placeholder="—" min="0"
-          style="padding:5px 8px;border:1px solid var(--blue-mid);border-radius:var(--radius);background:var(--surface);font-variant-numeric:tabular-nums;text-align:right;outline:none;font-size:12px;color:var(--text)" />
-        <input type="number" data-bulk-loc="${loc.id}" data-bulk-field="extraPerAdult" placeholder="—" min="0"
-          style="padding:5px 8px;border:1px solid var(--blue-mid);border-radius:var(--radius);background:var(--surface);font-variant-numeric:tabular-nums;text-align:right;outline:none;font-size:12px;color:var(--text)" />
-        <input type="number" data-bulk-loc="${loc.id}" data-bulk-field="extraPerChild" placeholder="—" min="0"
-          style="padding:5px 8px;border:1px solid var(--blue-mid);border-radius:var(--radius);background:var(--surface);font-variant-numeric:tabular-nums;text-align:right;outline:none;font-size:12px;color:var(--text)" />
-        <input type="number" data-bulk-loc="${loc.id}" data-bulk-field="pricePerEmployee" placeholder="—" min="0"
-          style="padding:5px 8px;border:1px solid var(--blue-mid);border-radius:var(--radius);background:var(--surface);font-variant-numeric:tabular-nums;text-align:right;outline:none;font-size:12px;color:var(--text)" />
-        <button class="cal-nav-btn" data-bulk-apply="${loc.id}" style="padding:5px 12px;font-size:11px;background:var(--blue);color:#fff;border-color:var(--blue);font-weight:600">Zastosuj</button>
+      <div style="padding:10px 14px;background:var(--blue-light);border-top:1px dashed var(--border)">
+        <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1.2fr;gap:8px;align-items:center;font-size:11px">
+          <div style="font-size:11px;color:var(--blue);font-weight:600;display:flex;align-items:center;gap:5px">${ICONS.clipboardList(13)} Ustaw dla wszystkich pokoi tego obiektu →</div>
+          <input type="number" data-bulk-loc="${loc.id}" data-bulk-field="basePrice" placeholder="—" min="0"
+            style="padding:5px 8px;border:1px solid var(--blue-mid);border-radius:var(--radius);background:var(--surface);font-variant-numeric:tabular-nums;text-align:right;outline:none;font-size:12px;color:var(--text)" />
+          <input type="number" data-bulk-loc="${loc.id}" data-bulk-field="extraPerAdult" placeholder="—" min="0"
+            style="padding:5px 8px;border:1px solid var(--blue-mid);border-radius:var(--radius);background:var(--surface);font-variant-numeric:tabular-nums;text-align:right;outline:none;font-size:12px;color:var(--text)" />
+          <input type="number" data-bulk-loc="${loc.id}" data-bulk-field="extraPerChild" placeholder="—" min="0"
+            style="padding:5px 8px;border:1px solid var(--blue-mid);border-radius:var(--radius);background:var(--surface);font-variant-numeric:tabular-nums;text-align:right;outline:none;font-size:12px;color:var(--text)" />
+          <input type="number" data-bulk-loc="${loc.id}" data-bulk-field="pricePerEmployee" placeholder="—" min="0"
+            style="padding:5px 8px;border:1px solid var(--blue-mid);border-radius:var(--radius);background:var(--surface);font-variant-numeric:tabular-nums;text-align:right;outline:none;font-size:12px;color:var(--text)" />
+        </div>
+        <button class="cal-nav-btn" data-bulk-apply="${loc.id}" style="margin-top:8px;padding:6px 12px;font-size:11px;background:var(--blue);color:#fff;border-color:var(--blue);font-weight:600;width:100%">Zastosuj do wszystkich pokoi</button>
       </div>`;
 
     return `
@@ -7500,7 +7542,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.12 · ${new Date().getFullYear()}
+          HospesAI · v3.13 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
