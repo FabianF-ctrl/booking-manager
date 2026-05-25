@@ -1989,6 +1989,33 @@ function getPermanentRevenue(entity, defaultDailyRate, fallbackFrom, rangeFrom, 
 }
 
 // ============================================================
+// PAID IN RANGE — wpłacono za rezerwację clip'owane do okresu
+// ============================================================
+// Zwraca kwotę zapłaconą za booking PRZYPISANĄ do okresu [rangeFrom, rangeTo).
+// - Permanent: deleguje do getPermanentPaidRevenue (clipuje przez paidMonths).
+// - Zwykła: pro-rata × (overlap_nights / total_nights). Bez tego booking
+//   Apr→Jun opłacony 5880 zł pokazywał 5880 wpłacone w MAJU (cały) — czyli
+//   Wpłacono > Przychód_clipped, co psuło Zysk zrealizowany na Dashboard.
+// Bez range = no clip (zwraca pełną kwotę — dla all-time view w Raportach).
+function bookingPaidInRange(b, room, rangeFrom, rangeTo) {
+  const isPerm = b.isPermanent && b.bookingType !== "company";
+  if (isPerm) {
+    const bp = (b.priceAtBooking?.basePrice ?? room?.basePrice) || 0;
+    return getPermanentPaidRevenue(b, bp, b.from, rangeFrom, rangeTo, b.payment?.timing);
+  }
+  const totalPaid = parseFloat(b.payment?.amountPaid);
+  if (isNaN(totalPaid) || totalPaid === 0) return 0;
+  if (!rangeFrom || !rangeTo) return totalPaid;
+  const totalNights = diffDays(b.from, b.to);
+  if (totalNights <= 0) return totalPaid;
+  const overlapFrom = b.from > rangeFrom ? b.from : rangeFrom;
+  const overlapTo = b.to < rangeTo ? b.to : rangeTo;
+  const overlapNights = diffDays(overlapFrom, overlapTo);
+  if (overlapNights <= 0) return 0;
+  return totalPaid * (overlapNights / totalNights);
+}
+
+// ============================================================
 // PAYMENT WARNING — wykryj zaległości "po pobycie" do podświetlenia w UI / confirm-dialogu
 // ============================================================
 // Zwraca null jeśli wszystko OK, lub { level: "warning"|"danger", title, message, owed, paid, total }.
@@ -2284,19 +2311,13 @@ function buildDashboard() {
     return s + calcBookingTotal(b, room, diffDays(b.from,b.to), { from: prevMonthStart, to: prevMonthEndExcl });
   }, 0);
 
-  // v3.18 — dual zysk (planowany memoriałowo + zrealizowany kasowo) dla "tego miesiąca".
-  // Wpłacono: dla permanent → clipped do okresu via helper, dla zwykłej → pełna kwota
-  // (konsystentne z Raporty — jest tam edge case multi-month bookingu który będzie naprawiony razem).
+  // v3.19 — używa bookingPaidInRange helper'a, który pro-rata clipuje
+  // amountPaid zwykłych rezerwacji do okresu (permanent ma własny clip via paidMonths).
+  // Wcześniej non-perm sumował PEŁNĄ kwotę → Wpłacono > Przychód_clipped, psuło Zysk zrealizowany.
   const thisMonthPaid = thisMonthBookings.reduce((s, b) => {
     const loc = DATA.locations.find(l=>l.id===b.locId);
     const room = loc?.rooms.find(r=>r.id===b.roomId);
-    const isPerm = b.isPermanent && b.bookingType !== "company";
-    if (isPerm) {
-      const bp = (b.priceAtBooking?.basePrice ?? room?.basePrice) || 0;
-      return s + getPermanentPaidRevenue(b, bp, b.from, monthStartExcl, monthEndExcl, b.payment?.timing);
-    }
-    const p = parseFloat(b.payment?.amountPaid);
-    return s + (isNaN(p) ? 0 : p);
+    return s + bookingPaidInRange(b, room, monthStartExcl, monthEndExcl);
   }, 0);
   // Media w bieżącym miesiącu — wpisy roomMedia z period == YYYY-MM tego miesiąca
   const monthPeriod = monthStart.slice(0, 7);
@@ -3089,21 +3110,16 @@ function buildReports() {
     const nights = getActualNights(b);
     const t = calcBookingTotal(b, room, nights, periodRange);
     totRevenue += t;
+    // v3.19 — pro-rata clip wpłaconej kwoty do okresu filtra
+    totPaid += bookingPaidInRange(b, room, periodRange?.from, periodRange?.to);
     const isPerm = b.isPermanent && b.bookingType !== "company";
     if (isPerm) {
-      // Permanent: paid wyciągamy z paidMonths (przez helper który clipuje do okresu)
-      const basePrice = (b.priceAtBooking?.basePrice ?? room?.basePrice) || 0;
-      totPaid += getPermanentPaidRevenue(b, basePrice, b.from, periodRange?.from, periodRange?.to, b.payment?.timing);
       // Najnowsza data wpłaty (z paidMonths YYYY-MM, traktujemy jako ostatni dzień miesiąca)
       const pm = Array.isArray(b.paidMonths) ? b.paidMonths : [];
       if (pm.length > 0) {
         const latest = pm.slice().sort().pop();
         if (!lastPaymentDate || latest > lastPaymentDate) lastPaymentDate = latest;
       }
-    } else {
-      // Tylko explicit amountPaid liczy się jako zapłacone. Sam timing=prepaid (intencja) bez kwoty = 0.
-      const p = parseFloat(b.payment?.amountPaid);
-      if (!isNaN(p)) totPaid += p;
     }
   });
   // Media w okresie raportu — uwzględniamy tylko miesiące nakładające się z filtrem.
@@ -3138,15 +3154,7 @@ function buildReports() {
         const loc = DATA.locations.find(l=>l.id===b.locId);
         const room = loc?.rooms.find(r=>r.id===b.roomId);
         const t = calcBookingTotal(b, room, getActualNights(b), periodRange);
-        // Permanent: paid via paidMonths helper; nie-permanent: tylko explicit amountPaid
-        let paid = 0;
-        if (b.isPermanent && b.bookingType !== "company") {
-          const bp = (b.priceAtBooking?.basePrice ?? room?.basePrice) || 0;
-          paid = getPermanentPaidRevenue(b, bp, b.from, periodRange?.from, periodRange?.to, b.payment?.timing);
-        } else {
-          const p = parseFloat(b.payment?.amountPaid);
-          if (!isNaN(p)) paid = p;
-        }
+        const paid = bookingPaidInRange(b, room, periodRange?.from, periodRange?.to);
         return Math.max(0, t - paid) > 0;
       }).length;
       const paidPct = totRevenue > 0 ? Math.round((totPaid / totRevenue) * 100) : 0;
@@ -3210,13 +3218,8 @@ function buildReports() {
         const nights = getActualNights(b);
         const t = calcBookingTotal(b, room, nights, periodRange);
         locRevenue += t;
-        if (b.isPermanent && b.bookingType !== "company") {
-          const bp = (b.priceAtBooking?.basePrice ?? room?.basePrice) || 0;
-          locPaid += getPermanentPaidRevenue(b, bp, b.from, periodRange?.from, periodRange?.to, b.payment?.timing);
-        } else {
-          const p = parseFloat(b.payment?.amountPaid);
-          if (!isNaN(p)) locPaid += p;
-        }
+        // v3.19 — pro-rata clip wpłaconej kwoty
+        locPaid += bookingPaidInRange(b, room, periodRange?.from, periodRange?.to);
       });
       loc.rooms.forEach(room => {
         const periods = getRoomMediaPeriods(room.id);
@@ -3354,15 +3357,13 @@ function buildReportGroupRow(groupBookings, loc, companyName, periodRange) {
   const first = groupBookings[0];
   const reservedNights = diffDays(first.from, first.to);
 
-  // Suma kwoty i wpłat (z opcjonalnym clip do okresu raportu).
-  // Tylko explicit amountPaid liczy się jako zapłacone (prepaid bez kwoty = 0).
+  // Suma kwoty i wpłat (z clip do okresu raportu, v3.19).
   let totalCost = 0, totalPaid = 0;
   groupBookings.forEach(b => {
     const room = loc.rooms.find(r=>r.id===b.roomId);
     const t = calcBookingTotal(b, room, getActualNights(b), periodRange);
     totalCost += t;
-    const p = parseFloat(b.payment?.amountPaid);
-    if (!isNaN(p)) totalPaid += p;
+    totalPaid += bookingPaidInRange(b, room, periodRange?.from, periodRange?.to);
   });
   const totalRemaining = Math.max(0, totalCost - totalPaid);
 
@@ -3426,22 +3427,12 @@ function buildReportRow(b, loc, periodRange) {
   const ae = getActualEnd(b); const isExtended = ae && parseDate(ae) > parseDate(b.to);
   const total = calcBookingTotal(b, room, actualNights, periodRange);
 
-  // Stały najemca: paid = paidMonths × rate (intersected z aktywnymi miesiącami w okresie).
-  // Jeśli prepaid — assume zapłacone wszystko aktywne w okresie.
+  // v3.19 — używa bookingPaidInRange (pro-rata clip dla non-perm, paidMonths dla perm).
   const isPerm = b.isPermanent && b.bookingType !== "company";
   const rFrom = periodRange?.from || null;
   const rTo = periodRange?.to || null;
-  let paid, remaining;
-  if (isPerm) {
-    const basePrice = (b.priceAtBooking?.basePrice ?? room?.basePrice) || 0;
-    paid = getPermanentPaidRevenue(b, basePrice, b.from, rFrom, rTo, b.payment?.timing);
-    remaining = Math.max(0, total - paid);
-  } else {
-    // Tylko explicit amountPaid; sam timing=prepaid bez kwoty = nie zapłacone.
-    const p = parseFloat(b.payment?.amountPaid);
-    paid = !isNaN(p) ? p : 0;
-    remaining = Math.max(0, total - paid);
-  }
+  const paid = bookingPaidInRange(b, room, rFrom, rTo);
+  const remaining = Math.max(0, total - paid);
   const overdueMonths = isPerm ? getPermanentOverdueMonths(b, b.from, b.payment?.timing) : [];
 
   // Room media for current period
@@ -3724,15 +3715,13 @@ function buildCharts() {
     const rev = calcBookingTotal(b, room, nights, { from: chartFromExcl, to: chartToExcl });
     kpiRevenue += rev;
     kpiBookings++;
+    // v3.19 — pro-rata clip wpłaconej kwoty do okresu wykresu
+    kpiPaid += bookingPaidInRange(b, room, chartFromExcl, chartToExcl);
     if (isPerm) {
       kpiPermBookings++;
       kpiPermMonths += getPermanentMonths(b, b.from, chartFromExcl, chartToExcl);
-      const bp = (b.priceAtBooking?.basePrice ?? room?.basePrice) || 0;
-      kpiPaid += getPermanentPaidRevenue(b, bp, b.from, chartFromExcl, chartToExcl, b.payment?.timing);
     } else {
       kpiNights += nights;
-      const _p = parseFloat(b.payment?.amountPaid);
-      if (!isNaN(_p)) kpiPaid += _p;
     }
     roomSet.add(b.roomId);
     const bFromForBucket = isPerm ? (b.permanentStart || b.from) : b.from;
@@ -7662,7 +7651,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.18 · ${new Date().getFullYear()}
+          HospesAI · v3.19 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
