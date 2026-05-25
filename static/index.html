@@ -1282,6 +1282,7 @@ let state = {
   reportsSearch: "",
   reportsYear: "",
   reportsMonth: "",
+  reportsSort: "date_desc",  // v3.20 — sort bookings within groups
   roomDetailModal: null, // { roomId, locId }
   billingMode: "room",   // "room" | "employee" — tryb rozliczenia firmowego
   customPrice: "",        // nadpisanie ceny finalnej, pusty = brak
@@ -3032,6 +3033,17 @@ function buildReports() {
         <span class="search-icon">${ICONS.search(13)}</span>
         <input type="text" id="reportsSearch" placeholder="Szukaj firmy, gościa, obiektu…" value="${esc(state.reportsSearch||"")}" autocomplete="off" />
       </div>
+      <div class="ctrl-group">
+        <label>Sortuj</label>
+        <select id="reportsSort" style="padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-size:13px;color:var(--text);font-family:inherit;outline:none">
+          <option value="date_desc"      ${state.reportsSort==="date_desc"?"selected":""}>Data ↓ (najnowsze)</option>
+          <option value="date_asc"       ${state.reportsSort==="date_asc"?"selected":""}>Data ↑ (najstarsze)</option>
+          <option value="amount_desc"    ${state.reportsSort==="amount_desc"?"selected":""}>Kwota ↓ (najwyższa)</option>
+          <option value="amount_asc"     ${state.reportsSort==="amount_asc"?"selected":""}>Kwota ↑ (najniższa)</option>
+          <option value="remaining_desc" ${state.reportsSort==="remaining_desc"?"selected":""}>Do pobrania ↓</option>
+          <option value="name_asc"       ${state.reportsSort==="name_asc"?"selected":""}>Klient A→Z</option>
+        </select>
+      </div>
       ${(state.reportsYear||state.reportsMonth) ? `<button class="ctrl-search-btn" id="reportsClearFilter" style="background:var(--surface2);color:var(--text2);border:1px solid var(--border)">✕ Wyczyść filtr</button>` : ""}
     </div>`;
 
@@ -3269,6 +3281,40 @@ function buildReports() {
         }
       });
 
+      // v3.20 — sortowanie bookings wewnątrz każdej grupy wg state.reportsSort.
+      // Stosowane do permanents, individuals, oraz każdej firmy z osobna.
+      const sortBookingsInGroup = (list) => {
+        const sortKey = state.reportsSort || "date_desc";
+        const dir = sortKey.endsWith("_asc") ? 1 : -1;
+        return list.slice().sort((a, b) => {
+          const room_a = loc.rooms.find(r=>r.id===a.roomId);
+          const room_b = loc.rooms.find(r=>r.id===b.roomId);
+          if (sortKey.startsWith("date")) {
+            const da = a.isPermanent ? (a.permanentStart || a.from) : a.from;
+            const db = b.isPermanent ? (b.permanentStart || b.from) : b.from;
+            return da === db ? 0 : (da < db ? 1 : -1) * dir;
+          }
+          if (sortKey.startsWith("amount")) {
+            const ta = calcBookingTotal(a, room_a, getActualNights(a), periodRange);
+            const tb = calcBookingTotal(b, room_b, getActualNights(b), periodRange);
+            return (tb - ta) * dir;  // dir handles asc/desc
+          }
+          if (sortKey === "remaining_desc") {
+            const ta = calcBookingTotal(a, room_a, getActualNights(a), periodRange);
+            const tb = calcBookingTotal(b, room_b, getActualNights(b), periodRange);
+            const pa = bookingPaidInRange(a, room_a, periodRange?.from, periodRange?.to);
+            const pb = bookingPaidInRange(b, room_b, periodRange?.from, periodRange?.to);
+            return Math.max(0, tb - pb) - Math.max(0, ta - pa);  // desc
+          }
+          if (sortKey === "name_asc") {
+            const na = a.bookingType === "company" ? (a.companyName || "") : ((a.guests?.[0]?.name) || "");
+            const nb = b.bookingType === "company" ? (b.companyName || "") : ((b.guests?.[0]?.name) || "");
+            return na.localeCompare(nb, "pl");
+          }
+          return 0;
+        });
+      };
+
       // Stali najemcy — sekcja pierwsza, najbardziej "powtarzalny" przychód.
       if (permanents.length > 0) {
         const t = permanents.reduce((s, b) => {
@@ -3292,7 +3338,7 @@ function buildReports() {
               <div class="report-entity">${ICONS.house(13)} Stali najemcy <span class="ibadge ibadge-in" style="background:var(--green);color:#fff">Permanent</span>${headerBadge}</div>
               <div class="report-total">zł${t.toLocaleString()}</div>
             </div>
-            ${permanents.map(b => buildReportRow(b, loc, periodRange)).join("")}
+            ${sortBookingsInGroup(permanents).map(b => buildReportRow(b, loc, periodRange)).join("")}
           </div>`;
       }
 
@@ -3302,9 +3348,10 @@ function buildReports() {
           const nights = getActualNights(b);
           return s + calcBookingTotal(b, room, nights, periodRange);
         }, 0);
-        // Grupuj bookingi tej firmy po (from, to) — jedna transza = jedna grupa multi-room
+        // Grupuj bookingi tej firmy po (from, to) — jedna transza = jedna grupa multi-room.
+        // v3.20: cBookings sortowane przed groupowaniem → trancheGroups insertion order = sort order
         const trancheGroups = {};
-        cBookings.forEach(b => {
+        sortBookingsInGroup(cBookings).forEach(b => {
           const key = `${b.from}__${b.to}`;
           (trancheGroups[key] = trancheGroups[key] || []).push(b);
         });
@@ -3334,7 +3381,7 @@ function buildReports() {
               <div class="report-entity">${ICONS.user(13)} Indywidualne <span class="ibadge ibadge-in">Indyw.</span></div>
               <div class="report-total">zł${t.toLocaleString()}</div>
             </div>
-            ${individuals.map(b=>buildReportRow(b, loc, periodRange)).join("")}
+            ${sortBookingsInGroup(individuals).map(b=>buildReportRow(b, loc, periodRange)).join("")}
           </div>`;
       }
 
@@ -6508,6 +6555,9 @@ function attachEvents() {
   document.getElementById("reportsClearFilter")?.addEventListener("click", () => {
     state.reportsYear = ""; state.reportsMonth = ""; render();
   });
+  document.getElementById("reportsSort")?.addEventListener("change", e => {
+    state.reportsSort = e.target.value; render();
+  });
   attachReportsEvents();
 
   // Edit modal
@@ -7651,7 +7701,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.19 · ${new Date().getFullYear()}
+          HospesAI · v3.20 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
