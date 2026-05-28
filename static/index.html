@@ -1028,7 +1028,7 @@ body {
 .preview-days-wrap { display: flex; flex: 1; }
 /* Day header — 2 wiersze: literka dnia tygodnia + numer dnia */
 .preview-day-header {
-  width: 32px; flex-shrink: 0;
+  width: 38px; flex-shrink: 0;
   display: flex; flex-direction: column;
   border-right: 1px solid var(--border);
   font-variant-numeric: tabular-nums;
@@ -1046,8 +1046,8 @@ body {
 }
 .preview-day-header:last-child { border-right: none; }
 .preview-day {
-  width: 32px; flex-shrink: 0; text-align: center; padding: 10px 0;
-  font-size: 11px; font-variant-numeric: tabular-nums; color: var(--text3);
+  width: 38px; flex-shrink: 0; text-align: center; padding: 11px 0;
+  font-size: 12px; font-variant-numeric: tabular-nums; color: var(--text3);
   border-right: 1px solid var(--border);
   transition: filter 0.1s; cursor: default;
 }
@@ -1057,11 +1057,13 @@ body {
 .preview-day.is-perm { background: #93c5fd; color: #1e3a8a; font-weight: 600; }   /* blue */
 .preview-day:hover { filter: brightness(1.08); }
 
-/* v3.33 — Weekendy: header BEZ green-light bg (biały / dziedziczy surface2 jak
-   reszta headera). Differentiation tylko przez green text literek i numeru. */
+/* v3.34 — Weekendy: header BIAŁY tekst + outline (spójność z data cells).
+   Wcześniej zielony tekst, ale user wolał white wszędzie żeby było jednolite.
+   Outline (text-shadow) zapewnia czytelność w light + dark mode. */
 .preview-day-header.is-weekend .dow,
 .preview-day-header.is-weekend .dnum {
-  color: var(--green);
+  color: #fff;
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.55);
 }
 /* v3.32 — Komórki danych w weekend: liczba BIAŁA + bold + subtle dark outline.
    Wcześniej green ale zielony tekst na zielonym bg (wolny status) niewidoczny.
@@ -4836,7 +4838,7 @@ function buildPreviewDetail(locId) {
         ${selectedMonths.map(m => {
           const [y, n] = m.split("-").map(Number);
           const di = new Date(y, n, 0).getDate();
-          return `<div class="preview-month-span" style="width:${di * 32}px">${MONTHS[n-1]} ${y}</div>`;
+          return `<div class="preview-month-span" style="width:${di * 38}px">${MONTHS[n-1]} ${y}</div>`;
         }).join("")}
       </div>
       <div class="preview-sum-cell"></div>
@@ -8362,7 +8364,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.33-staging · ${new Date().getFullYear()}
+          HospesAI · v3.34-staging · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
