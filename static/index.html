@@ -40,6 +40,8 @@
   --yellow: #8A6200;
   --yellow-light: #FDF6DC;
   --yellow-border: #F0D566;
+  --violet: #7C3AED;       /* fiolet z logo (prawa półkula AI) */
+  --violet-light: #EDE9FE; /* light violet bg, light mode */
   --radius: 8px;
   --radius-lg: 12px;
   --radius-xl: 18px;
@@ -73,6 +75,8 @@
   --yellow: #D9B43A;
   --yellow-light: #2A2006;
   --yellow-border: #6A5010;
+  --violet: #A78BFA;       /* fiolet w dark mode — light variant for visibility */
+  --violet-light: #2E1D5C; /* ciemny fiolet bg dla dark mode */
 }
 
 body {
@@ -1053,15 +1057,24 @@ body {
 .preview-day.is-perm { background: #93c5fd; color: #1e3a8a; font-weight: 600; }   /* blue */
 .preview-day:hover { filter: brightness(1.08); }
 
-/* v3.29 — Weekendy (sobota, niedziela): subtle blue tint w HEADER row only.
-   Data cells (poniżej) zachowują kolory statusu — bez weekendowej dekoracji,
-   żeby kalendarz wyglądał czysto. Header wystarcza by user zlokalizował weekend. */
+/* v3.30 — Weekendy (sobota, niedziela): FIOLET z logo HospesAI (prawa półkula).
+   Header: violet bg + violet text. Data cells: violet color dla numeru dnia
+   (na tle koloru statusu — zielone/czerwone/niebieskie tło, ale liczba fioletowa). */
 .preview-day-header.is-weekend {
-  background: var(--blue-light);
+  background: var(--violet-light);
 }
 .preview-day-header.is-weekend .dow,
 .preview-day-header.is-weekend .dnum {
-  color: var(--blue);
+  color: var(--violet);
+}
+/* Komórki danych w weekend — liczba w fiolecie, font-weight bold dla czytelności */
+.preview-day.is-weekend {
+  color: var(--violet) !important;
+  font-weight: 700;
+}
+.preview-legend-box.is-weekend-sample {
+  background: var(--violet-light);
+  border-color: var(--violet);
 }
 
 /* Niedziela (dow=0) — koniec polskiego tygodnia. Grubsza right border
@@ -4775,12 +4788,13 @@ function buildPreviewDetail(locId) {
       const statusCls = s.status === "perm" ? "is-perm" : s.status === "occupied" ? "is-occupied" : "is-free";
       const boundaryCls = day.isMonthStart ? "is-month-boundary" : "";
       const weekBoundCls = day.dow === 0 ? "is-week-boundary" : "";
+      const weekendCls = day.isWeekend ? "is-weekend" : "";   // v3.30 — fiolet liczba dnia
       if (s.status === "perm") permDays++;
       else if (s.status === "occupied") occupiedDays++;
       const tooltip = s.guestName
         ? `${dowLetters[day.dow]} ${day.day}.${String(day.mn).padStart(2,"0")} · ${s.guestName}`
         : `${dowLetters[day.dow]} ${day.day}.${String(day.mn).padStart(2,"0")} · wolny`;
-      return `<div class="preview-day ${statusCls} ${boundaryCls} ${weekBoundCls}" title="${esc(tooltip)}">${day.day}</div>`;
+      return `<div class="preview-day ${statusCls} ${boundaryCls} ${weekBoundCls} ${weekendCls}" title="${esc(tooltip)}">${day.day}</div>`;
     }).join("");
 
     if (filter === "occupied" && occupiedDays === 0 && permDays === 0) return "";
@@ -4915,7 +4929,7 @@ function buildPreviewDetail(locId) {
           <span><span class="preview-legend-box is-free"></span> Wolny</span>
           <span><span class="preview-legend-box is-occupied"></span> Rezerwacja</span>
           <span><span class="preview-legend-box is-perm"></span> Stały najemca</span>
-          <span style="color:var(--blue);font-weight:600">So Nd</span><span style="color:var(--text3);margin-left:-12px"> = weekend</span>
+          <span style="color:var(--violet);font-weight:700">So Nd</span><span style="color:var(--text3);margin-left:-12px"> = weekend</span>
         </div>
         <div class="preview-filter-wrap">
           <label style="font-size:11px;color:var(--text2);font-weight:600">Pokaż:</label>
@@ -8353,7 +8367,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.29 · ${new Date().getFullYear()}
+          HospesAI · v3.30 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
