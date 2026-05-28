@@ -2071,19 +2071,29 @@ function countCalendarMonths(start, endExclusive) {
 // pStartStr inclusive (YYYY-MM-DD), pEndStr exclusive (YYYY-MM-DD).
 // Dla aktywnego najemcy pEnd = endOfCurrentMonthExclusive() → bieżący miesiąc liczy się
 // jako pełny (rent płaci się za cały miesiąc, nie pro-rata na dziś).
+// v3.28: PEŁEN MIESIĄC ZAWSZE (no pro-rata).
+// User decyzja: stały najemca który przychodzi w środku miesiąca PŁACI FULL stawkę
+// za ten miesiąc. Jeśli wyprowadza się wcześniej — też FULL za ostatni miesiąc.
+// Funkcja nadal zwraca 0 gdy nie ma overlap (najemca nie był aktywny w tym miesiącu).
 function prorataMonthPrice(monthlyRate, ym, pStartStr, pEndStr) {
   if (!monthlyRate || monthlyRate <= 0 || !ym || !pStartStr || !pEndStr) return 0;
   const [y, m] = ym.split("-").map(Number);
   const monthStart = toStr(new Date(y, m - 1, 1));
   const monthEndExcl = toStr(new Date(y, m, 1));
-  const daysInMonth = diffDays(monthStart, monthEndExcl);
   const usedStart = pStartStr > monthStart ? pStartStr : monthStart;
   const usedEnd = pEndStr < monthEndExcl ? pEndStr : monthEndExcl;
   if (usedStart >= usedEnd) return 0;
-  const daysUsed = diffDays(usedStart, usedEnd);
-  if (daysUsed >= daysInMonth) return monthlyRate;
-  // Zaokrąglenie do 2 miejsc — standard dla PLN (grosze).
-  return Math.round(monthlyRate * daysUsed / daysInMonth * 100) / 100;
+  return monthlyRate;
+}
+
+// v3.28: helper dla open-ended najemcy (brak permanentEnd).
+// Gdy filtr/range sięga w przyszłość, używamy rangeTo zamiast endOfCurrentMonthExclusive.
+// Bez tego: Raporty/Wykresy z filtrem na np. lipiec nie pokazywałyby najemcy bo
+// pEnd byłby clamp'owany do bieżącego miesiąca.
+function effectivePermanentEnd(entity, rangeTo) {
+  if (entity.permanentEnd) return entity.permanentEnd;
+  const defaultEnd = endOfCurrentMonthExclusive();
+  return (rangeTo && rangeTo > defaultEnd) ? rangeTo : defaultEnd;
 }
 
 // Helper: zwraca [usedDays, daysInMonth] dla danego YYYY-MM oraz zakresu [pStart, pEnd).
@@ -2112,7 +2122,7 @@ function getPermanentMonths(entity, fallbackFrom, rangeFrom, rangeTo) {
 // Lista miesięcy "YYYY-MM" w których stały najemca był aktywny, opcjonalnie clipped do okresu.
 function getPermanentActiveMonths(entity, fallbackFrom, rangeFrom, rangeTo) {
   const pStart = entity.permanentStart || fallbackFrom;
-  const pEnd = entity.permanentEnd || endOfCurrentMonthExclusive();
+  const pEnd = effectivePermanentEnd(entity, rangeTo);
   const from = rangeFrom && rangeFrom > pStart ? rangeFrom : pStart;
   const to   = rangeTo   && rangeTo   < pEnd   ? rangeTo   : pEnd;
   if (!from || !to || from >= to) return [];
@@ -3318,7 +3328,8 @@ function buildReports() {
           if (!pEnd || latest > pEnd) pEnd = latest;
         }
       }
-      bEnd = pEnd || endOfCurrentMonthExclusive();
+      // v3.28: open-ended → effectivePermanentEnd(rangeTo) zamiast endOfCurrentMonthExclusive
+      bEnd = pEnd || effectivePermanentEnd(b, periodRange?.to);
     } else {
       bStart = b.from;
       bEnd = b.to;
@@ -3973,7 +3984,8 @@ function buildCharts() {
     const isPerm = b.isPermanent && b.bookingType !== "company";
     if (isPerm) {
       const pStart = b.permanentStart || b.from;
-      const pEnd = b.permanentEnd || endOfCurrentMonthExclusive();
+      // v3.28: open-ended → effectivePermanentEnd(chartToExcl) zamiast endOfCurrentMonthExclusive
+      const pEnd = effectivePermanentEnd(b, chartToExcl);
       if (pStart >= chartToExcl || pEnd <= chartFromExcl) return;
     } else {
       const bFromD = parseDate(b.from);
@@ -8313,7 +8325,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.27-staging · ${new Date().getFullYear()}
+          HospesAI · v3.28 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
