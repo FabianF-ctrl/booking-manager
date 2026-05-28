@@ -2597,12 +2597,16 @@ function buildDashboard() {
     const room = loc?.rooms.find(r=>r.id===b.roomId);
     return s + bookingPaidInRange(b, room, monthStartExcl, monthEndExcl) * bookingNettoFactor(b);
   }, 0);
-  // Media w bieżącym miesiącu — wpisy roomMedia z period == YYYY-MM tego miesiąca
+  // Media w bieżącym miesiącu — wpisy z period == YYYY-MM tego miesiąca.
+  // v3.39: media kluczowane po loc.id (per-location), nie per-room. Filtr na
+  // valid loc IDs odrzuca legacy room-keyed entries jeśli takie zostały.
   const monthPeriod = monthStart.slice(0, 7);
   const prevMonthPeriod = prevMonthStart.slice(0, 7);
+  const validLocIds = new Set(DATA.locations.map(l => String(l.id)));
   let thisMonthMedia = 0, prevMonthMedia = 0;
   Object.entries(roomMedia).forEach(([key, m]) => {
-    const period = key.split("__")[1];
+    const [keyId, period] = key.split("__");
+    if (!validLocIds.has(keyId)) return;  // skip legacy room-keyed entries
     if (period === monthPeriod) thisMonthMedia += sumMediaObj(m);
     if (period === prevMonthPeriod) prevMonthMedia += sumMediaObj(m);
   });
@@ -3414,10 +3418,12 @@ function buildReports() {
     }
   });
   // Media w okresie raportu — uwzględniamy tylko miesiące nakładające się z filtrem.
-  // Bez filtra = wszystkie media.
+  // v3.39: filtr na valid loc IDs (skip legacy room-keyed entries).
+  const _validLocs = new Set(DATA.locations.map(l => String(l.id)));
   Object.entries(roomMedia).forEach(([key, m]) => {
+    const [keyId, period] = key.split("__");
+    if (!_validLocs.has(keyId)) return;
     if (!periodRange) { totMedia += sumMediaObj(m); return; }
-    const period = key.split("__")[1];
     if (!period) return;
     const pStart = period + "-01";
     const [y, mn] = period.split("-").map(Number);
@@ -3513,9 +3519,15 @@ function buildReports() {
         // v3.19 — pro-rata clip wpłaconej kwoty
         locPaid += bookingPaidInRange(b, room, periodRange?.from, periodRange?.to) * _f;
       });
-      loc.rooms.forEach(room => {
-        const periods = getRoomMediaPeriods(room.id);
-        periods.forEach(period => { locMedia += sumRoomMedia(room.id, period); });
+      // v3.39: media per-LOCATION (nie per room) — klucz to loc.id
+      getRoomMediaPeriods(loc.id).forEach(period => {
+        if (!periodRange) { locMedia += sumRoomMedia(loc.id, period); return; }
+        const pStart = period + "-01";
+        const [py, pm] = period.split("-").map(Number);
+        const pEnd = `${pm === 12 ? py+1 : py}-${String(pm === 12 ? 1 : pm+1).padStart(2,"0")}-01`;
+        if (pStart < periodRange.to && pEnd > periodRange.from) {
+          locMedia += sumRoomMedia(loc.id, period);
+        }
       });
       const locProfit = locRevenue - locMedia;
       const locRemaining = Math.max(0, locRevenue - locPaid);
@@ -3858,24 +3870,19 @@ function buildReportRow(b, loc, periodRange) {
 
 // ─── MEDIA SECTION per location (embedded in reports) ────────
 function buildMediaSectionForLoc(loc) {
-  // Pokoje z istniejącymi wpisami media (nie wszystkie pokoje z rezerwacjami).
-  const roomsWithMedia = loc.rooms.filter(r => getRoomMediaPeriods(r.id).length > 0);
-  // Pokoje bez wpisów ale z rezerwacjami — kandydaci do "dodaj media dla pokoju"
-  const roomsWithoutMedia = loc.rooms.filter(r =>
-    !getRoomMediaPeriods(r.id).length && savedBookings.some(b => b.roomId === r.id)
-  );
-  // Total mediów dla tego obiektu (do nagłówka)
+  // v3.39: Media PER OBIEKT (nie per pokój). Klucz w storage to loc.id.
+  // Pokazuje wszystkie okresy zapisane dla tego obiektu + jeden form do dodania
+  // wpisu za wybrany YYYY-MM. Aplikuje się do całego budynku jako koszt operacyjny.
+  const allPeriods = getRoomMediaPeriods(loc.id);
+  const hasAnyBookings = savedBookings.some(b => b.locId === loc.id);
   let locMediaTotal = 0;
-  roomsWithMedia.forEach(r => {
-    getRoomMediaPeriods(r.id).forEach(p => { locMediaTotal += sumRoomMedia(r.id, p); });
-  });
+  allPeriods.forEach(p => { locMediaTotal += sumRoomMedia(loc.id, p); });
 
-  // Jeśli ani jednego pokoju (z mediami lub z rezerwacjami) — nie pokazuj sekcji
-  if (roomsWithMedia.length === 0 && roomsWithoutMedia.length === 0) return "";
+  if (allPeriods.length === 0 && !hasAnyBookings) return "";
 
   const isExpanded = !!state.mediaExpanded[loc.id];
-  const summary = roomsWithMedia.length > 0
-    ? `${roomsWithMedia.length} ${roomsWithMedia.length===1?"pokój":roomsWithMedia.length<5?"pokoje":"pokoi"} z wpisami · zł${locMediaTotal.toFixed(2)}`
+  const summary = allPeriods.length > 0
+    ? `${allPeriods.length} ${allPeriods.length===1?"okres":allPeriods.length<5?"okresy":"okresów"} · zł${locMediaTotal.toFixed(2)}`
     : `brak wpisów — kliknij aby dodać`;
 
   let html = `
@@ -3892,104 +3899,88 @@ function buildMediaSectionForLoc(loc) {
   }
 
   const cp = currentPeriod();
-  // Lista pokoi z wpisami
-  roomsWithMedia.forEach(room => {
-    const allPeriods = getRoomMediaPeriods(room.id);
-    const periods = allPeriods.includes(cp) ? allPeriods : [cp, ...allPeriods];
+  // Wszystkie okresy zapisane dla tego obiektu + bieżący (jeśli nie ma)
+  const periods = allPeriods.includes(cp) ? allPeriods : [cp, ...allPeriods];
 
-    let roomTotalMedia = 0;
-    allPeriods.forEach(p => { roomTotalMedia += sumRoomMedia(room.id, p); });
+  // Łączny przychód obiektu (do "Netto" w summary, brutto*factor)
+  let locRevenueTotal = 0;
+  savedBookings.filter(b => b.locId === loc.id).forEach(b => {
+    const room = loc.rooms.find(r => r.id === b.roomId);
+    const nights = getActualNights(b);
+    locRevenueTotal += calcBookingTotal(b, room, nights) * bookingNettoFactor(b);
+  });
+  const locNet = Math.max(0, locRevenueTotal - locMediaTotal);
 
-    const roomBookings = savedBookings.filter(b => b.roomId === room.id);
-    let roomRevenue = 0;
-    roomBookings.forEach(b => {
-      const nights = getActualNights(b);
-      roomRevenue += calcBookingTotal(b, room, nights);
-    });
-    const roomNet = Math.max(0, roomRevenue - roomTotalMedia);
+  // Header pojedynczy summary dla całego obiektu
+  html += `
+    <div style="padding:10px 14px;background:var(--orange-light);border-bottom:1px dashed var(--orange-border);font-size:11px;color:var(--orange);font-weight:600">
+      ${locMediaTotal > 0 ? `Łącznie media obiektu: zł${locMediaTotal.toFixed(2)} · Przychód netto (brutto-media-vat): zł${locNet.toFixed(2)}` : "Brak wpisów media. Dodaj okres niżej."}
+    </div>`;
 
+  // Editor — jeden per okres (rzędy electricity/gas/water + others)
+  periods.forEach(period => {
+    const m = getRoomMedia(loc.id, period);
+    const periodSum = sumRoomMedia(loc.id, period);
+    const others = m.others || [];
     html += `
-      <div class="media-room-block">
-        <div class="media-room-hdr" data-media-toggle="${room.id}">
-          <span class="media-room-hdr-title">${esc(room.name)}</span>
-          <span class="media-room-hdr-total">${roomTotalMedia > 0 ? `Media: zł${roomTotalMedia.toFixed(2)} · Netto: zł${roomNet.toFixed(2)}` : "Brak mediów — kliknij aby dodać"}</span>
+      <div style="border:1px solid var(--orange-border);border-radius:var(--radius);padding:10px 12px;margin:8px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <span style="font-size:13px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums">${period}</span>
+          <span style="font-size:11px;color:var(--orange);font-variant-numeric:tabular-nums;font-weight:600">${periodSum>0?`Suma za ten miesiąc: zł${periodSum.toFixed(2)}`:""}</span>
         </div>
-        <div class="media-room-body" id="media-body-${room.id}">
-          ${periods.map(period => {
-            const m = getRoomMedia(room.id, period);
-            const periodSum = sumRoomMedia(room.id, period);
-            const others = m.others || [];
-            return `
-              <div style="border:1px solid var(--orange-border);border-radius:var(--radius);padding:10px 12px;margin-bottom:8px">
-                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-                  <span style="font-size:11px;font-weight:600;color:var(--text2);font-variant-numeric:tabular-nums">${period}</span>
-                  <span style="font-size:11px;color:var(--orange);font-variant-numeric:tabular-nums;font-weight:600">${periodSum>0?`Suma: zł${periodSum.toFixed(2)}`:""}</span>
-                </div>
-                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
-                  ${[{field:"electricity",label:"Prąd",icon:ICONS.zap,val:m.electricity},{field:"gas",label:"Gaz",icon:ICONS.flame,val:m.gas},{field:"water",label:"Woda",icon:ICONS.droplet,val:m.water}].map(ft => {
-                    const linked = invoices.filter(inv => inv.roomId === room.id && inv.period === period && stripEmoji(inv.note) === ft.label);
-                    const fid = `mi-${ft.field}-${room.id}-${period}`;
-                    return `<div class="media-field">
-                      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">
-                        <label style="margin:0;display:inline-flex;align-items:center;gap:5px">${ft.icon(13)} ${ft.label} (zł)</label>
-                        <label for="${fid}" style="cursor:pointer;font-size:10px;color:var(--blue);padding:1px 6px;border-radius:4px;background:var(--blue-light);white-space:nowrap;font-weight:600;display:inline-flex;align-items:center;gap:3px">${ICONS.pin(10)}${linked.length > 0 ? linked.length : ''}</label>
-                      </div>
-                      <input type="file" id="${fid}" style="display:none" accept=".pdf,.jpg,.jpeg,.png"
-                        data-mi-room="${room.id}" data-mi-loc="${loc.id}" data-mi-period="${period}"
-                        data-mi-type="${ft.label}" data-mi-field="${ft.field}" />
-                      <input type="number" class="media-inp" data-roomid="${room.id}" data-period="${period}" data-field="${ft.field}" value="${ft.val||""}" placeholder="0.00" min="0" step="0.01" />
-                      ${linked.map(inv => `<a href="${inv.url||"#"}" target="_blank" title="${esc(inv.filename)}"
-                        style="display:flex;align-items:center;gap:3px;font-size:10px;color:var(--blue);text-decoration:none;margin-top:3px;padding:2px 6px;border-radius:4px;background:var(--blue-light);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-                        📄 ${esc(inv.filename||"Faktura")}</a>`).join("")}
-                    </div>`;
-                  }).join("")}
-                </div>
-                ${others.map((o,idx) => {
-                  const oLabel = o.label || `Inne ${idx+1}`;
-                  const oLinked = invoices.filter(inv => inv.roomId === room.id && inv.period === period && stripEmoji(inv.note) === stripEmoji(oLabel));
-                  const ofid = `mi-other-${room.id}-${period}-${idx}`;
-                  return `
-                  <div style="display:grid;grid-template-columns:1fr 110px auto auto;gap:6px;align-items:flex-end;margin-bottom:6px">
-                    <div class="media-field"><label style="display:inline-flex;align-items:center;gap:5px">${ICONS.pin(12)} Inne — opis</label>
-                      <input type="text" class="media-inp" data-roomid="${room.id}" data-period="${period}" data-field="other_label_${idx}" value="${esc(oLabel)}" placeholder="np. Naprawa…" style="font-family:inherit" /></div>
-                    <div class="media-field"><label>Kwota (zł)</label>
-                      <input type="number" class="media-inp" data-roomid="${room.id}" data-period="${period}" data-field="other_amount_${idx}" value="${o.amount||""}" placeholder="0.00" min="0" step="0.01" /></div>
-                    <div style="align-self:flex-end;margin-bottom:1px">
-                      <input type="file" id="${ofid}" style="display:none" accept=".pdf,.jpg,.jpeg,.png"
-                        data-mi-room="${room.id}" data-mi-loc="${loc.id}" data-mi-period="${period}"
-                        data-mi-type="${esc(oLabel)}" data-mi-field="other_${idx}" />
-                      <label for="${ofid}" style="display:flex;align-items:center;justify-content:center;cursor:pointer;width:30px;height:30px;border-radius:var(--radius);background:var(--blue-light);color:var(--blue);font-size:13px;font-weight:700;border:1px solid var(--blue-light)"${oLinked.length > 0 ? ' title="'+oLinked.length+' faktura/y"' : ''}>${ICONS.pin(13)}${oLinked.length > 0 ? `<span style="font-size:9px;margin-left:2px">${oLinked.length}</span>` : ""}</label>
-                    </div>
-                    <button class="remove-btn" data-remove-other="${room.id}" data-period="${period}" data-other-idx="${idx}" style="margin-bottom:1px;align-self:flex-end">✕</button>
-                  </div>`;
-                }).join("")}
-                <div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap">
-                  <button class="media-add-period-btn" data-add-other="${room.id}" data-period="${period}" style="margin-top:0">+ Dodaj inne</button>
-                  <button class="media-save-btn" data-media-save="${room.id}" data-period="${period}">${ICONS.save(13)} Zapisz</button>
-                </div>
-              </div>`;
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
+          ${[{field:"electricity",label:"Prąd",icon:ICONS.zap,val:m.electricity},{field:"gas",label:"Gaz",icon:ICONS.flame,val:m.gas},{field:"water",label:"Woda",icon:ICONS.droplet,val:m.water}].map(ft => {
+            const linked = invoices.filter(inv => inv.roomId === loc.id && inv.period === period && stripEmoji(inv.note) === ft.label);
+            const fid = `mi-${ft.field}-${loc.id}-${period}`;
+            return `<div class="media-field">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">
+                <label style="margin:0;display:inline-flex;align-items:center;gap:5px">${ft.icon(13)} ${ft.label} (zł)</label>
+                <label for="${fid}" style="cursor:pointer;font-size:10px;color:var(--blue);padding:1px 6px;border-radius:4px;background:var(--blue-light);white-space:nowrap;font-weight:600;display:inline-flex;align-items:center;gap:3px">${ICONS.pin(10)}${linked.length > 0 ? linked.length : ''}</label>
+              </div>
+              <input type="file" id="${fid}" style="display:none" accept=".pdf,.jpg,.jpeg,.png"
+                data-mi-room="${loc.id}" data-mi-loc="${loc.id}" data-mi-period="${period}"
+                data-mi-type="${ft.label}" data-mi-field="${ft.field}" />
+              <input type="number" class="media-inp" data-roomid="${loc.id}" data-period="${period}" data-field="${ft.field}" value="${ft.val||""}" placeholder="0.00" min="0" step="0.01" />
+              ${linked.map(inv => `<a href="${inv.url||"#"}" target="_blank" title="${esc(inv.filename)}"
+                style="display:flex;align-items:center;gap:3px;font-size:10px;color:var(--blue);text-decoration:none;margin-top:3px;padding:2px 6px;border-radius:4px;background:var(--blue-light);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                📄 ${esc(inv.filename||"Faktura")}</a>`).join("")}
+            </div>`;
           }).join("")}
-          <div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap">
-            <input type="month" id="media-period-picker-${room.id}" value="${currentPeriod()}"
-              style="padding:5px 8px;border:1px dashed var(--orange-border);border-radius:var(--radius);font-size:11px;color:var(--orange);background:var(--surface);font-variant-numeric:tabular-nums;outline:none;cursor:pointer" />
-            <button class="media-add-period-btn" data-add-period="${room.id}" style="margin-top:0">+ Dodaj wybrany okres</button>
-          </div>
+        </div>
+        ${others.map((o,idx) => {
+          const oLabel = o.label || `Inne ${idx+1}`;
+          const oLinked = invoices.filter(inv => inv.roomId === loc.id && inv.period === period && stripEmoji(inv.note) === stripEmoji(oLabel));
+          const ofid = `mi-other-${loc.id}-${period}-${idx}`;
+          return `
+          <div style="display:grid;grid-template-columns:1fr 110px auto auto;gap:6px;align-items:flex-end;margin-bottom:6px">
+            <div class="media-field"><label style="display:inline-flex;align-items:center;gap:5px">${ICONS.pin(12)} Inne — opis</label>
+              <input type="text" class="media-inp" data-roomid="${loc.id}" data-period="${period}" data-field="other_label_${idx}" value="${esc(oLabel)}" placeholder="np. Naprawa…" style="font-family:inherit" /></div>
+            <div class="media-field"><label>Kwota (zł)</label>
+              <input type="number" class="media-inp" data-roomid="${loc.id}" data-period="${period}" data-field="other_amount_${idx}" value="${o.amount||""}" placeholder="0.00" min="0" step="0.01" /></div>
+            <div style="align-self:flex-end;margin-bottom:1px">
+              <input type="file" id="${ofid}" style="display:none" accept=".pdf,.jpg,.jpeg,.png"
+                data-mi-room="${loc.id}" data-mi-loc="${loc.id}" data-mi-period="${period}"
+                data-mi-type="${esc(oLabel)}" data-mi-field="other_${idx}" />
+              <label for="${ofid}" style="display:flex;align-items:center;justify-content:center;cursor:pointer;width:30px;height:30px;border-radius:var(--radius);background:var(--blue-light);color:var(--blue);font-size:13px;font-weight:700;border:1px solid var(--blue-light)"${oLinked.length > 0 ? ' title="'+oLinked.length+' faktura/y"' : ''}>${ICONS.pin(13)}${oLinked.length > 0 ? `<span style="font-size:9px;margin-left:2px">${oLinked.length}</span>` : ""}</label>
+            </div>
+            <button class="remove-btn" data-remove-other="${loc.id}" data-period="${period}" data-other-idx="${idx}" style="margin-bottom:1px;align-self:flex-end">✕</button>
+          </div>`;
+        }).join("")}
+        <div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap">
+          <button class="media-add-period-btn" data-add-other="${loc.id}" data-period="${period}" style="margin-top:0">+ Dodaj inne</button>
+          <button class="media-save-btn" data-media-save="${loc.id}" data-period="${period}">${ICONS.save(13)} Zapisz</button>
         </div>
       </div>`;
   });
 
-  // Przycisk dodawania mediów dla pokoju bez wpisów (jeśli są takie pokoje z rezerwacjami)
-  if (roomsWithoutMedia.length > 0) {
-    html += `
-      <div style="padding:10px 14px;border-top:1px dashed var(--orange-border);display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--surface)">
-        <span style="font-size:11px;color:var(--text2)">Dodaj media dla pokoju:</span>
-        <select id="media-add-room-${loc.id}" style="padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-size:11px;font-family:inherit;outline:none">
-          <option value="">— wybierz pokój —</option>
-          ${roomsWithoutMedia.map(r => `<option value="${r.id}">${esc(r.name)}</option>`).join("")}
-        </select>
-        <button class="media-add-period-btn" data-media-add-blank="${loc.id}" style="margin-top:0">+ Dodaj wpis</button>
-      </div>`;
-  }
+  // Dodaj nowy okres
+  html += `
+    <div style="padding:10px 14px;border-top:1px dashed var(--orange-border);display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--surface)">
+      <span style="font-size:11px;color:var(--text2)">Dodaj media za inny okres:</span>
+      <input type="month" id="media-period-picker-${loc.id}" value="${currentPeriod()}"
+        style="padding:5px 8px;border:1px dashed var(--orange-border);border-radius:var(--radius);font-size:11px;color:var(--orange);background:var(--surface);font-variant-numeric:tabular-nums;outline:none;cursor:pointer" />
+      <button class="media-add-period-btn" data-add-period="${loc.id}" style="margin-top:0">+ Dodaj wybrany okres</button>
+    </div>`;
 
   html += `</div></div>`; // close padding wrapper + media-loc-section
   return html;
@@ -4065,9 +4056,12 @@ function buildCharts() {
   const kpiRemaining = Math.max(0, kpiRevenue - kpiPaid);
 
   // v3.18 — Media w okresie wykresu, dla zysku planowanego/zrealizowanego
+  // v3.39: media per-LOCATION — filtr na valid loc IDs (skip legacy room keys)
   let kpiMedia = 0;
+  const _validLocsK = new Set(DATA.locations.map(l => String(l.id)));
   Object.entries(roomMedia).forEach(([key, m]) => {
-    const period = key.split("__")[1];
+    const [keyId, period] = key.split("__");
+    if (!_validLocsK.has(keyId)) return;
     if (!period) return;
     const pStart = period + "-01";
     const [py, pm] = period.split("-").map(Number);
@@ -8208,9 +8202,11 @@ function generatePrintReport(fromDate, toDate) {
       if (!isNaN(p)) totPaid += p;
     }
   });
-  // Media w okresie (uwzględniamy okresy YYYY-MM nakładające się z zakresem)
+  // Media w okresie (v3.39: filtr na valid loc IDs — pomija legacy room-keyed)
+  const _validLocsP = new Set(DATA.locations.map(l => String(l.id)));
   Object.entries(roomMedia).forEach(([key, m]) => {
-    const period = key.split("__")[1];
+    const [keyId, period] = key.split("__");
+    if (!_validLocsP.has(keyId)) return;
     if (!period) return;
     const pStart = period + "-01";
     const [y, mn] = period.split("-").map(Number);
@@ -8452,7 +8448,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.38 · ${new Date().getFullYear()}
+          HospesAI · v3.39 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
