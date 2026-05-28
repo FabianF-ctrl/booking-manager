@@ -4587,6 +4587,9 @@ function buildPreviewDetail(locId) {
 
   // Helper: status komórki dla (room, day)
   // Zwraca: { status: "free"|"occupied"|"perm", booking?, guestName? }
+  // v3.24 BUG FIX: dla permanent BEZ permanentEnd (do odwołania) NIE używamy
+  // endOfCurrentMonthExclusive() bo to clipuje wizualizację do bieżącego miesiąca
+  // (czerwiec pokazywał wolny mimo aktywnego najemcy). Dla podglądu — nieskończoność.
   const getCellStatus = (roomId, dayStr) => {
     const dayEndExcl = toStr(addDays(parseDate(dayStr), 1));
     for (const b of savedBookings) {
@@ -4595,7 +4598,7 @@ function buildPreviewDetail(locId) {
       const hasPermGuest = (b.guests || []).some(g => g.isPermanent);
       if (isPerm || hasPermGuest) {
         const pStart = b.permanentStart || b.from;
-        const pEnd = b.permanentEnd || endOfCurrentMonthExclusive();
+        const pEnd = b.permanentEnd || "9999-12-31";  // brak końca = aktywny w nieskończoność
         if (pStart <= dayStr && pEnd > dayStr) {
           const who = b.bookingType === "company"
             ? b.companyName
@@ -4634,18 +4637,25 @@ function buildPreviewDetail(locId) {
     if (filter === "free" && (occupiedDays > 0 || permDays > 0)) return "";
     if (filter === "perm" && permDays === 0) return "";
 
-    // Przychód + wpłacono dla tego pokoju w tym miesiącu (clipped do miesiąca)
+    // Przychód + wpłacono dla tego pokoju w tym miesiącu (clipped do miesiąca).
+    // v3.24: dla permanent bez końca:
+    // - overlap check: traktuj jako aktywny do nieskończoności (9999-12-31)
+    // - calcBookingTotal / bookingPaidInRange: też używa overlap'u via getPermanentActiveMonths,
+    //   który defaultuje pEnd = endOfCurrentMonthExclusive (psuje wizualizację przyszłych miesięcy).
+    //   Override: spread booking z permanentEnd="9999-12-31" TYLKO dla tej kalkulacji.
+    //   Nie mutujemy oryginalnego bookingu — pozostaje "do odwołania" w danych.
     const roomBookings = savedBookings.filter(b => b.roomId === room.id);
     let roomRevenue = 0, roomPaid = 0;
     roomBookings.forEach(b => {
-      // overlap test
       const isPerm = b.isPermanent && b.bookingType !== "company";
       const bStart = isPerm ? (b.permanentStart || b.from) : b.from;
-      const bEnd = isPerm ? (b.permanentEnd || endOfCurrentMonthExclusive()) : b.to;
+      const bEnd = isPerm ? (b.permanentEnd || "9999-12-31") : b.to;
       if (bStart >= monthEndExcl || bEnd <= monthStart) return;
-      const t = calcBookingTotal(b, room, getActualNights(b), { from: monthStart, to: monthEndExcl });
+      // Override permanentEnd for the calc, jeśli "do odwołania"
+      const bForCalc = (isPerm && !b.permanentEnd) ? { ...b, permanentEnd: "9999-12-31" } : b;
+      const t = calcBookingTotal(bForCalc, room, getActualNights(bForCalc), { from: monthStart, to: monthEndExcl });
       roomRevenue += t;
-      roomPaid += bookingPaidInRange(b, room, monthStart, monthEndExcl);
+      roomPaid += bookingPaidInRange(bForCalc, room, monthStart, monthEndExcl);
     });
     const roomRemaining = Math.max(0, roomRevenue - roomPaid);
 
@@ -8113,7 +8123,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.23 · ${new Date().getFullYear()}
+          HospesAI · v3.24 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
