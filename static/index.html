@@ -979,12 +979,17 @@ body {
 .preview-hero-name { font-size: 22px; font-weight: 700; color: var(--text); margin: 0; }
 .preview-hero-meta { font-size: 12px; color: var(--text2); margin-top: 4px; font-variant-numeric: tabular-nums; }
 
+.preview-toolbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin-bottom: 10px; flex-wrap: wrap;
+}
+.preview-filter-wrap { display: flex; align-items: center; gap: 6px; }
 .preview-legend {
-  display: flex; gap: 16px; font-size: 11px; color: var(--text2); margin-bottom: 10px; align-items: center; flex-wrap: wrap;
+  display: flex; gap: 16px; font-size: 11px; color: var(--text2); align-items: center; flex-wrap: wrap;
 }
 .preview-legend-box { display: inline-block; width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); vertical-align: middle; margin-right: 4px; }
-.preview-legend-box.is-free { background: var(--surface); }
-.preview-legend-box.is-occupied { background: #fde68a; border-color: #f59e0b; }   /* yellow */
+.preview-legend-box.is-free { background: #bbf7d0; border-color: #16a34a; }       /* green */
+.preview-legend-box.is-occupied { background: #fecaca; border-color: #dc2626; }   /* red */
 .preview-legend-box.is-perm { background: #93c5fd; border-color: #2563eb; }       /* blue */
 
 /* Grid (rooms × days) */
@@ -1020,17 +1025,25 @@ body {
   transition: filter 0.1s; cursor: default;
 }
 .preview-day:last-child { border-right: none; }
-.preview-day.is-free { background: var(--surface); }
-.preview-day.is-occupied { background: #fde68a; color: #92400e; font-weight: 600; }
-.preview-day.is-perm { background: #93c5fd; color: #1e3a8a; font-weight: 600; }
-.preview-day:hover { filter: brightness(1.1); }
+.preview-day.is-free { background: #bbf7d0; color: #14532d; }                     /* green */
+.preview-day.is-occupied { background: #fecaca; color: #7f1d1d; font-weight: 600; }/* red */
+.preview-day.is-perm { background: #93c5fd; color: #1e3a8a; font-weight: 600; }   /* blue */
+.preview-day:hover { filter: brightness(1.08); }
 .preview-sum-cell {
-  width: 110px; flex-shrink: 0; padding: 10px 12px;
+  width: 170px; flex-shrink: 0; padding: 10px 12px;
   border-left: 1px solid var(--border); font-size: 12px;
   display: flex; flex-direction: column; gap: 2px; text-align: right; font-variant-numeric: tabular-nums;
   background: inherit;
 }
-.preview-sum-sub { font-size: 10px; color: var(--text3); font-weight: 400; }
+.preview-sum-rev { font-size: 14px; font-weight: 700; color: var(--blue); }
+.preview-sum-paid { font-size: 10px; color: var(--green); font-weight: 600; }
+.preview-sum-days { font-size: 10px; color: var(--text3); font-weight: 400; }
+
+/* Clickable row — hover effect */
+.preview-row-clickable { cursor: pointer; transition: background 0.12s; }
+.preview-row-clickable:hover { background: var(--blue-light); }
+.preview-row-clickable:hover .preview-room-cell,
+.preview-row-clickable:hover .preview-sum-cell { background: var(--blue-light); }
 
 /* Month tabs (bottom) */
 .preview-month-tabs {
@@ -1395,6 +1408,7 @@ let state = {
   // v3.21 — Preview tab (Podgląd)
   previewLocId: null,        // null = lista, number = detail view
   previewMonth: null,        // "YYYY-MM" lub null (=current month)
+  previewFilter: "all",      // v3.22 — "all" | "occupied" | "free" | "perm"
   roomDetailModal: null, // { roomId, locId }
   billingMode: "room",   // "room" | "employee" — tryb rozliczenia firmowego
   customPrice: "",        // nadpisanie ceny finalnej, pusty = brak
@@ -4591,7 +4605,8 @@ function buildPreviewDetail(locId) {
     return { status: "free" };
   };
 
-  // Build rooms × days grid
+  // Build rooms × days grid (v3.22: +revenue/paid per room + filter + clickable)
+  const filter = state.previewFilter || "all";
   const roomsHtml = loc.rooms.map(room => {
     let occupiedDays = 0, permDays = 0;
     const dayCells = [];
@@ -4604,21 +4619,42 @@ function buildPreviewDetail(locId) {
       const tooltip = s.guestName ? `${d}.${String(mn).padStart(2,"0")} · ${s.guestName}` : `${d}.${String(mn).padStart(2,"0")} · wolny`;
       dayCells.push(`<div class="preview-day ${cls}" title="${esc(tooltip)}">${d}</div>`);
     }
+
+    // Filter — pomiń wiersze które nie pasują
+    if (filter === "occupied" && occupiedDays === 0 && permDays === 0) return "";
+    if (filter === "free" && (occupiedDays > 0 || permDays > 0)) return "";
+    if (filter === "perm" && permDays === 0) return "";
+
+    // Przychód + wpłacono dla tego pokoju w tym miesiącu (clipped do miesiąca)
+    const roomBookings = savedBookings.filter(b => b.roomId === room.id);
+    let roomRevenue = 0, roomPaid = 0;
+    roomBookings.forEach(b => {
+      // overlap test
+      const isPerm = b.isPermanent && b.bookingType !== "company";
+      const bStart = isPerm ? (b.permanentStart || b.from) : b.from;
+      const bEnd = isPerm ? (b.permanentEnd || endOfCurrentMonthExclusive()) : b.to;
+      if (bStart >= monthEndExcl || bEnd <= monthStart) return;
+      const t = calcBookingTotal(b, room, getActualNights(b), { from: monthStart, to: monthEndExcl });
+      roomRevenue += t;
+      roomPaid += bookingPaidInRange(b, room, monthStart, monthEndExcl);
+    });
+    const roomRemaining = Math.max(0, roomRevenue - roomPaid);
+
     const totalUsed = occupiedDays + permDays;
-    const rateLbl = room.basePrice ? `zł${room.basePrice}/dobę` : "—";
     return `
-      <div class="preview-row">
+      <div class="preview-row preview-row-clickable" data-room-detail="${room.id}" data-room-loc="${loc.id}" title="Kliknij aby zobaczyć szczegóły pokoju">
         <div class="preview-room-cell">
           <strong>${esc(room.name)}</strong>
-          <div class="preview-room-sub">${room.capacity || 1} ${(room.capacity||1)===1?"łóżko":(room.capacity||1)<5?"łóżka":"łóżek"} · ${rateLbl}</div>
+          <div class="preview-room-sub">${room.capacity || 1} ${(room.capacity||1)===1?"łóżko":(room.capacity||1)<5?"łóżka":"łóżek"}${room.basePrice?` · zł${room.basePrice}/dobę`:""}</div>
         </div>
         <div class="preview-days-wrap">${dayCells.join("")}</div>
         <div class="preview-sum-cell">
-          <strong>${totalUsed}/${daysInMonth}</strong>
-          <div class="preview-sum-sub">${permDays > 0 ? `${permDays} stały · ${occupiedDays} regularne` : `${occupiedDays} dni`}</div>
+          <div class="preview-sum-rev">zł${roomRevenue.toLocaleString()}</div>
+          <div class="preview-sum-paid">wpł. zł${Math.round(roomPaid).toLocaleString()}${roomRemaining>0?` · <span style="color:var(--orange)">zł${roomRemaining.toLocaleString()} do pobrania</span>`:""}</div>
+          <div class="preview-sum-days">${totalUsed}/${daysInMonth} dni${permDays>0?` (${permDays} stały)`:""}</div>
         </div>
       </div>`;
-  }).join("");
+  }).filter(Boolean).join("");
 
   // Notatki dla rezerwacji z tego obiektu w tym miesiącu (lub aktywnych)
   const locBookingIds = new Set(savedBookings.filter(b => b.locId === locId).map(b => b.id));
@@ -4654,11 +4690,22 @@ function buildPreviewDetail(locId) {
         <div class="preview-hero-meta">${loc.rooms.length} ${loc.rooms.length===1?"pokój":loc.rooms.length<5?"pokoje":"pokoi"} · ${totalBeds} łóżek · ${monthLabel}</div>
       </div>
 
-      <!-- Legend -->
-      <div class="preview-legend">
-        <span><span class="preview-legend-box is-free"></span> Wolny</span>
-        <span><span class="preview-legend-box is-occupied"></span> Rezerwacja</span>
-        <span><span class="preview-legend-box is-perm"></span> Stały najemca</span>
+      <!-- Toolbar: legend + filter -->
+      <div class="preview-toolbar">
+        <div class="preview-legend">
+          <span><span class="preview-legend-box is-free"></span> Wolny</span>
+          <span><span class="preview-legend-box is-occupied"></span> Rezerwacja</span>
+          <span><span class="preview-legend-box is-perm"></span> Stały najemca</span>
+        </div>
+        <div class="preview-filter-wrap">
+          <label style="font-size:11px;color:var(--text2);font-weight:600">Pokaż:</label>
+          <select id="previewFilter" style="padding:5px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-size:12px;color:var(--text);font-family:inherit;outline:none">
+            <option value="all"      ${filter==="all"?"selected":""}>Wszystkie pokoje</option>
+            <option value="occupied" ${filter==="occupied"?"selected":""}>Tylko z rezerwacjami</option>
+            <option value="free"     ${filter==="free"?"selected":""}>Tylko wolne cały miesiąc</option>
+            <option value="perm"     ${filter==="perm"?"selected":""}>Tylko stały najemca</option>
+          </select>
+        </div>
       </div>
 
       <!-- Grid -->
@@ -6881,6 +6928,10 @@ function attachEvents() {
       render();
     });
   });
+  document.getElementById("previewFilter")?.addEventListener("change", e => {
+    state.previewFilter = e.target.value;
+    render();
+  });
   attachReportsEvents();
 
   // Edit modal
@@ -8024,7 +8075,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.21 · ${new Date().getFullYear()}
+          HospesAI · v3.22 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
