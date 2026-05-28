@@ -1057,24 +1057,20 @@ body {
 .preview-day.is-perm { background: #93c5fd; color: #1e3a8a; font-weight: 600; }   /* blue */
 .preview-day:hover { filter: brightness(1.08); }
 
-/* v3.30 — Weekendy (sobota, niedziela): FIOLET z logo HospesAI (prawa półkula).
-   Header: violet bg + violet text. Data cells: violet color dla numeru dnia
-   (na tle koloru statusu — zielone/czerwone/niebieskie tło, ale liczba fioletowa). */
+/* v3.31 — Weekendy (sobota, niedziela): GREEN (var --green/--green-light).
+   Wcześniej violet ale słabo widoczny. Header: green-light bg + green text.
+   Data cells: green color dla numeru dnia (na tle koloru statusu). */
 .preview-day-header.is-weekend {
-  background: var(--violet-light);
+  background: var(--green-light);
 }
 .preview-day-header.is-weekend .dow,
 .preview-day-header.is-weekend .dnum {
-  color: var(--violet);
+  color: var(--green);
 }
-/* Komórki danych w weekend — liczba w fiolecie, font-weight bold dla czytelności */
+/* Komórki danych w weekend — liczba w zielonym + bold dla czytelności */
 .preview-day.is-weekend {
-  color: var(--violet) !important;
+  color: var(--green) !important;
   font-weight: 700;
-}
-.preview-legend-box.is-weekend-sample {
-  background: var(--violet-light);
-  border-color: var(--violet);
 }
 
 /* Niedziela (dow=0) — koniec polskiego tygodnia. Grubsza right border
@@ -4929,7 +4925,7 @@ function buildPreviewDetail(locId) {
           <span><span class="preview-legend-box is-free"></span> Wolny</span>
           <span><span class="preview-legend-box is-occupied"></span> Rezerwacja</span>
           <span><span class="preview-legend-box is-perm"></span> Stały najemca</span>
-          <span style="color:var(--violet);font-weight:700">So Nd</span><span style="color:var(--text3);margin-left:-12px"> = weekend</span>
+          <span style="color:var(--green);font-weight:700">So Nd</span><span style="color:var(--text3);margin-left:-12px"> = weekend</span>
         </div>
         <div class="preview-filter-wrap">
           <label style="font-size:11px;color:var(--text2);font-weight:600">Pokaż:</label>
@@ -8367,7 +8363,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.30 · ${new Date().getFullYear()}
+          HospesAI · v3.31 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
