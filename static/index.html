@@ -979,6 +979,7 @@ body {
 .preview-hero-city { font-size: 12px; font-weight: 600; color: var(--blue); text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
 .preview-hero-name { font-size: 22px; font-weight: 700; color: var(--text); margin: 0; }
 .preview-hero-meta { font-size: 12px; color: var(--text2); margin-top: 4px; font-variant-numeric: tabular-nums; }
+.preview-hero-month-label { font-size: 22px; font-weight: 700; color: var(--blue); margin-top: 6px; font-variant-numeric: tabular-nums; letter-spacing: -0.3px; }
 .preview-year-select { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
 .preview-year-select select {
   padding: 8px 14px; border: 1px solid var(--blue-mid); border-radius: var(--radius);
@@ -1038,6 +1039,43 @@ body {
 .preview-day.is-occupied { background: #fecaca; color: #7f1d1d; font-weight: 600; }/* red */
 .preview-day.is-perm { background: #93c5fd; color: #1e3a8a; font-weight: 600; }   /* blue */
 .preview-day:hover { filter: brightness(1.08); }
+
+/* Weekendy (sob, ndz) — pogrubienie + ramka inset.
+   Różny miesiąc = różne daty weekendów (logika w JS, klasa is-weekend per dzień). */
+.preview-day.is-weekend,
+.preview-day-header.is-weekend {
+  font-weight: 700;
+  box-shadow: inset 0 0 0 1px #6b7280;  /* szara ramka wewnętrzna */
+  position: relative;  /* żeby box-shadow nadpisywał border-right */
+  z-index: 1;
+}
+
+/* Granica między miesiącami (gdy 2 miesiące wybrane) */
+.preview-day.is-month-boundary,
+.preview-day-header.is-month-boundary {
+  border-left: 3px solid var(--blue) !important;
+}
+.preview-month-header-row {
+  background: var(--blue-light);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--blue);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.preview-month-span {
+  flex-shrink: 0;
+  text-align: center;
+  padding: 7px 0;
+  border-right: 2px solid var(--blue);
+}
+.preview-month-span:last-child { border-right: none; }
+
+.preview-legend-box.is-weekend-sample {
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px #6b7280;
+}
 .preview-sum-cell {
   width: 170px; flex-shrink: 0; padding: 10px 12px;
   border-left: 1px solid var(--border); font-size: 12px;
@@ -1054,21 +1092,48 @@ body {
 .preview-row-clickable:hover .preview-room-cell,
 .preview-row-clickable:hover .preview-sum-cell { background: var(--blue-light); }
 
-/* Month tabs (bottom) */
-.preview-month-tabs {
-  display: flex; gap: 4px; padding: 8px; background: var(--surface);
-  border: 1px solid var(--border); border-radius: var(--radius-lg);
-  overflow-x: auto; -webkit-overflow-scrolling: touch;
-  margin-bottom: 18px;
+/* Month nav: arrowy + tabs (TOP) + compare toggle */
+.preview-month-nav {
+  display: flex; align-items: center; gap: 6px;
+  margin-bottom: 12px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  padding: 6px;
 }
+.preview-nav-arrow {
+  flex-shrink: 0;
+  width: 32px; height: 32px;
+  background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+  cursor: pointer; font-family: inherit;
+  font-size: 18px; font-weight: 700; color: var(--text2);
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.12s;
+}
+.preview-nav-arrow:hover { background: var(--blue-light); color: var(--blue); border-color: var(--blue); }
+.preview-month-tabs {
+  flex: 1; min-width: 0;
+  display: flex; gap: 4px;
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  padding: 0 2px;
+}
+.preview-month-tabs::-webkit-scrollbar { height: 0; }  /* ukryj scrollbar dla czystości */
 .preview-month-tab {
   padding: 6px 12px; background: var(--surface2); border: 1px solid var(--border);
   border-radius: var(--radius); cursor: pointer; font-family: inherit;
   font-size: 12px; color: var(--text2); white-space: nowrap; font-variant-numeric: tabular-nums;
-  transition: all 0.12s;
+  transition: all 0.12s; flex-shrink: 0;
 }
 .preview-month-tab:hover { background: var(--surface3); color: var(--text); }
 .preview-month-tab.active { background: var(--blue); color: #fff; border-color: var(--blue); font-weight: 600; }
+.preview-compare-toggle {
+  flex-shrink: 0;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; background: var(--surface2);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  font-size: 11px; color: var(--text2); cursor: pointer; white-space: nowrap;
+  font-weight: 600;
+}
+.preview-compare-toggle input[type=checkbox] { margin: 0; cursor: pointer; }
 
 /* Notes section */
 .preview-notes-list { display: flex; flex-direction: column; gap: 8px; }
@@ -1436,7 +1501,8 @@ let state = {
 
   // v3.21 — Preview tab (Podgląd)
   previewLocId: null,        // null = lista, number = detail view
-  previewMonth: null,        // "YYYY-MM" lub null (=current month)
+  previewMonths: [],         // v3.27: array "YYYY-MM" (1-2 items). [] = current month default.
+  previewCompareMode: false, // v3.27: toggle — clicks add/remove (max 2) zamiast switch
   previewFilter: "all",      // v3.22 — "all" | "occupied" | "free" | "perm"
   roomDetailModal: null, // { roomId, locId }
   billingMode: "room",   // "room" | "employee" — tryb rozliczenia firmowego
@@ -4583,46 +4649,54 @@ function buildPreview() {
   `;
 }
 
-// Detail: hero + grid (pokoje × dni) + month tabs + notatki.
+// Detail: hero + month tabs (TOP, z arrowami + compare toggle) + grid + notatki.
+// v3.27: multi-month select (max 2), weekend bolding/ramka, tabs przeniesione pod hero.
 function buildPreviewDetail(locId) {
   const loc = DATA.locations.find(l => l.id === locId);
   if (!loc) return `<div class="no-results-box">Obiekt nie znaleziony.</div>`;
 
-  // Bieżący miesiąc do wyboru
+  // Selected months — array (1 or 2), chronologically sorted.
   const today = todayStr();
-  const month = state.previewMonth || today.slice(0, 7);
-  const [yr, mn] = month.split("-").map(Number);
-  const daysInMonth = new Date(yr, mn, 0).getDate();
-  const monthStart = `${month}-01`;
-  const monthEndExcl = toStr(new Date(yr, mn, 1));  // pierwszy dzień następnego mies
-  const monthLabel = `${MONTHS[mn-1]} ${yr}`;
+  const selectedMonths = (state.previewMonths && state.previewMonths.length > 0)
+    ? state.previewMonths.slice().sort()
+    : [today.slice(0, 7)];
+  const primaryMonth = selectedMonths[0];  // dla year selector i tab centering
+  const [yr, mn] = primaryMonth.split("-").map(Number);
+  const compareMode = !!state.previewCompareMode;
 
-  // Build month tabs (±6 miesięcy wokół bieżącego), na dole
-  const tabMonths = [];
-  for (let i = -6; i <= 6; i++) {
-    const d = new Date(yr, mn - 1 + i, 1);
-    const ym = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
-    tabMonths.push({ ym, label: `${MONTHS[d.getMonth()].slice(0,3)} '${String(d.getFullYear()).slice(2)}` });
-  }
+  // Etykieta np. "Maj 2026" lub "Maj 2026 + Czerwiec 2026"
+  const monthLabel = selectedMonths.map(m => {
+    const [y, n] = m.split("-").map(Number);
+    return `${MONTHS[n-1]} ${y}`;
+  }).join(" + ");
 
-  // Helper: status komórki dla (room, day)
-  // Zwraca: { status: "free"|"occupied"|"perm", booking?, guestName? }
-  // v3.24 BUG FIX: dla permanent BEZ permanentEnd (do odwołania) NIE używamy
-  // endOfCurrentMonthExclusive() bo to clipuje wizualizację do bieżącego miesiąca
-  // (czerwiec pokazywał wolny mimo aktywnego najemcy). Dla podglądu — nieskończoność.
+  // Flat array dni przez wszystkie wybrane miesiące.
+  // Zawiera: yr, mn, day, dateStr, dow (0-6), isWeekend, isMonthStart (pierwszy dzień drugiego miesiąca).
+  const allDays = [];
+  selectedMonths.forEach((m, midx) => {
+    const [y, n] = m.split("-").map(Number);
+    const di = new Date(y, n, 0).getDate();
+    for (let d = 1; d <= di; d++) {
+      const dateStr = `${m}-${String(d).padStart(2, "0")}`;
+      const dt = new Date(y, n - 1, d);
+      const dow = dt.getDay();  // 0=niedziela, 6=sobota
+      const isWeekend = (dow === 0 || dow === 6);
+      const isMonthStart = (midx > 0 && d === 1);
+      allDays.push({ yr: y, mn: n, day: d, dateStr, dow, isWeekend, isMonthStart });
+    }
+  });
+
+  // Helper: status komórki (room, day). Permanent bez końca → traktowany jako aktywny w nieskończoność.
   const getCellStatus = (roomId, dayStr) => {
-    const dayEndExcl = toStr(addDays(parseDate(dayStr), 1));
     for (const b of savedBookings) {
       if (b.roomId !== roomId) continue;
       const isPerm = b.isPermanent && b.bookingType !== "company";
       const hasPermGuest = (b.guests || []).some(g => g.isPermanent);
       if (isPerm || hasPermGuest) {
         const pStart = b.permanentStart || b.from;
-        const pEnd = b.permanentEnd || "9999-12-31";  // brak końca = aktywny w nieskończoność
+        const pEnd = b.permanentEnd || "9999-12-31";
         if (pStart <= dayStr && pEnd > dayStr) {
-          const who = b.bookingType === "company"
-            ? b.companyName
-            : (b.guests?.[0]?.name || "—");
+          const who = b.bookingType === "company" ? b.companyName : (b.guests?.[0]?.name || "—");
           return { status: "perm", booking: b, guestName: who };
         }
       } else {
@@ -4637,70 +4711,106 @@ function buildPreviewDetail(locId) {
     return { status: "free" };
   };
 
-  // Build rooms × days grid (v3.22: +revenue/paid per room + filter + clickable)
+  // Revenue/paid agregowany przez wszystkie wybrane miesiące.
+  const computeRoomFinances = (room) => {
+    let rev = 0, paid = 0;
+    selectedMonths.forEach(m => {
+      const [y, n] = m.split("-").map(Number);
+      const mStart = `${m}-01`;
+      const mEndExcl = toStr(new Date(y, n, 1));
+      const roomBookings = savedBookings.filter(b => b.roomId === room.id);
+      roomBookings.forEach(b => {
+        const isPerm = b.isPermanent && b.bookingType !== "company";
+        const bStart = isPerm ? (b.permanentStart || b.from) : b.from;
+        const bEnd = isPerm ? (b.permanentEnd || "9999-12-31") : b.to;
+        if (bStart >= mEndExcl || bEnd <= mStart) return;
+        const bForCalc = (isPerm && !b.permanentEnd) ? { ...b, permanentEnd: "9999-12-31" } : b;
+        rev += calcBookingTotal(bForCalc, room, getActualNights(bForCalc), { from: mStart, to: mEndExcl });
+        paid += bookingPaidInRange(bForCalc, room, mStart, mEndExcl);
+      });
+    });
+    return { rev, paid, remaining: Math.max(0, rev - paid) };
+  };
+
+  // Build rows
   const filter = state.previewFilter || "all";
   const roomsHtml = loc.rooms.map(room => {
     let occupiedDays = 0, permDays = 0;
-    const dayCells = [];
-    for (let d = 1; d <= daysInMonth; d++) {
-      const dStr = `${month}-${String(d).padStart(2,"0")}`;
-      const s = getCellStatus(room.id, dStr);
-      const cls = s.status === "perm" ? "is-perm" : s.status === "occupied" ? "is-occupied" : "is-free";
+    const dayCells = allDays.map(day => {
+      const s = getCellStatus(room.id, day.dateStr);
+      const statusCls = s.status === "perm" ? "is-perm" : s.status === "occupied" ? "is-occupied" : "is-free";
+      const weekendCls = day.isWeekend ? "is-weekend" : "";
+      const boundaryCls = day.isMonthStart ? "is-month-boundary" : "";
       if (s.status === "perm") permDays++;
       else if (s.status === "occupied") occupiedDays++;
-      const tooltip = s.guestName ? `${d}.${String(mn).padStart(2,"0")} · ${s.guestName}` : `${d}.${String(mn).padStart(2,"0")} · wolny`;
-      dayCells.push(`<div class="preview-day ${cls}" title="${esc(tooltip)}">${d}</div>`);
-    }
+      const tooltip = s.guestName
+        ? `${day.day}.${String(day.mn).padStart(2,"0")} · ${s.guestName}`
+        : `${day.day}.${String(day.mn).padStart(2,"0")} · wolny`;
+      return `<div class="preview-day ${statusCls} ${weekendCls} ${boundaryCls}" title="${esc(tooltip)}">${day.day}</div>`;
+    }).join("");
 
-    // Filter — pomiń wiersze które nie pasują
     if (filter === "occupied" && occupiedDays === 0 && permDays === 0) return "";
     if (filter === "free" && (occupiedDays > 0 || permDays > 0)) return "";
     if (filter === "perm" && permDays === 0) return "";
 
-    // Przychód + wpłacono dla tego pokoju w tym miesiącu (clipped do miesiąca).
-    // v3.24: dla permanent bez końca:
-    // - overlap check: traktuj jako aktywny do nieskończoności (9999-12-31)
-    // - calcBookingTotal / bookingPaidInRange: też używa overlap'u via getPermanentActiveMonths,
-    //   który defaultuje pEnd = endOfCurrentMonthExclusive (psuje wizualizację przyszłych miesięcy).
-    //   Override: spread booking z permanentEnd="9999-12-31" TYLKO dla tej kalkulacji.
-    //   Nie mutujemy oryginalnego bookingu — pozostaje "do odwołania" w danych.
-    const roomBookings = savedBookings.filter(b => b.roomId === room.id);
-    let roomRevenue = 0, roomPaid = 0;
-    roomBookings.forEach(b => {
-      const isPerm = b.isPermanent && b.bookingType !== "company";
-      const bStart = isPerm ? (b.permanentStart || b.from) : b.from;
-      const bEnd = isPerm ? (b.permanentEnd || "9999-12-31") : b.to;
-      if (bStart >= monthEndExcl || bEnd <= monthStart) return;
-      // Override permanentEnd for the calc, jeśli "do odwołania"
-      const bForCalc = (isPerm && !b.permanentEnd) ? { ...b, permanentEnd: "9999-12-31" } : b;
-      const t = calcBookingTotal(bForCalc, room, getActualNights(bForCalc), { from: monthStart, to: monthEndExcl });
-      roomRevenue += t;
-      roomPaid += bookingPaidInRange(bForCalc, room, monthStart, monthEndExcl);
-    });
-    const roomRemaining = Math.max(0, roomRevenue - roomPaid);
-
+    const { rev, paid, remaining } = computeRoomFinances(room);
     const totalUsed = occupiedDays + permDays;
+    const totalDaysCount = allDays.length;
     return `
       <div class="preview-row preview-row-clickable" data-room-detail="${room.id}" data-room-loc="${loc.id}" title="Kliknij aby zobaczyć szczegóły pokoju">
         <div class="preview-room-cell">
           <strong>${esc(room.name)}</strong>
           <div class="preview-room-sub">${room.capacity || 1} ${(room.capacity||1)===1?"łóżko":(room.capacity||1)<5?"łóżka":"łóżek"}${room.basePrice?` · zł${room.basePrice}/dobę`:""}</div>
         </div>
-        <div class="preview-days-wrap">${dayCells.join("")}</div>
+        <div class="preview-days-wrap">${dayCells}</div>
         <div class="preview-sum-cell">
-          <div class="preview-sum-rev">zł${roomRevenue.toLocaleString()}</div>
-          <div class="preview-sum-paid">wpł. zł${Math.round(roomPaid).toLocaleString()}${roomRemaining>0?` · <span style="color:var(--orange)">zł${roomRemaining.toLocaleString()} do pobrania</span>`:""}</div>
-          <div class="preview-sum-days">${totalUsed}/${daysInMonth} dni${permDays>0?` (${permDays} stały)`:""}</div>
+          <div class="preview-sum-rev">zł${rev.toLocaleString()}</div>
+          <div class="preview-sum-paid">wpł. zł${Math.round(paid).toLocaleString()}${remaining>0?` · <span style="color:var(--orange)">zł${remaining.toLocaleString()} do pobrania</span>`:""}</div>
+          <div class="preview-sum-days">${totalUsed}/${totalDaysCount} dni${permDays>0?` (${permDays} stały)`:""}</div>
         </div>
       </div>`;
   }).filter(Boolean).join("");
 
-  // Notatki dla rezerwacji z tego obiektu w tym miesiącu (lub aktywnych)
-  const locBookingIds = new Set(savedBookings.filter(b => b.locId === locId).map(b => b.id));
-  const relevantNotes = notes.filter(n =>
-    n.type === "booking" && locBookingIds.has(n.bookingId)
-  ).sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+  // Day header row: numery dni (1-31, 1-30 jeśli 2 miesiące)
+  const dayHeaderCells = allDays.map(day => {
+    const weekendCls = day.isWeekend ? "is-weekend" : "";
+    const boundaryCls = day.isMonthStart ? "is-month-boundary" : "";
+    return `<div class="preview-day-header ${weekendCls} ${boundaryCls}">${day.day}</div>`;
+  }).join("");
 
+  // Month label row (powyżej day numbers) — pokazuje który miesiąc dotyczy danego zakresu dni.
+  // Pokazujemy tylko gdy 2 miesiące wybrane (przy 1 — etykieta w hero wystarcza).
+  const monthHeaderRow = selectedMonths.length > 1 ? `
+    <div class="preview-row preview-month-header-row">
+      <div class="preview-room-cell"></div>
+      <div class="preview-days-wrap">
+        ${selectedMonths.map(m => {
+          const [y, n] = m.split("-").map(Number);
+          const di = new Date(y, n, 0).getDate();
+          return `<div class="preview-month-span" style="width:${di * 28}px">${MONTHS[n-1]} ${y}</div>`;
+        }).join("")}
+      </div>
+      <div class="preview-sum-cell"></div>
+    </div>` : "";
+
+  // Tab months — ±18 miesięcy (więcej do scroll'a arrows).
+  const tabMonths = [];
+  for (let i = -18; i <= 18; i++) {
+    const d = new Date(yr, mn - 1 + i, 1);
+    const ym = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+    tabMonths.push({ ym, label: `${MONTHS[d.getMonth()].slice(0,3)} '${String(d.getFullYear()).slice(2)}` });
+  }
+  const tabsHtml = tabMonths.map(t => {
+    const isSelected = selectedMonths.includes(t.ym);
+    return `<button class="preview-month-tab ${isSelected?"active":""}" data-preview-month="${t.ym}">${esc(t.label)}</button>`;
+  }).join("");
+
+  const totalBeds = loc.rooms.reduce((s, r) => s + (r.capacity || 0), 0);
+
+  // Notatki dla rezerwacji z tego obiektu (wszystkie aktywne — nie clipowane do miesiąca).
+  const locBookingIds = new Set(savedBookings.filter(b => b.locId === locId).map(b => b.id));
+  const relevantNotes = notes.filter(n => n.type === "booking" && locBookingIds.has(n.bookingId))
+    .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
   const notesHtml = relevantNotes.length === 0
     ? `<div style="color:var(--text3);font-size:12px;font-style:italic;padding:8px">Brak notatek dla tego obiektu.</div>`
     : relevantNotes.slice(0, 20).map(n => {
@@ -4717,8 +4827,6 @@ function buildPreviewDetail(locId) {
           </div>`;
       }).join("");
 
-  const totalBeds = loc.rooms.reduce((s, r) => s + (r.capacity || 0), 0);
-
   return `
     <div class="preview-detail">
       <button class="cal-nav-btn" id="previewBackBtn" style="margin-bottom:12px">← Wszystkie obiekty</button>
@@ -4728,13 +4836,13 @@ function buildPreviewDetail(locId) {
           <div>
             <div class="preview-hero-city">${ICONS.mapPin(14)} ${esc(loc.city)}</div>
             <h2 class="preview-hero-name">${esc(loc.name)}</h2>
-            <div class="preview-hero-meta">${loc.rooms.length} ${loc.rooms.length===1?"pokój":loc.rooms.length<5?"pokoje":"pokoi"} · ${totalBeds} łóżek · ${monthLabel}</div>
+            <div class="preview-hero-meta">${loc.rooms.length} ${loc.rooms.length===1?"pokój":loc.rooms.length<5?"pokoje":"pokoi"} · ${totalBeds} łóżek</div>
+            <div class="preview-hero-month-label">${monthLabel}</div>
           </div>
           <div class="preview-year-select">
             <label style="font-size:11px;color:var(--blue);font-weight:600;text-transform:uppercase;letter-spacing:0.4px">Rok</label>
             <select id="previewYearSelect">
               ${(() => {
-                // Lista lat: od min(2020, min booking year) do max(current+1, max booking year +1).
                 const bookingYears = savedBookings
                   .map(b => parseInt((b.permanentStart || b.from || "").slice(0, 4)))
                   .filter(y => !isNaN(y));
@@ -4750,12 +4858,24 @@ function buildPreviewDetail(locId) {
         </div>
       </div>
 
+      <!-- Month tabs (TOP, z arrowami + compare toggle) -->
+      <div class="preview-month-nav">
+        <button class="preview-nav-arrow" id="previewTabsPrev" title="Przewiń w lewo">‹</button>
+        <div class="preview-month-tabs" id="previewMonthTabs">${tabsHtml}</div>
+        <button class="preview-nav-arrow" id="previewTabsNext" title="Przewiń w prawo">›</button>
+        <label class="preview-compare-toggle" title="Gdy włączone — kliknięcia dodają/usuwają miesiące (max 2)">
+          <input type="checkbox" id="previewCompareToggle" ${compareMode?"checked":""} />
+          Porównaj 2 mies.
+        </label>
+      </div>
+
       <!-- Toolbar: legend + filter -->
       <div class="preview-toolbar">
         <div class="preview-legend">
           <span><span class="preview-legend-box is-free"></span> Wolny</span>
           <span><span class="preview-legend-box is-occupied"></span> Rezerwacja</span>
           <span><span class="preview-legend-box is-perm"></span> Stały najemca</span>
+          <span><span class="preview-legend-box is-weekend-sample"></span> Weekend</span>
         </div>
         <div class="preview-filter-wrap">
           <label style="font-size:11px;color:var(--text2);font-weight:600">Pokaż:</label>
@@ -4770,21 +4890,13 @@ function buildPreviewDetail(locId) {
 
       <!-- Grid -->
       <div class="preview-grid-wrap">
+        ${monthHeaderRow}
         <div class="preview-row preview-grid-header">
           <div class="preview-room-cell">Pokój</div>
-          <div class="preview-days-wrap">
-            ${Array.from({length: daysInMonth}, (_, i) => `<div class="preview-day-header">${i+1}</div>`).join("")}
-          </div>
+          <div class="preview-days-wrap">${dayHeaderCells}</div>
           <div class="preview-sum-cell">Razem dni</div>
         </div>
         ${roomsHtml}
-      </div>
-
-      <!-- Month tabs (bottom) -->
-      <div class="preview-month-tabs">
-        ${tabMonths.map(t => `
-          <button class="preview-month-tab ${t.ym === month ? "active" : ""}" data-preview-month="${t.ym}">${esc(t.label)}</button>
-        `).join("")}
       </div>
 
       <!-- Notes panel -->
@@ -6969,37 +7081,93 @@ function attachEvents() {
     state.reportsSort = e.target.value; render();
   });
 
-  // v3.21 — Podgląd handlers
+  // v3.21+27 — Podgląd handlers (multi-month support)
   document.querySelectorAll("[data-preview-loc]").forEach(btn => {
     btn.addEventListener("click", () => {
       state.previewLocId = parseInt(btn.dataset.previewLoc);
-      state.previewMonth = null;  // reset do bieżącego
+      state.previewMonths = [];          // reset do bieżącego
+      state.previewCompareMode = false;
       render();
     });
   });
   document.getElementById("previewBackBtn")?.addEventListener("click", () => {
     state.previewLocId = null;
-    state.previewMonth = null;
+    state.previewMonths = [];
+    state.previewCompareMode = false;
     render();
   });
+  // Click tab — gdy compareMode ON: toggle add/remove (max 2). Gdy OFF: set single primary.
   document.querySelectorAll("[data-preview-month]").forEach(btn => {
     btn.addEventListener("click", () => {
-      state.previewMonth = btn.dataset.previewMonth;
+      const ym = btn.dataset.previewMonth;
+      const current = (state.previewMonths && state.previewMonths.length > 0)
+        ? state.previewMonths.slice()
+        : [todayStr().slice(0, 7)];
+      if (!state.previewCompareMode) {
+        state.previewMonths = [ym];
+      } else {
+        const idx = current.indexOf(ym);
+        if (idx >= 0) {
+          // Remove (ale zachowaj minimum 1)
+          if (current.length > 1) current.splice(idx, 1);
+        } else {
+          // Add (FIFO drop jeśli już 2)
+          if (current.length >= 2) current.shift();
+          current.push(ym);
+        }
+        state.previewMonths = current;
+      }
       render();
     });
+  });
+  // Arrowy — scroll tabs container
+  document.getElementById("previewTabsPrev")?.addEventListener("click", () => {
+    const el = document.getElementById("previewMonthTabs");
+    if (el) el.scrollBy({ left: -240, behavior: "smooth" });
+  });
+  document.getElementById("previewTabsNext")?.addEventListener("click", () => {
+    const el = document.getElementById("previewMonthTabs");
+    if (el) el.scrollBy({ left: 240, behavior: "smooth" });
+  });
+  // Compare toggle
+  document.getElementById("previewCompareToggle")?.addEventListener("change", e => {
+    state.previewCompareMode = e.target.checked;
+    // Gdy wyłączamy compare i były 2 miesiące — zostaw tylko pierwszy
+    if (!state.previewCompareMode && state.previewMonths && state.previewMonths.length > 1) {
+      state.previewMonths = [state.previewMonths.sort()[0]];
+    }
+    render();
   });
   document.getElementById("previewFilter")?.addEventListener("change", e => {
     state.previewFilter = e.target.value;
     render();
   });
   document.getElementById("previewYearSelect")?.addEventListener("change", e => {
-    // Zmień rok zachowując bieżący miesiąc. previewMonth ma format "YYYY-MM".
     const newYear = e.target.value;
     const today = todayStr();
-    const currentMonth = (state.previewMonth || today.slice(0, 7)).slice(5, 7);
-    state.previewMonth = `${newYear}-${currentMonth}`;
+    // Bierzemy pierwszy z previewMonths jako primary, zachowujemy miesiąc.
+    const primary = (state.previewMonths && state.previewMonths.length > 0)
+      ? state.previewMonths.slice().sort()[0]
+      : today.slice(0, 7);
+    const currentMonth = primary.slice(5, 7);
+    state.previewMonths = [`${newYear}-${currentMonth}`];
+    state.previewCompareMode = false;  // zmiana roku resetuje compare
     render();
   });
+
+  // Po renderze: scroll month tabs do aktywnego (żeby był widoczny od razu).
+  setTimeout(() => {
+    const tabsEl = document.getElementById("previewMonthTabs");
+    if (tabsEl) {
+      const active = tabsEl.querySelector(".preview-month-tab.active");
+      if (active) {
+        const tabsRect = tabsEl.getBoundingClientRect();
+        const activeRect = active.getBoundingClientRect();
+        const offset = activeRect.left - tabsRect.left - (tabsRect.width / 2) + (activeRect.width / 2);
+        tabsEl.scrollBy({ left: offset, behavior: "instant" });
+      }
+    }
+  }, 0);
   attachReportsEvents();
 
   // Edit modal
@@ -8145,7 +8313,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.26 · ${new Date().getFullYear()}
+          HospesAI · v3.27-staging · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
