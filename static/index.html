@@ -2255,6 +2255,16 @@ function getPermanentRevenue(entity, defaultDailyRate, fallbackFrom, rangeFrom, 
 }
 
 // ============================================================
+// VAT — netto factor (v3.38). Przychód (raporty/dashboard/wykresy) = netto.
+// Customer płaci brutto (calcBookingTotal zwraca brutto), ale dla księgowych
+// raportów Przychód = netto = brutto / (1 + vat/100).
+// ============================================================
+function bookingNettoFactor(b) {
+  const vat = parseFloat(b?.vatRate) || 8;
+  return 1 / (1 + vat / 100);
+}
+
+// ============================================================
 // PAID IN RANGE — wpłacono za rezerwację clip'owane do okresu
 // ============================================================
 // Zwraca kwotę zapłaconą za booking PRZYPISANĄ do okresu [rangeFrom, rangeTo).
@@ -2562,7 +2572,7 @@ function buildDashboard() {
   const thisMonthRevenue = thisMonthBookings.reduce((s, b) => {
     const loc = DATA.locations.find(l=>l.id===b.locId);
     const room = loc?.rooms.find(r=>r.id===b.roomId);
-    return s + calcBookingTotal(b, room, diffDays(b.from,b.to), { from: monthStartExcl, to: monthEndExcl });
+    return s + calcBookingTotal(b, room, diffDays(b.from,b.to), { from: monthStartExcl, to: monthEndExcl }) * bookingNettoFactor(b);
   }, 0);
 
   const prevMonthBookings = savedBookings.filter(b => {
@@ -2576,7 +2586,7 @@ function buildDashboard() {
   const prevMonthRevenue = prevMonthBookings.reduce((s, b) => {
     const loc = DATA.locations.find(l=>l.id===b.locId);
     const room = loc?.rooms.find(r=>r.id===b.roomId);
-    return s + calcBookingTotal(b, room, diffDays(b.from,b.to), { from: prevMonthStart, to: prevMonthEndExcl });
+    return s + calcBookingTotal(b, room, diffDays(b.from,b.to), { from: prevMonthStart, to: prevMonthEndExcl }) * bookingNettoFactor(b);
   }, 0);
 
   // v3.19 — używa bookingPaidInRange helper'a, który pro-rata clipuje
@@ -2585,7 +2595,7 @@ function buildDashboard() {
   const thisMonthPaid = thisMonthBookings.reduce((s, b) => {
     const loc = DATA.locations.find(l=>l.id===b.locId);
     const room = loc?.rooms.find(r=>r.id===b.roomId);
-    return s + bookingPaidInRange(b, room, monthStartExcl, monthEndExcl);
+    return s + bookingPaidInRange(b, room, monthStartExcl, monthEndExcl) * bookingNettoFactor(b);
   }, 0);
   // Media w bieżącym miesiącu — wpisy roomMedia z period == YYYY-MM tego miesiąca
   const monthPeriod = monthStart.slice(0, 7);
@@ -3389,9 +3399,10 @@ function buildReports() {
     const room = loc?.rooms.find(r=>r.id===b.roomId);
     const nights = getActualNights(b);
     const t = calcBookingTotal(b, room, nights, periodRange);
-    totRevenue += t;
+    const _factor = bookingNettoFactor(b);  // v3.38 — netto factor
+    totRevenue += t * _factor;
     // v3.19 — pro-rata clip wpłaconej kwoty do okresu filtra
-    totPaid += bookingPaidInRange(b, room, periodRange?.from, periodRange?.to);
+    totPaid += bookingPaidInRange(b, room, periodRange?.from, periodRange?.to) * _factor;
     const isPerm = b.isPermanent && b.bookingType !== "company";
     if (isPerm) {
       // Najnowsza data wpłaty (z paidMonths YYYY-MM, traktujemy jako ostatni dzień miesiąca)
@@ -3497,9 +3508,10 @@ function buildReports() {
         const room = loc.rooms.find(r=>r.id===b.roomId);
         const nights = getActualNights(b);
         const t = calcBookingTotal(b, room, nights, periodRange);
-        locRevenue += t;
+        const _f = bookingNettoFactor(b);  // v3.38 — netto factor
+        locRevenue += t * _f;
         // v3.19 — pro-rata clip wpłaconej kwoty
-        locPaid += bookingPaidInRange(b, room, periodRange?.from, periodRange?.to);
+        locPaid += bookingPaidInRange(b, room, periodRange?.from, periodRange?.to) * _f;
       });
       loc.rooms.forEach(room => {
         const periods = getRoomMediaPeriods(room.id);
@@ -3676,9 +3688,9 @@ function buildReportGroupRow(groupBookings, loc, companyName, periodRange) {
   let totalCost = 0, totalPaid = 0;
   groupBookings.forEach(b => {
     const room = loc.rooms.find(r=>r.id===b.roomId);
-    const t = calcBookingTotal(b, room, getActualNights(b), periodRange);
-    totalCost += t;
-    totalPaid += bookingPaidInRange(b, room, periodRange?.from, periodRange?.to);
+    const _f = bookingNettoFactor(b);  // v3.38 — netto
+    totalCost += calcBookingTotal(b, room, getActualNights(b), periodRange) * _f;
+    totalPaid += bookingPaidInRange(b, room, periodRange?.from, periodRange?.to) * _f;
   });
   const totalRemaining = Math.max(0, totalCost - totalPaid);
 
@@ -3740,13 +3752,14 @@ function buildReportRow(b, loc, periodRange) {
   const actualNights = getActualNights(b);
   const reservedNights = diffDays(b.from, b.to);
   const ae = getActualEnd(b); const isExtended = ae && parseDate(ae) > parseDate(b.to);
-  const total = calcBookingTotal(b, room, actualNights, periodRange);
+  const _rowFactor = bookingNettoFactor(b);  // v3.38 — netto
+  const total = calcBookingTotal(b, room, actualNights, periodRange) * _rowFactor;
 
   // v3.19 — używa bookingPaidInRange (pro-rata clip dla non-perm, paidMonths dla perm).
   const isPerm = b.isPermanent && b.bookingType !== "company";
   const rFrom = periodRange?.from || null;
   const rTo = periodRange?.to || null;
-  const paid = bookingPaidInRange(b, room, rFrom, rTo);
+  const paid = bookingPaidInRange(b, room, rFrom, rTo) * _rowFactor;
   const remaining = Math.max(0, total - paid);
   const overdueMonths = isPerm ? getPermanentOverdueMonths(b, b.from, b.payment?.timing) : [];
 
@@ -4029,10 +4042,11 @@ function buildCharts() {
     const room = loc?.rooms.find(r=>r.id===b.roomId);
     const nights = getActualNights(b);
     const rev = calcBookingTotal(b, room, nights, { from: chartFromExcl, to: chartToExcl });
-    kpiRevenue += rev;
+    const _kf = bookingNettoFactor(b);  // v3.38 — netto factor
+    kpiRevenue += rev * _kf;
     kpiBookings++;
     // v3.19 — pro-rata clip wpłaconej kwoty do okresu wykresu
-    kpiPaid += bookingPaidInRange(b, room, chartFromExcl, chartToExcl);
+    kpiPaid += bookingPaidInRange(b, room, chartFromExcl, chartToExcl) * _kf;
     if (isPerm) {
       kpiPermBookings++;
       kpiPermMonths += getPermanentMonths(b, b.from, chartFromExcl, chartToExcl);
@@ -4043,7 +4057,7 @@ function buildCharts() {
     const bFromForBucket = isPerm ? (b.permanentStart || b.from) : b.from;
     const dForBucket = parseDate(bFromForBucket);
     const key = `${dForBucket.getFullYear()}-${String(dForBucket.getMonth()+1).padStart(2,"0")}`;
-    kpiBuckets[key] = (kpiBuckets[key] || 0) + rev;
+    kpiBuckets[key] = (kpiBuckets[key] || 0) + rev * _kf;
   });
   const kpiMonthCount = Object.keys(kpiBuckets).length || 1;
   const kpiAvg = Math.round(kpiRevenue / kpiMonthCount);
@@ -8438,7 +8452,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.37 · ${new Date().getFullYear()}
+          HospesAI · v3.38 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
