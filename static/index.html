@@ -471,7 +471,7 @@ body {
 
 .summary-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
 .summary-strip.hero-layout { grid-template-columns: 1.4fr 1fr 1fr 1fr; }
-/* Dual-hero (Zysk planowany + zrealizowany + 3 detale) — 6-col grid, 2 rzędy:
+/* Dual-hero (Przychód planowany + zrealizowany + 3 detale) — 6-col grid, 2 rzędy:
    - rząd 1: 2 hero spanują po 3 kol (każdy 50%)
    - rząd 2: 3 detale spanują po 2 kol (każdy 33%) */
 .summary-strip.dual-hero-layout { grid-template-columns: repeat(6, 1fr); }
@@ -1540,6 +1540,7 @@ let state = {
   roomDetailModal: null, // { roomId, locId }
   billingMode: "room",   // "room" | "employee" — tryb rozliczenia firmowego
   customPrice: "",        // nadpisanie ceny finalnej, pusty = brak
+  vatRate: "8",           // v3.37: stawka VAT — "8" (krótkoterm) lub "23" (długoterm)
   isPermanent: false,     // stały najemca (rezerwacja indywidualna open-ended)
   permanentMonthlyRate: "", // stawka miesięczna stałego najemcy (pusty = liczyć za dobę z cennika)
   printReport: null,      // { from, to } — gdy ustawione, render pokazuje modal wyboru zakresu
@@ -2260,7 +2261,7 @@ function getPermanentRevenue(entity, defaultDailyRate, fallbackFrom, rangeFrom, 
 // - Permanent: deleguje do getPermanentPaidRevenue (clipuje przez paidMonths).
 // - Zwykła: pro-rata × (overlap_nights / total_nights). Bez tego booking
 //   Apr→Jun opłacony 5880 zł pokazywał 5880 wpłacone w MAJU (cały) — czyli
-//   Wpłacono > Przychód_clipped, co psuło Zysk zrealizowany na Dashboard.
+//   Wpłacono > Przychód_clipped, co psuło Przychód zrealizowany na Dashboard.
 // Bez range = no clip (zwraca pełną kwotę — dla all-time view w Raportach).
 function bookingPaidInRange(b, room, rangeFrom, rangeTo) {
   const isPerm = b.isPermanent && b.bookingType !== "company";
@@ -2580,7 +2581,7 @@ function buildDashboard() {
 
   // v3.19 — używa bookingPaidInRange helper'a, który pro-rata clipuje
   // amountPaid zwykłych rezerwacji do okresu (permanent ma własny clip via paidMonths).
-  // Wcześniej non-perm sumował PEŁNĄ kwotę → Wpłacono > Przychód_clipped, psuło Zysk zrealizowany.
+  // Wcześniej non-perm sumował PEŁNĄ kwotę → Wpłacono > Przychód_clipped, psuło Przychód zrealizowany.
   const thisMonthPaid = thisMonthBookings.reduce((s, b) => {
     const loc = DATA.locations.find(l=>l.id===b.locId);
     const room = loc?.rooms.find(r=>r.id===b.roomId);
@@ -2700,7 +2701,7 @@ function buildDashboard() {
           <div style="font-size:11px;color:var(--text3);margin-top:4px">${occupancyPct}% obłożenia</div>
         </div>
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px 18px">
-          <div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;margin-bottom:6px">Zysk planowany — ten miesiąc <span class="hero-tag">memoriałowo</span></div>
+          <div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;margin-bottom:6px">Przychód planowany — ten miesiąc <span class="hero-tag">memoriałowo</span></div>
           <div style="font-size:26px;font-weight:700;font-variant-numeric:tabular-nums">zł${thisMonthProfit.toLocaleString()}</div>
           <div style="font-size:11px;color:var(--text3);margin-top:4px">Przychód zł${thisMonthRevenue.toLocaleString()} − Media zł${thisMonthMedia.toLocaleString()}${profitDeltaHtml}</div>
         </div>
@@ -2710,7 +2711,7 @@ function buildDashboard() {
           <div style="font-size:11px;color:var(--text3);margin-top:4px">${unpaid.length > 0 ? `zł${unpaidTotal.toLocaleString()} do ściągnięcia` : "Wszystkie pobyty rozliczone"}</div>
         </div>
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px 18px">
-          <div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;margin-bottom:6px">Zysk zrealizowany — ten miesiąc <span class="hero-tag">kasowo</span></div>
+          <div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;margin-bottom:6px">Przychód zrealizowany — ten miesiąc <span class="hero-tag">kasowo</span></div>
           <div style="font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;color:${thisMonthProfitRealized<0?"var(--red)":"var(--blue)"}">zł${thisMonthProfitRealized.toLocaleString()}</div>
           <div style="font-size:11px;color:var(--text3);margin-top:4px">Wpłacono zł${Math.round(thisMonthPaid).toLocaleString()} − Media zł${thisMonthMedia.toLocaleString()} · ${realizedPct}% planowanego</div>
         </div>
@@ -3443,12 +3444,12 @@ function buildReports() {
       return `
       <div class="summary-strip dual-hero-layout">
         <div class="sum-card hero">
-          <div class="lbl">Zysk planowany <span class="hero-tag">memoriałowo</span></div>
+          <div class="lbl">Przychód planowany <span class="hero-tag">memoriałowo</span></div>
           <div class="val">zł${totProfit.toLocaleString()}</div>
           <div class="sub">Przychód zł${totRevenue.toLocaleString()} − Media zł${totMedia.toLocaleString()}</div>
         </div>
         <div class="sum-card hero hero-cash">
-          <div class="lbl">Zysk zrealizowany <span class="hero-tag">kasowo</span></div>
+          <div class="lbl">Przychód zrealizowany <span class="hero-tag">kasowo</span></div>
           <div class="val" style="color:${totProfitRealized < 0 ? "var(--red)" : "var(--blue)"}">zł${totProfitRealized.toLocaleString()}</div>
           <div class="sub">Wpłacono zł${totPaid.toLocaleString()} − Media zł${totMedia.toLocaleString()}</div>
         </div>
@@ -3517,12 +3518,12 @@ function buildReports() {
           </div>
           <div class="loc-finance-totals dual-hero-layout">
             <div class="loc-fin-stat hero">
-              <span class="k">Zysk planowany <span class="hero-tag">memoriałowo</span></span>
+              <span class="k">Przychód planowany <span class="hero-tag">memoriałowo</span></span>
               <span class="v">zł${locProfit.toLocaleString()}</span>
               <span class="sub">Przychód zł${locRevenue.toLocaleString()} − Media zł${locMedia.toLocaleString()}</span>
             </div>
             <div class="loc-fin-stat hero hero-cash">
-              <span class="k">Zysk zrealizowany <span class="hero-tag">kasowo</span></span>
+              <span class="k">Przychód zrealizowany <span class="hero-tag">kasowo</span></span>
               <span class="v" style="color:${(locPaid - locMedia) < 0 ? 'var(--red)' : 'var(--blue)'}">zł${(locPaid - locMedia).toLocaleString()}</span>
               <span class="sub">Wpłacono zł${locPaid.toLocaleString()} − Media zł${locMedia.toLocaleString()}</span>
             </div>
@@ -4063,18 +4064,18 @@ function buildCharts() {
   const kpiProfitRealized = kpiPaid - kpiMedia;
   const kpiPaidPct = kpiRevenue > 0 ? Math.round((kpiPaid/kpiRevenue)*100) : 0;
 
-  // Dual-hero (Zysk planowany + zrealizowany) + 3 detale (Przychód, Wpłacono, Do pobrania).
+  // Dual-hero (Przychód planowany + zrealizowany) + 3 detale (Przychód, Wpłacono, Do pobrania).
   // Wcześniej: hero "Przychód w okresie" + 3 detale (Wpłacono / Do pobrania / Najlepszy mies).
   // "Najlepszy miesiąc" usunięty — informacja zawarta w wykresie pod spodem.
   const kpiCards = hasData ? `
     <div class="summary-strip dual-hero-layout" style="margin-bottom:18px">
       <div class="sum-card hero">
-        <div class="lbl">Zysk planowany w okresie <span class="hero-tag">memoriałowo</span></div>
+        <div class="lbl">Przychód planowany w okresie <span class="hero-tag">memoriałowo</span></div>
         <div class="val">${kpiProfitPlanned.toLocaleString()} zł</div>
         <div class="sub">Przychód ${kpiRevenue.toLocaleString()} zł − Media ${kpiMedia.toLocaleString()} zł · ${kpiAvg.toLocaleString()} zł/mies śr.</div>
       </div>
       <div class="sum-card hero hero-cash">
-        <div class="lbl">Zysk zrealizowany w okresie <span class="hero-tag">kasowo</span></div>
+        <div class="lbl">Przychód zrealizowany w okresie <span class="hero-tag">kasowo</span></div>
         <div class="val" style="color:${kpiProfitRealized<0?"var(--red)":"var(--blue)"}">${kpiProfitRealized.toLocaleString()} zł</div>
         <div class="sub">Wpłacono ${Math.round(kpiPaid).toLocaleString()} zł − Media ${kpiMedia.toLocaleString()} zł</div>
       </div>
@@ -5599,10 +5600,38 @@ function buildBookingForm(loc) {
       <div class="price-val">zł${total.toLocaleString()}</div>
     </div>
 
+    ${(() => {
+      // v3.37 — VAT checkboxy: 8% (default) lub 23%, mutually exclusive.
+      // Wartość total to brutto. Pokazujemy split: netto + VAT.
+      const vRate = state.vatRate || "8";
+      const vRateNum = parseInt(vRate);
+      const netto = total > 0 ? total / (1 + vRateNum/100) : 0;
+      const vatAmt = total - netto;
+      return `
+      <div class="buffer-field" style="background:var(--blue-light);border-color:var(--blue-mid)">
+        <label>Stawka VAT</label>
+        <div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
+          <label class="checkbox-row" style="margin:0;cursor:pointer">
+            <input type="checkbox" id="vat8" ${vRate==="8"?"checked":""} data-vat="8" />
+            <strong>8% VAT</strong> (krótkoterminowe zakwaterowanie)
+          </label>
+          <label class="checkbox-row" style="margin:0;cursor:pointer">
+            <input type="checkbox" id="vat23" ${vRate==="23"?"checked":""} data-vat="23" />
+            <strong>23% VAT</strong> (najem długoterminowy / inne usługi)
+          </label>
+        </div>
+        ${total > 0 ? `<div style="font-size:12px;color:var(--text2);font-variant-numeric:tabular-nums;padding-top:6px;border-top:1px dashed var(--blue-mid)">
+          Brutto: <strong>zł${total.toLocaleString()}</strong> &nbsp;·&nbsp;
+          Netto: <strong>zł${netto.toFixed(2)}</strong> &nbsp;·&nbsp;
+          VAT ${vRate}%: <strong>zł${vatAmt.toFixed(2)}</strong>
+        </div>` : ""}
+      </div>`;
+    })()}
+
     <div class="buffer-field">
       <label>Nadpisz cenę finalną (opcjonalne)</label>
       <input type="number" id="customPriceInput" min="0" step="0.01" value="${esc(state.customPrice)}" placeholder="np. 1200 — zostaw puste żeby liczyć z cennika" />
-      <div class="buffer-hint">${isCompany && selectedRooms.length > 1 ? "Wartość zapisze się dla każdego z wybranych pokoi (jako cena finalna per pokój)." : "Jeśli wypełnisz, zostanie zapisana jako finalna cena rezerwacji."} Edytowalne potem w Raportach.</div>
+      <div class="buffer-hint">${isCompany && selectedRooms.length > 1 ? "Wartość zapisze się dla każdego z wybranych pokoi (jako cena finalna per pokój)." : "Jeśli wypełnisz, zostanie zapisana jako finalna cena rezerwacji."} Edytowalne potem w Raportach. <strong>Stawka VAT wybrana wyżej zostanie zaaplikowana</strong>.</div>
     </div>
 
     <div class="buffer-field">
@@ -6402,6 +6431,25 @@ function buildEditModal() {
               value="${em.customPrice !== undefined ? esc(em.customPrice) : (b.customPrice != null ? b.customPrice : "")}"
               placeholder="np. 1200" />
           </div>
+
+          ${(() => {
+            // v3.37 — VAT w edit modal
+            const currentVat = em.vatRate !== undefined ? em.vatRate : (b.vatRate || "8");
+            return `
+            <div class="edit-field" style="background:var(--blue-light);border:1px solid var(--blue-mid);padding:10px 12px;border-radius:var(--radius)">
+              <label>Stawka VAT</label>
+              <div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap">
+                <label class="checkbox-row" style="margin:0;cursor:pointer">
+                  <input type="checkbox" data-edit-vat="8" ${currentVat==="8"?"checked":""} />
+                  <strong>8%</strong> (krótkoterminowe)
+                </label>
+                <label class="checkbox-row" style="margin:0;cursor:pointer">
+                  <input type="checkbox" data-edit-vat="23" ${currentVat==="23"?"checked":""} />
+                  <strong>23%</strong> (długoterminowe / pozostałe)
+                </label>
+              </div>
+            </div>`;
+          })()}
 
           ${b.bookingType !== "company" ? `
           <div class="edit-field" style="padding:10px 12px;background:${(em.isPermanent ?? b.isPermanent)?"var(--green-light)":"var(--surface2)"};border:1px solid ${(em.isPermanent ?? b.isPermanent)?"var(--green-mid)":"var(--border)"};border-radius:var(--radius)">
@@ -7559,6 +7607,15 @@ function attachEvents() {
       state.customPrice = e.target.value;
     });
     document.getElementById("customPriceInput")?.addEventListener("change", () => render());
+    // v3.37 — VAT checkboxes: mutually exclusive, klik na unchecked → switch
+    document.querySelectorAll("[data-vat]").forEach(cb => {
+      cb.addEventListener("change", e => {
+        const newRate = cb.dataset.vat;
+        // Wymuś jeden zaznaczony (nigdy oba ani żaden)
+        state.vatRate = (state.vatRate === newRate) ? newRate : newRate;
+        render();
+      });
+    });
 
     document.querySelectorAll(".pm-btn").forEach(btn => {
       btn.addEventListener("click", () => {
@@ -7712,6 +7769,13 @@ function attachEditEvents() {
   });
   document.getElementById("editPermanentMonthlyRate")?.addEventListener("change", () => render());
   document.getElementById("editCustomPrice")?.addEventListener("input", e => { state.editModal.customPrice = e.target.value; });
+  // v3.37 — Edit VAT checkboxes
+  document.querySelectorAll("[data-edit-vat]").forEach(cb => {
+    cb.addEventListener("change", () => {
+      state.editModal.vatRate = cb.dataset.editVat;
+      render();
+    });
+  });
 
   // Paid months toggle dla stałego najemcy indywidualnego
   document.querySelectorAll(".paid-month-btn[data-paid-month]").forEach(btn => {
@@ -7836,6 +7900,7 @@ function attachEditEvents() {
       if (!isNaN(n) && n >= 0) b.customPrice = n;
       else delete b.customPrice;
     }
+    if (em.vatRate !== undefined) b.vatRate = em.vatRate;  // v3.37 VAT save
     state.editModal = null; state.actualCalMonth = null;
     showToast("✅ Rezerwacja zaktualizowana");
     render();
@@ -7912,6 +7977,7 @@ function openModal(locId) {
   state.viewMonth = new Date();
   state.billingMode = "room";
   state.customPrice = "";
+  state.vatRate = "8";
   state.isPermanent = false;
   state.permanentMonthlyRate = "";
   state.calEndWasPlaceholder = false;
@@ -7922,6 +7988,7 @@ function closeModal() {
   state.modal = null;
   state.billingMode = "room";
   state.customPrice = "";
+  state.vatRate = "8";
   // Defensywny reset — wczesniej zostawiało selectedRooms[], guests[], calStart/End z
   // poprzedniej sesji. Otwarcie modalu pokoju via openModal i tak resetuje, ale jeśli
   // ktoś re-otworzy via inny path (np. tabs), state byłby skażony.
@@ -8001,6 +8068,7 @@ function confirmBooking() {
       ...(isPerm ? { isPermanent: true, permanentStart: state.calStart, permanentEnd: null } : {}),
       ...(hasPermMonthly ? { permanentMonthlyRate: permanentMonthly } : {}),
       ...(hasCustom ? { customPrice: customPriceNum } : {}),
+      vatRate: state.vatRate || "8",   // v3.37 — stawka VAT (8/23%)
       payment: { ...state.payment },
       actualFrom: null, actualTo: null, priceAtBooking,
     };
@@ -8370,7 +8438,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.36 · ${new Date().getFullYear()}
+          HospesAI · v3.37 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
@@ -8480,6 +8548,7 @@ async function confirmBookingAPI() {
       ...(isPerm ? { isPermanent: true, permanentStart: state.calStart, permanentEnd: null } : {}),
       ...(hasPermMonthly ? { permanentMonthlyRate: permanentMonthly } : {}),
       ...(hasCustom ? { customPrice: customPriceNum } : {}),
+      vatRate: state.vatRate || "8",   // v3.37 — stawka VAT
       payment: { ...state.payment },
       actualFrom: null, actualTo: null, priceAtBooking,
     };
@@ -8585,6 +8654,7 @@ async function saveEditAPI() {
     if (!isNaN(n) && n >= 0) updated.customPrice = n;
     else delete updated.customPrice;
   }
+  if (em.vatRate !== undefined) updated.vatRate = em.vatRate;  // v3.37 VAT
   // PaidMonths dla stałego najemcy indywidualnego
   if (em.paidMonths !== undefined) {
     updated.paidMonths = Array.isArray(em.paidMonths) ? [...em.paidMonths] : [];
