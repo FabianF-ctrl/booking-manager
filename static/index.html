@@ -975,9 +975,18 @@ body {
   border: 1px solid var(--blue-mid); border-radius: var(--radius-lg);
   padding: 18px 22px; margin-bottom: 18px;
 }
+.preview-hero-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .preview-hero-city { font-size: 12px; font-weight: 600; color: var(--blue); text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
 .preview-hero-name { font-size: 22px; font-weight: 700; color: var(--text); margin: 0; }
 .preview-hero-meta { font-size: 12px; color: var(--text2); margin-top: 4px; font-variant-numeric: tabular-nums; }
+.preview-year-select { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
+.preview-year-select select {
+  padding: 8px 14px; border: 1px solid var(--blue-mid); border-radius: var(--radius);
+  background: var(--surface); font-size: 14px; font-weight: 600; color: var(--blue);
+  font-family: inherit; font-variant-numeric: tabular-nums; outline: none; cursor: pointer;
+  min-width: 100px;
+}
+.preview-year-select select:focus { border-color: var(--blue); }
 
 .preview-toolbar {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -4685,9 +4694,30 @@ function buildPreviewDetail(locId) {
       <button class="cal-nav-btn" id="previewBackBtn" style="margin-bottom:12px">← Wszystkie obiekty</button>
 
       <div class="preview-hero">
-        <div class="preview-hero-city">${ICONS.mapPin(14)} ${esc(loc.city)}</div>
-        <h2 class="preview-hero-name">${esc(loc.name)}</h2>
-        <div class="preview-hero-meta">${loc.rooms.length} ${loc.rooms.length===1?"pokój":loc.rooms.length<5?"pokoje":"pokoi"} · ${totalBeds} łóżek · ${monthLabel}</div>
+        <div class="preview-hero-row">
+          <div>
+            <div class="preview-hero-city">${ICONS.mapPin(14)} ${esc(loc.city)}</div>
+            <h2 class="preview-hero-name">${esc(loc.name)}</h2>
+            <div class="preview-hero-meta">${loc.rooms.length} ${loc.rooms.length===1?"pokój":loc.rooms.length<5?"pokoje":"pokoi"} · ${totalBeds} łóżek · ${monthLabel}</div>
+          </div>
+          <div class="preview-year-select">
+            <label style="font-size:11px;color:var(--blue);font-weight:600;text-transform:uppercase;letter-spacing:0.4px">Rok</label>
+            <select id="previewYearSelect">
+              ${(() => {
+                // Lista lat: od min(2020, min booking year) do max(current+1, max booking year +1).
+                const bookingYears = savedBookings
+                  .map(b => parseInt((b.permanentStart || b.from || "").slice(0, 4)))
+                  .filter(y => !isNaN(y));
+                const currentY = new Date().getFullYear();
+                const minY = Math.min(2020, bookingYears.length > 0 ? Math.min(...bookingYears) : currentY);
+                const maxY = Math.max(currentY + 1, bookingYears.length > 0 ? Math.max(...bookingYears) + 1 : currentY + 1);
+                const years = [];
+                for (let y = maxY; y >= minY; y--) years.push(y);
+                return years.map(y => `<option value="${y}" ${y === yr ? "selected" : ""}>${y}</option>`).join("");
+              })()}
+            </select>
+          </div>
+        </div>
       </div>
 
       <!-- Toolbar: legend + filter -->
@@ -6932,6 +6962,14 @@ function attachEvents() {
     state.previewFilter = e.target.value;
     render();
   });
+  document.getElementById("previewYearSelect")?.addEventListener("change", e => {
+    // Zmień rok zachowując bieżący miesiąc. previewMonth ma format "YYYY-MM".
+    const newYear = e.target.value;
+    const today = todayStr();
+    const currentMonth = (state.previewMonth || today.slice(0, 7)).slice(5, 7);
+    state.previewMonth = `${newYear}-${currentMonth}`;
+    render();
+  });
   attachReportsEvents();
 
   // Edit modal
@@ -8075,7 +8113,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.22 · ${new Date().getFullYear()}
+          HospesAI · v3.23 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
