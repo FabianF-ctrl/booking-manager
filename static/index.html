@@ -949,6 +949,114 @@ body {
 .info-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 99px; font-size: 11px; font-weight: 600; background: var(--blue-light); color: var(--blue); }
 .no-results-box { padding: 48px; text-align: center; color: var(--text2); font-size: 14px; }
 
+/* ─── PODGLĄD (v3.21) ─── */
+.preview-city-group { margin-bottom: 24px; }
+.preview-city-hdr {
+  font-size: 12px; font-weight: 700; color: var(--text2); text-transform: uppercase;
+  letter-spacing: 0.5px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;
+  padding-bottom: 6px; border-bottom: 1px solid var(--border);
+}
+.preview-city-count { font-size: 10px; color: var(--text3); background: var(--surface2); padding: 1px 7px; border-radius: 99px; font-weight: 600; }
+.preview-loc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.preview-loc-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  padding: 14px 16px; cursor: pointer; text-align: left; font-family: inherit;
+  transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.preview-loc-card:hover { border-color: var(--blue); transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+.preview-loc-city { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.3px; }
+.preview-loc-name { font-size: 16px; font-weight: 700; color: var(--text); }
+.preview-loc-meta { font-size: 11px; color: var(--text2); margin-top: 4px; font-variant-numeric: tabular-nums; }
+
+/* Detail view */
+.preview-hero {
+  background: linear-gradient(135deg, var(--blue-light) 0%, var(--surface) 100%);
+  border: 1px solid var(--blue-mid); border-radius: var(--radius-lg);
+  padding: 18px 22px; margin-bottom: 18px;
+}
+.preview-hero-city { font-size: 12px; font-weight: 600; color: var(--blue); text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.preview-hero-name { font-size: 22px; font-weight: 700; color: var(--text); margin: 0; }
+.preview-hero-meta { font-size: 12px; color: var(--text2); margin-top: 4px; font-variant-numeric: tabular-nums; }
+
+.preview-legend {
+  display: flex; gap: 16px; font-size: 11px; color: var(--text2); margin-bottom: 10px; align-items: center; flex-wrap: wrap;
+}
+.preview-legend-box { display: inline-block; width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); vertical-align: middle; margin-right: 4px; }
+.preview-legend-box.is-free { background: var(--surface); }
+.preview-legend-box.is-occupied { background: #fde68a; border-color: #f59e0b; }   /* yellow */
+.preview-legend-box.is-perm { background: #93c5fd; border-color: #2563eb; }       /* blue */
+
+/* Grid (rooms × days) */
+.preview-grid-wrap {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+  margin-bottom: 14px;
+}
+.preview-row {
+  display: flex; align-items: stretch; border-bottom: 1px solid var(--border);
+  min-width: max-content;  /* allow horizontal scroll when days don't fit */
+}
+.preview-row:last-child { border-bottom: none; }
+.preview-grid-header { background: var(--surface2); position: sticky; top: 0; z-index: 5; font-weight: 700; font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.3px; }
+.preview-room-cell {
+  width: 140px; flex-shrink: 0; padding: 10px 12px;
+  border-right: 1px solid var(--border); display: flex; flex-direction: column; gap: 2px;
+  font-size: 12px; background: inherit; position: sticky; left: 0; z-index: 4;
+}
+.preview-row:not(.preview-grid-header) .preview-room-cell { background: var(--surface); }
+.preview-room-sub { font-size: 10px; color: var(--text3); font-weight: 400; font-variant-numeric: tabular-nums; }
+.preview-days-wrap { display: flex; flex: 1; }
+.preview-day-header {
+  width: 26px; flex-shrink: 0; text-align: center; padding: 8px 0;
+  font-size: 10px; color: var(--text3); font-variant-numeric: tabular-nums;
+  border-right: 1px solid var(--border);
+}
+.preview-day-header:last-child { border-right: none; }
+.preview-day {
+  width: 26px; flex-shrink: 0; text-align: center; padding: 10px 0;
+  font-size: 10px; font-variant-numeric: tabular-nums; color: var(--text3);
+  border-right: 1px solid var(--border);
+  transition: filter 0.1s; cursor: default;
+}
+.preview-day:last-child { border-right: none; }
+.preview-day.is-free { background: var(--surface); }
+.preview-day.is-occupied { background: #fde68a; color: #92400e; font-weight: 600; }
+.preview-day.is-perm { background: #93c5fd; color: #1e3a8a; font-weight: 600; }
+.preview-day:hover { filter: brightness(1.1); }
+.preview-sum-cell {
+  width: 110px; flex-shrink: 0; padding: 10px 12px;
+  border-left: 1px solid var(--border); font-size: 12px;
+  display: flex; flex-direction: column; gap: 2px; text-align: right; font-variant-numeric: tabular-nums;
+  background: inherit;
+}
+.preview-sum-sub { font-size: 10px; color: var(--text3); font-weight: 400; }
+
+/* Month tabs (bottom) */
+.preview-month-tabs {
+  display: flex; gap: 4px; padding: 8px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+  margin-bottom: 18px;
+}
+.preview-month-tab {
+  padding: 6px 12px; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: var(--radius); cursor: pointer; font-family: inherit;
+  font-size: 12px; color: var(--text2); white-space: nowrap; font-variant-numeric: tabular-nums;
+  transition: all 0.12s;
+}
+.preview-month-tab:hover { background: var(--surface3); color: var(--text); }
+.preview-month-tab.active { background: var(--blue); color: #fff; border-color: var(--blue); font-weight: 600; }
+
+/* Notes section */
+.preview-notes-list { display: flex; flex-direction: column; gap: 8px; }
+.preview-note {
+  background: var(--yellow-light); border: 1px solid var(--yellow-border);
+  border-radius: var(--radius); padding: 10px 12px; font-size: 12px;
+}
+.preview-note-meta { font-size: 11px; color: var(--text2); margin-bottom: 4px; }
+.preview-note-text { color: var(--text); white-space: pre-wrap; }
+
 /* Archive / History Section */
 .hist-section { background: var(--surface3); border: 1px solid var(--border2); border-radius: var(--radius-lg); padding: 12px 16px; margin-bottom: 14px; }
 .hist-section h4 { font-size: 12px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 10px; }
@@ -1283,6 +1391,10 @@ let state = {
   reportsYear: "",
   reportsMonth: "",
   reportsSort: "date_desc",  // v3.20 — sort bookings within groups
+
+  // v3.21 — Preview tab (Podgląd)
+  previewLocId: null,        // null = lista, number = detail view
+  previewMonth: null,        // "YYYY-MM" lub null (=current month)
   roomDetailModal: null, // { roomId, locId }
   billingMode: "room",   // "room" | "employee" — tryb rozliczenia firmowego
   customPrice: "",        // nadpisanie ceny finalnej, pusty = brak
@@ -2179,6 +2291,7 @@ function buildAppCore() {
           <div class="tab-pane ${state.activeTab==="dashboard"?"active":""}" id="pane-dashboard">${buildDashboard()}</div>
           <div class="tab-pane ${state.activeTab==="locations"?"active":""}" id="pane-locations">${buildLocations()}</div>
           <div class="tab-pane ${state.activeTab==="status"?"active":""}" id="pane-status">${buildStatus()}</div>
+          <div class="tab-pane ${state.activeTab==="preview"?"active":""}" id="pane-preview">${buildPreview()}</div>
           <div class="tab-pane ${state.activeTab==="reports"?"active":""}" id="pane-reports">${buildReports()}</div>
           <div class="tab-pane ${state.activeTab==="charts"?"active":""}" id="pane-charts">${buildCharts()}</div>
           <div class="tab-pane ${state.activeTab==="invoices"?"active":""}" id="pane-invoices">${buildInvoices()}</div>
@@ -2205,6 +2318,7 @@ function buildSidebar() {
     { id:"dashboard", icon: ICONS.home(),     lbl:"Start" },
     { id:"locations", icon: ICONS.building(), lbl:"Obiekty" },
     { id:"status",    icon: ICONS.grid(),     lbl:"Status" },
+    { id:"preview",   icon: ICONS.eye(),      lbl:"Podgląd" },
     { id:"reports",   icon: ICONS.fileText(), lbl:"Raporty" },
     { id:"charts",    icon: ICONS.barChart(), lbl:"Wykresy" },
     { id:"invoices",  icon: ICONS.receipt(),  lbl:"Faktury" },
@@ -4386,6 +4500,195 @@ function buildSms() {
 }
 
 // ─── AGENT SI ────────────────────────────────────────────────
+// ─── PODGLĄD (Preview) — Excel-style siatka pokoje × dni per obiekt ──
+// v3.21: lista lokacji (grupowana po miastach alfabetycznie) → klik → detail z gridem.
+// Wyłącznie do odczytu, nie do edycji. Inspiracja: Excel usera z arkuszem
+// per obiekt + zakładki miesięcy + kolorowe komórki dni.
+function buildPreview() {
+  if (state.previewLocId !== null) return buildPreviewDetail(state.previewLocId);
+
+  // Lista — grupowana po miastach alfabetycznie, w każdym mieście obiekty po nazwie.
+  const byCity = {};
+  DATA.locations.forEach(loc => {
+    if (!byCity[loc.city]) byCity[loc.city] = [];
+    byCity[loc.city].push(loc);
+  });
+  const cities = Object.keys(byCity).sort((a, b) => a.localeCompare(b, "pl"));
+  cities.forEach(c => byCity[c].sort((a, b) => a.name.localeCompare(b.name, "pl")));
+
+  return `
+    <div style="margin-bottom:18px">
+      <h2 style="font-size:17px;font-weight:700;display:flex;align-items:center;gap:8px">${ICONS.eye(22)} Podgląd</h2>
+      <p style="font-size:13px;color:var(--text2);margin-top:6px">Wybierz obiekt, aby zobaczyć siatkę rezerwacji wg dni i pokoi (jak w Excelu, tylko do odczytu).</p>
+    </div>
+    ${cities.map(city => `
+      <div class="preview-city-group">
+        <div class="preview-city-hdr">${ICONS.mapPin(13)} ${esc(city)} <span class="preview-city-count">${byCity[city].length} ${byCity[city].length===1?"obiekt":byCity[city].length<5?"obiekty":"obiektów"}</span></div>
+        <div class="preview-loc-grid">
+          ${byCity[city].map(loc => {
+            const totalBeds = loc.rooms.reduce((s, r) => s + (r.capacity || 0), 0);
+            return `
+              <button class="preview-loc-card" data-preview-loc="${loc.id}">
+                <div class="preview-loc-city">${esc(city)}</div>
+                <div class="preview-loc-name">${esc(loc.name)}</div>
+                <div class="preview-loc-meta">${loc.rooms.length} ${loc.rooms.length===1?"pokój":loc.rooms.length<5?"pokoje":"pokoi"} · ${totalBeds} łóżek</div>
+              </button>`;
+          }).join("")}
+        </div>
+      </div>
+    `).join("")}
+  `;
+}
+
+// Detail: hero + grid (pokoje × dni) + month tabs + notatki.
+function buildPreviewDetail(locId) {
+  const loc = DATA.locations.find(l => l.id === locId);
+  if (!loc) return `<div class="no-results-box">Obiekt nie znaleziony.</div>`;
+
+  // Bieżący miesiąc do wyboru
+  const today = todayStr();
+  const month = state.previewMonth || today.slice(0, 7);
+  const [yr, mn] = month.split("-").map(Number);
+  const daysInMonth = new Date(yr, mn, 0).getDate();
+  const monthStart = `${month}-01`;
+  const monthEndExcl = toStr(new Date(yr, mn, 1));  // pierwszy dzień następnego mies
+  const monthLabel = `${MONTHS[mn-1]} ${yr}`;
+
+  // Build month tabs (±6 miesięcy wokół bieżącego), na dole
+  const tabMonths = [];
+  for (let i = -6; i <= 6; i++) {
+    const d = new Date(yr, mn - 1 + i, 1);
+    const ym = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+    tabMonths.push({ ym, label: `${MONTHS[d.getMonth()].slice(0,3)} '${String(d.getFullYear()).slice(2)}` });
+  }
+
+  // Helper: status komórki dla (room, day)
+  // Zwraca: { status: "free"|"occupied"|"perm", booking?, guestName? }
+  const getCellStatus = (roomId, dayStr) => {
+    const dayEndExcl = toStr(addDays(parseDate(dayStr), 1));
+    for (const b of savedBookings) {
+      if (b.roomId !== roomId) continue;
+      const isPerm = b.isPermanent && b.bookingType !== "company";
+      const hasPermGuest = (b.guests || []).some(g => g.isPermanent);
+      if (isPerm || hasPermGuest) {
+        const pStart = b.permanentStart || b.from;
+        const pEnd = b.permanentEnd || endOfCurrentMonthExclusive();
+        if (pStart <= dayStr && pEnd > dayStr) {
+          const who = b.bookingType === "company"
+            ? b.companyName
+            : (b.guests?.[0]?.name || "—");
+          return { status: "perm", booking: b, guestName: who };
+        }
+      } else {
+        if (b.from <= dayStr && b.to > dayStr) {
+          const who = b.bookingType === "company"
+            ? b.companyName
+            : (b.guests || []).map(g => g.name).filter(Boolean).join(", ");
+          return { status: "occupied", booking: b, guestName: who };
+        }
+      }
+    }
+    return { status: "free" };
+  };
+
+  // Build rooms × days grid
+  const roomsHtml = loc.rooms.map(room => {
+    let occupiedDays = 0, permDays = 0;
+    const dayCells = [];
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dStr = `${month}-${String(d).padStart(2,"0")}`;
+      const s = getCellStatus(room.id, dStr);
+      const cls = s.status === "perm" ? "is-perm" : s.status === "occupied" ? "is-occupied" : "is-free";
+      if (s.status === "perm") permDays++;
+      else if (s.status === "occupied") occupiedDays++;
+      const tooltip = s.guestName ? `${d}.${String(mn).padStart(2,"0")} · ${s.guestName}` : `${d}.${String(mn).padStart(2,"0")} · wolny`;
+      dayCells.push(`<div class="preview-day ${cls}" title="${esc(tooltip)}">${d}</div>`);
+    }
+    const totalUsed = occupiedDays + permDays;
+    const rateLbl = room.basePrice ? `zł${room.basePrice}/dobę` : "—";
+    return `
+      <div class="preview-row">
+        <div class="preview-room-cell">
+          <strong>${esc(room.name)}</strong>
+          <div class="preview-room-sub">${room.capacity || 1} ${(room.capacity||1)===1?"łóżko":(room.capacity||1)<5?"łóżka":"łóżek"} · ${rateLbl}</div>
+        </div>
+        <div class="preview-days-wrap">${dayCells.join("")}</div>
+        <div class="preview-sum-cell">
+          <strong>${totalUsed}/${daysInMonth}</strong>
+          <div class="preview-sum-sub">${permDays > 0 ? `${permDays} stały · ${occupiedDays} regularne` : `${occupiedDays} dni`}</div>
+        </div>
+      </div>`;
+  }).join("");
+
+  // Notatki dla rezerwacji z tego obiektu w tym miesiącu (lub aktywnych)
+  const locBookingIds = new Set(savedBookings.filter(b => b.locId === locId).map(b => b.id));
+  const relevantNotes = notes.filter(n =>
+    n.type === "booking" && locBookingIds.has(n.bookingId)
+  ).sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+
+  const notesHtml = relevantNotes.length === 0
+    ? `<div style="color:var(--text3);font-size:12px;font-style:italic;padding:8px">Brak notatek dla tego obiektu.</div>`
+    : relevantNotes.slice(0, 20).map(n => {
+        const b = savedBookings.find(x => x.id === n.bookingId);
+        const room = b ? loc.rooms.find(r => r.id === b.roomId) : null;
+        const who = b?.bookingType === "company" ? b.companyName : (b?.guests?.[0]?.name || "—");
+        const dt = n.createdAt ? new Date(n.createdAt).toLocaleDateString("pl-PL") : "";
+        return `
+          <div class="preview-note">
+            <div class="preview-note-meta">
+              <strong>${esc(room?.name || "—")}</strong> · ${esc(who)} <span style="color:var(--text3)">· ${dt}</span>
+            </div>
+            <div class="preview-note-text">${esc(n.text || "")}</div>
+          </div>`;
+      }).join("");
+
+  const totalBeds = loc.rooms.reduce((s, r) => s + (r.capacity || 0), 0);
+
+  return `
+    <div class="preview-detail">
+      <button class="cal-nav-btn" id="previewBackBtn" style="margin-bottom:12px">← Wszystkie obiekty</button>
+
+      <div class="preview-hero">
+        <div class="preview-hero-city">${ICONS.mapPin(14)} ${esc(loc.city)}</div>
+        <h2 class="preview-hero-name">${esc(loc.name)}</h2>
+        <div class="preview-hero-meta">${loc.rooms.length} ${loc.rooms.length===1?"pokój":loc.rooms.length<5?"pokoje":"pokoi"} · ${totalBeds} łóżek · ${monthLabel}</div>
+      </div>
+
+      <!-- Legend -->
+      <div class="preview-legend">
+        <span><span class="preview-legend-box is-free"></span> Wolny</span>
+        <span><span class="preview-legend-box is-occupied"></span> Rezerwacja</span>
+        <span><span class="preview-legend-box is-perm"></span> Stały najemca</span>
+      </div>
+
+      <!-- Grid -->
+      <div class="preview-grid-wrap">
+        <div class="preview-row preview-grid-header">
+          <div class="preview-room-cell">Pokój</div>
+          <div class="preview-days-wrap">
+            ${Array.from({length: daysInMonth}, (_, i) => `<div class="preview-day-header">${i+1}</div>`).join("")}
+          </div>
+          <div class="preview-sum-cell">Razem dni</div>
+        </div>
+        ${roomsHtml}
+      </div>
+
+      <!-- Month tabs (bottom) -->
+      <div class="preview-month-tabs">
+        ${tabMonths.map(t => `
+          <button class="preview-month-tab ${t.ym === month ? "active" : ""}" data-preview-month="${t.ym}">${esc(t.label)}</button>
+        `).join("")}
+      </div>
+
+      <!-- Notes panel -->
+      <div class="preview-notes-section">
+        <h3 style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:var(--text2);margin:18px 0 10px;display:flex;align-items:center;gap:6px">${ICONS.notebook(14)} Notatki dla obiektu</h3>
+        <div class="preview-notes-list">${notesHtml}</div>
+      </div>
+    </div>
+  `;
+}
+
 function buildAiAgent() {
   const wipBadge = `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;background:var(--orange-light);color:var(--orange);border:1px solid var(--orange-border);border-radius:99px;font-size:11px;font-weight:600">${ICONS.alertTriangle(12)} W przygotowaniu</span>`;
   const exampleQ = (q, a) => `
@@ -6558,6 +6861,26 @@ function attachEvents() {
   document.getElementById("reportsSort")?.addEventListener("change", e => {
     state.reportsSort = e.target.value; render();
   });
+
+  // v3.21 — Podgląd handlers
+  document.querySelectorAll("[data-preview-loc]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      state.previewLocId = parseInt(btn.dataset.previewLoc);
+      state.previewMonth = null;  // reset do bieżącego
+      render();
+    });
+  });
+  document.getElementById("previewBackBtn")?.addEventListener("click", () => {
+    state.previewLocId = null;
+    state.previewMonth = null;
+    render();
+  });
+  document.querySelectorAll("[data-preview-month]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      state.previewMonth = btn.dataset.previewMonth;
+      render();
+    });
+  });
   attachReportsEvents();
 
   // Edit modal
@@ -7701,7 +8024,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.20 · ${new Date().getFullYear()}
+          HospesAI · v3.21 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
