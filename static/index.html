@@ -2247,10 +2247,9 @@ function getPermanentPaidRevenue(entity, defaultDailyRate, fallbackFrom, rangeFr
     return periodExpected * ratio;
   }
 
-  // PRIORYTET 2/3: prepaid auto-fill albo granular paidMonths
-  const paidMonths = (payTiming === "prepaid")
-    ? activeMonths.slice()
-    : (Array.isArray(entity.paidMonths) ? entity.paidMonths.filter(m => activeMonths.includes(m)) : []);
+  // PRIORYTET 2/3: granular paidMonths (v3.51 — koniec auto-opłacania prepaid;
+  // każdy miesiąc wymaga potwierdzenia pracownika, niezależnie od trybu rozliczenia).
+  const paidMonths = Array.isArray(entity.paidMonths) ? entity.paidMonths.filter(m => activeMonths.includes(m)) : [];
   if (paidMonths.length === 0) return 0;
 
   const monthlyRate = parseFloat(entity.permanentMonthlyRate);
@@ -2279,7 +2278,8 @@ function getPermanentPaidRevenue(entity, defaultDailyRate, fallbackFrom, rangeFr
 // Miesiące zaległe (active ale nie zapłacone, w przeszłości).
 // Bieżący miesiąc nie liczy się jako zaległy (jeszcze trwa).
 function getPermanentOverdueMonths(entity, fallbackFrom, payTiming) {
-  if (payTiming === "prepaid") return [];
+  // v3.51 — prepaid też może mieć zaległości (koniec auto-opłacania): miesiąc z przeszłości
+  // bez potwierdzonej wpłaty = zaległość, niezależnie od trybu rozliczenia.
   const activeMonths = getPermanentActiveMonths(entity, fallbackFrom, null, null);
   const paid = Array.isArray(entity.paidMonths) ? entity.paidMonths : [];
   const now = new Date();
@@ -4040,6 +4040,8 @@ function buildMediaSectionForLoc(loc) {
     const periodSum = sumRoomMedia(loc.id, period);
     const periodSumNetto = sumRoomMediaNetto(loc.id, period);   // v3.46
     const others = m.others || [];
+    // v3.51 — wszystkie faktury przypięte do tego obiektu i okresu (niezależnie od opisu)
+    const periodInvoices = invoices.filter(inv => inv.locId == loc.id && (inv.period || inv.date?.slice(0,7) || "") === period);
     html += `
       <div style="border:1px solid var(--orange-border);border-radius:var(--radius);padding:10px 12px;margin:8px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
@@ -4091,7 +4093,19 @@ function buildMediaSectionForLoc(loc) {
             <button class="remove-btn" data-remove-other="${loc.id}" data-period="${period}" data-other-idx="${idx}" style="margin-bottom:1px;align-self:flex-end">✕</button>
           </div>`;
         }).join("")}
-        <div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap">
+        ${periodInvoices.length > 0 ? `
+        <div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border)">
+          <div style="font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.3px;margin-bottom:6px;display:flex;align-items:center;gap:5px">${ICONS.fileText(11)} Faktury za ten okres (${periodInvoices.length})</div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            ${periodInvoices.map(inv => `
+              <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);font-size:11px">
+                <span style="flex-shrink:0;color:var(--blue)">${ICONS.fileText(13)}</span>
+                <div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(inv.filename || "Faktura")}${inv.note ? ` · <span style="color:var(--text3)">${esc(stripEmoji(inv.note))}</span>` : ""}${inv.amount ? ` · <strong style="font-variant-numeric:tabular-nums">zł${parseFloat(inv.amount).toLocaleString()}</strong>` : ""}</div>
+                ${inv.url ? `<a href="${esc(inv.url)}" target="_blank" rel="noopener" style="flex-shrink:0;display:inline-flex;align-items:center;gap:4px;color:var(--blue);text-decoration:none;font-weight:600;padding:2px 8px;border-radius:6px;background:var(--blue-light)" title="Otwórz fakturę w nowej karcie">${ICONS.eye(12)} Podgląd</a>` : `<span style="flex-shrink:0;color:var(--text3);font-size:10px">brak pliku</span>`}
+              </div>`).join("")}
+          </div>
+        </div>` : ""}
+        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
           <button class="media-add-period-btn" data-add-other="${loc.id}" data-period="${period}" style="margin-top:0">+ Dodaj inne</button>
           <button class="media-save-btn" data-media-save="${loc.id}" data-period="${period}">${ICONS.save(13)} Zapisz</button>
         </div>
@@ -5743,38 +5757,10 @@ function buildBookingForm(loc) {
       <div class="price-val">zł${total.toLocaleString()}</div>
     </div>
 
-    ${(() => {
-      // v3.37 — VAT checkboxy: 8% (default) lub 23%, mutually exclusive.
-      // Wartość total to brutto. Pokazujemy split: netto + VAT.
-      const vRate = state.vatRate || "8";
-      const vRateNum = parseInt(vRate);
-      const netto = total > 0 ? total / (1 + vRateNum/100) : 0;
-      const vatAmt = total - netto;
-      return `
-      <div class="buffer-field" style="background:var(--blue-light);border-color:var(--blue-mid)">
-        <label>Stawka VAT</label>
-        <div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
-          <label class="checkbox-row" style="margin:0;cursor:pointer">
-            <input type="checkbox" id="vat8" ${vRate==="8"?"checked":""} data-vat="8" />
-            <strong>8% VAT</strong> (krótkoterminowe zakwaterowanie)
-          </label>
-          <label class="checkbox-row" style="margin:0;cursor:pointer">
-            <input type="checkbox" id="vat23" ${vRate==="23"?"checked":""} data-vat="23" />
-            <strong>23% VAT</strong> (najem długoterminowy / inne usługi)
-          </label>
-        </div>
-        ${total > 0 ? `<div style="font-size:12px;color:var(--text2);font-variant-numeric:tabular-nums;padding-top:6px;border-top:1px dashed var(--blue-mid)">
-          Brutto: <strong>zł${total.toLocaleString()}</strong> &nbsp;·&nbsp;
-          Netto: <strong>zł${netto.toFixed(2)}</strong> &nbsp;·&nbsp;
-          VAT ${vRate}%: <strong>zł${vatAmt.toFixed(2)}</strong>
-        </div>` : ""}
-      </div>`;
-    })()}
-
     <div class="buffer-field">
       <label>Nadpisz cenę finalną (opcjonalne)</label>
       <input type="number" id="customPriceInput" min="0" step="0.01" value="${esc(state.customPrice)}" placeholder="np. 1200 — zostaw puste żeby liczyć z cennika" />
-      <div class="buffer-hint">${isCompany && selectedRooms.length > 1 ? "Wartość zapisze się dla każdego z wybranych pokoi (jako cena finalna per pokój)." : "Jeśli wypełnisz, zostanie zapisana jako finalna cena rezerwacji."} Edytowalne potem w Raportach. <strong>Stawka VAT wybrana wyżej zostanie zaaplikowana</strong>.</div>
+      <div class="buffer-hint">${isCompany && selectedRooms.length > 1 ? "Wartość zapisze się dla każdego z wybranych pokoi (jako cena finalna per pokój)." : "Jeśli wypełnisz, zostanie zapisana jako finalna cena rezerwacji."} Edytowalne potem w Raportach. <strong>Stawka VAT wybrana niżej zostanie zaaplikowana</strong>.</div>
     </div>
 
     <div class="buffer-field">
@@ -5956,7 +5942,33 @@ function buildBookingForm(loc) {
             </div>`;
           })()}
         `}
-      </div>`).join("")}`;
+      </div>`).join("")}
+    ${(() => {
+      // v3.51 — blok wyboru VAT przeniesiony na DÓŁ formularza (przed zatwierdzeniem).
+      const vRate = state.vatRate || "8";
+      const vRateNum = parseInt(vRate);
+      const netto = total > 0 ? total / (1 + vRateNum/100) : 0;
+      const vatAmt = total - netto;
+      return `
+      <div class="buffer-field" style="background:var(--blue-light);border-color:var(--blue-mid)">
+        <label>Stawka VAT</label>
+        <div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
+          <label class="checkbox-row" style="margin:0;cursor:pointer">
+            <input type="checkbox" id="vat8" ${vRate==="8"?"checked":""} data-vat="8" />
+            <strong>8% VAT</strong> (krótkoterminowe zakwaterowanie)
+          </label>
+          <label class="checkbox-row" style="margin:0;cursor:pointer">
+            <input type="checkbox" id="vat23" ${vRate==="23"?"checked":""} data-vat="23" />
+            <strong>23% VAT</strong> (najem długoterminowy / inne usługi)
+          </label>
+        </div>
+        ${total > 0 ? `<div style="font-size:12px;color:var(--text2);font-variant-numeric:tabular-nums;padding-top:6px;border-top:1px dashed var(--blue-mid)">
+          Brutto: <strong>zł${total.toLocaleString()}</strong> &nbsp;·&nbsp;
+          Netto: <strong>zł${netto.toFixed(2)}</strong> &nbsp;·&nbsp;
+          VAT ${vRate}%: <strong>zł${vatAmt.toFixed(2)}</strong>
+        </div>` : ""}
+      </div>`;
+    })()}`;
 }
 
 function buildFooter() {
@@ -6315,32 +6327,48 @@ function buildEditModal() {
                 const paidMonths = new Set(em.paidMonths !== undefined
                   ? (em.paidMonths || [])
                   : (b.paidMonths || []));
-                // Pokaż miesiące pogrupowane po roku
+                const now = new Date();
+                const currentYm = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+                // Pro-rata context — używamy edytowanych dat (em.permanentEnd etc.)
+                const previewPStart = b.permanentStart || em.from || b.from;
+                const previewPEndRaw = (em.permanentEnd !== undefined ? em.permanentEnd : b.permanentEnd);
+                const isOpenEnded = !previewPEndRaw;  // najemca "do odwołania"
+                // v3.51 — miesiące do POKAZANIA w gridzie: od startu najmu do horyzontu.
+                // Zamknięty najemca: do daty końca. Otwarty: do końca (bieżący rok + Dodaj rok).
+                // Pozwala odhaczyć przyszłe miesiące (płatność z góry, też na lata).
+                const extraYears = state.editModal.paidMonthsExtraYears || 0;
+                const startYm = previewPStart.slice(0,7);
+                const endYm = isOpenEnded ? `${now.getFullYear() + extraYears}-12` : previewPEndRaw.slice(0,7);
+                // pEnd do PRO-RATY: otwarty najemca → koniec zakresu wyświetlania (przyszłe miesiące
+                // = pełna stawka, nie 0); zamknięty → faktyczna data końca.
+                const previewPEnd = previewPEndRaw || `${now.getFullYear() + extraYears + 1}-01-01`;
+                const displayMonths = [];
+                { let yy = parseInt(startYm.slice(0,4)), mm = parseInt(startYm.slice(5,7));
+                  const ey = parseInt(endYm.slice(0,4)), emo = parseInt(endYm.slice(5,7));
+                  let guard = 0;
+                  while ((yy < ey || (yy === ey && mm <= emo)) && guard++ < 600) {
+                    displayMonths.push(`${yy}-${String(mm).padStart(2,"0")}`);
+                    mm++; if (mm > 12) { mm = 1; yy++; }
+                  }
+                }
+                // Zaległość = przeszły miesiąc najmu bez potwierdzonej wpłaty (każdy tryb — v3.51).
+                const overdue = displayMonths.filter(ym => ym < currentYm && !paidMonths.has(ym));
                 const byYear = {};
-                activeMonths.forEach(ym => {
+                displayMonths.forEach(ym => {
                   const [y, m] = ym.split("-");
                   if (!byYear[y]) byYear[y] = [];
                   byYear[y].push({ ym, m: parseInt(m) });
                 });
-                const now = new Date();
-                const currentYm = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-                const overdue = activeMonths.filter(ym => ym < currentYm && !paidMonths.has(ym) && b.payment?.timing !== "prepaid");
-                const isPrepaid = b.payment?.timing === "prepaid";
-
-                // Pro-rata context dla każdego miesiąca — używamy edytowanych dat (em.permanentEnd etc.)
-                const previewPStart = b.permanentStart || em.from || b.from;
-                const previewPEnd = (em.permanentEnd !== undefined ? em.permanentEnd : b.permanentEnd) || endOfCurrentMonthExclusive();
                 const monthGrid = Object.entries(byYear).map(([y, months]) => `
                   <div style="margin-bottom:10px">
                     <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:6px">${y}</div>
                     <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:4px">
                       ${months.map(({ ym, m }) => {
-                        const isPaid = isPrepaid || paidMonths.has(ym);
-                        const isOverdue = ym < currentYm && !isPaid && !isPrepaid;
+                        const isPaid = paidMonths.has(ym);
+                        const isOverdue = ym < currentYm && !isPaid;
                         const isFuture = ym > currentYm;
                         const bg = isPaid ? "var(--green)" : (isOverdue ? "var(--red)" : (isFuture ? "var(--surface2)" : "var(--surface3)"));
                         const color = (isPaid || isOverdue) ? "#fff" : "var(--text2)";
-                        const cursor = isPrepaid ? "default" : "pointer";
                         // Pro-rata szczegóły dla tego miesiąca
                         const info = prorataMonthInfo(ym, previewPStart, previewPEnd);
                         const amt = hasMonthly ? prorataMonthPrice(monthly, ym, previewPStart, previewPEnd) : 0;
@@ -6349,9 +6377,9 @@ function buildEditModal() {
                           : (info.isPartial
                             ? `${info.daysUsed}/${info.daysInMonth}d · zł${amt}`
                             : `zł${amt}`);
-                        return `<button class="paid-month-btn" data-paid-month="${ym}" ${isPrepaid?"disabled":""}
-                          style="padding:8px 4px;font-size:11px;font-weight:700;border:1px solid var(--border);border-radius:var(--radius);background:${bg};color:${color};cursor:${cursor};font-family:inherit;display:flex;flex-direction:column;align-items:center;gap:2px;min-height:48px"
-                          title="${isPaid?'Zapłacone':isOverdue?'ZALEGŁOŚĆ':isFuture?'Przyszły miesiąc':'Niezapłacone (bieżący)'}${hasMonthly && info.isPartial ? ` · pro-rata ${info.daysUsed}/${info.daysInMonth} dni` : ''}">
+                        return `<button class="paid-month-btn" data-paid-month="${ym}"
+                          style="padding:8px 4px;font-size:11px;font-weight:700;border:1px solid var(--border);border-radius:var(--radius);background:${bg};color:${color};cursor:pointer;font-family:inherit;display:flex;flex-direction:column;align-items:center;gap:2px;min-height:48px"
+                          title="${isPaid?'Zapłacone — kliknij by cofnąć':isOverdue?'ZALEGŁOŚĆ — kliknij gdy opłacone':isFuture?'Przyszły miesiąc — kliknij by zaznaczyć przedpłatę':'Bieżący — kliknij gdy opłacone'}${hasMonthly && info.isPartial ? ` · pro-rata ${info.daysUsed}/${info.daysInMonth} dni` : ''}">
                           <span>${MONTHS[m-1].slice(0,3)}${isPaid?' ✓':isOverdue?' !':''}</span>
                           ${subLabel ? `<span style="font-size:9px;font-weight:500;opacity:0.85;font-variant-numeric:tabular-nums">${subLabel}</span>` : ""}
                         </button>`;
@@ -6360,10 +6388,8 @@ function buildEditModal() {
                   </div>
                 `).join("");
 
-                // Suma wpłat — sumuj pro-rata cen za zapłacone miesiące (a nie count × stawka).
-                const selectedMonths = isPrepaid
-                  ? activeMonths
-                  : activeMonths.filter(m => paidMonths.has(m));
+                // Suma wpłat — pro-rata za zaznaczone (zapłacone) miesiące spośród pokazanych.
+                const selectedMonths = displayMonths.filter(m => paidMonths.has(m));
                 const totalPaidAmt = hasMonthly
                   ? selectedMonths.reduce((s, ym) => s + prorataMonthPrice(monthly, ym, previewPStart, previewPEnd), 0)
                   : 0;
@@ -6373,16 +6399,16 @@ function buildEditModal() {
                 <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;display:flex;align-items:center;gap:6px">${ICONS.house(13)} Wpłaty miesięczne (stały najemca)</div>
                 <div style="padding:10px 12px;background:var(--green-light);border:1px solid var(--green-mid);border-radius:var(--radius);color:var(--text);font-size:12px;margin-bottom:10px;display:flex;gap:8px;align-items:flex-start">
                   <span style="flex-shrink:0;color:var(--green);margin-top:1px">${ICONS.house(13)}</span>
-                  <div>Stała stawka: <strong>${rateDesc}</strong>${overdue.length>0?` · <span style="color:var(--red);font-weight:700">${overdue.length} zaległych miesięcy</span>`:""}${isPrepaid?` · <span style="color:var(--blue);font-weight:600">Płaci z góry — wszystkie traktowane jako zapłacone</span>`:""}</div>
+                  <div>Stała stawka: <strong>${rateDesc}</strong>${overdue.length>0?` · <span style="color:var(--red);font-weight:700">${overdue.length} zaległych miesięcy</span>`:""} · <span style="color:var(--text3)">odhacz miesiąc gdy najemca zapłaci (też z góry, na przyszłość)</span></div>
                 </div>
-                ${activeMonths.length === 0 ? `<div style="padding:10px;color:var(--text3);font-style:italic;font-size:12px">Brak aktywnych miesięcy do rozliczenia.</div>` : `
+                ${displayMonths.length === 0 ? `<div style="padding:10px;color:var(--text3);font-style:italic;font-size:12px">Brak miesięcy do rozliczenia.</div>` : `
                   <div style="margin-bottom:10px">${monthGrid}</div>
-                  ${!isPrepaid ? `
                   <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
                     <button class="cal-nav-btn" id="paidMonthsAll" style="font-size:11px;padding:5px 12px;display:inline-flex;align-items:center;gap:5px">${ICONS.checkCircle(11)} Zaznacz wszystkie</button>
                     <button class="cal-nav-btn" id="paidMonthsNone" style="font-size:11px;padding:5px 12px;color:var(--red);border-color:var(--red)">Wyczyść</button>
-                  </div>` : ""}
-                  ${hasMonthly ? `<div style="font-size:11px;color:var(--text2);margin-bottom:4px;font-weight:600">Suma wpłat za widoczne miesiące: zł${totalPaidAmt.toLocaleString()}</div>` : ""}
+                    ${isOpenEnded ? `<button class="cal-nav-btn" id="paidMonthsAddYear" style="font-size:11px;padding:5px 12px;display:inline-flex;align-items:center;gap:5px">${ICONS.plus ? ICONS.plus(11) : "+"} Dodaj rok</button>` : ""}
+                  </div>
+                  ${hasMonthly ? `<div style="font-size:11px;color:var(--text2);margin-bottom:4px;font-weight:600">Suma zaznaczonych wpłat: zł${totalPaidAmt.toLocaleString()}</div>` : ""}
                   ${(() => {
                     // Wskazówka jeśli user wpisał amountPaid (override mode)
                     const ap = parseFloat(em.amountPaid !== undefined ? em.amountPaid : (b.payment?.amountPaid || ""));
@@ -7991,6 +8017,11 @@ function attachEditEvents() {
     state.editModal.paidMonths = [];
     render();
   });
+  // v3.51 — rozwiń grid o kolejny rok w przód (odhaczanie przedpłat na lata)
+  document.getElementById("paidMonthsAddYear")?.addEventListener("click", () => {
+    state.editModal.paidMonthsExtraYears = (state.editModal.paidMonthsExtraYears || 0) + 1;
+    render();
+  });
 
   document.getElementById("editSaveBtn")?.addEventListener("click", () => {
     if (API_CREDS) return;
@@ -8628,7 +8659,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.50 · ${new Date().getFullYear()}
+          HospesAI · v3.51 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
