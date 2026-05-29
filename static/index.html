@@ -2070,17 +2070,25 @@ function buildBookingBreakdown(b, room, nights) {
 // MEDIA helpers (per room, per period)
 // ============================================================
 function getRoomMediaKey(roomId, period) { return `${roomId}__${period}`; }
+// v3.46 — domyślne stawki VAT mediów (PL): prąd/gaz 23%, woda/ścieki 8%, inne 23%.
+const MEDIA_VAT_DEFAULTS = { electricity: 23, gas: 23, water: 8, other: 23 };
 function getRoomMedia(roomId, period) {
   const m = roomMedia[getRoomMediaKey(roomId, period)];
-  if (!m) return { electricity: 0, gas: 0, water: 0, others: [], note: "" };
+  if (!m) return { electricity: 0, gas: 0, water: 0, electricityVat: 23, gasVat: 23, waterVat: 8, others: [], note: "" };
   // backward compat: migrate 'repairs' to others
   if (!m.others) m.others = (parseFloat(m.repairs) > 0) ? [{ label: "Naprawy", amount: parseFloat(m.repairs) }] : [];
   if (m.gas === undefined) m.gas = 0;
+  // v3.46 — VAT per pozycja (kwoty wpisywane BRUTTO). Legacy bez VAT → stawki domyślne.
+  if (m.electricityVat === undefined) m.electricityVat = MEDIA_VAT_DEFAULTS.electricity;
+  if (m.gasVat === undefined) m.gasVat = MEDIA_VAT_DEFAULTS.gas;
+  if (m.waterVat === undefined) m.waterVat = MEDIA_VAT_DEFAULTS.water;
+  m.others.forEach(o => { if (o.vat === undefined) o.vat = MEDIA_VAT_DEFAULTS.other; });
   return m;
 }
 function saveRoomMedia(roomId, period, data) {
   roomMedia[getRoomMediaKey(roomId, period)] = data;
 }
+// Suma BRUTTO (kwoty tak jak wpisane / z faktury).
 function sumMediaObj(m) {
   if (!m) return 0;
   let s = (parseFloat(m.electricity)||0) + (parseFloat(m.gas)||0) + (parseFloat(m.water)||0);
@@ -2090,6 +2098,24 @@ function sumMediaObj(m) {
 }
 function sumRoomMedia(roomId, period) {
   return sumMediaObj(getRoomMedia(roomId, period));
+}
+// v3.46 — NETTO: kwoty media są brutto, więc netto = brutto / (1 + VAT/100) per pozycja.
+function mediaItemNetto(amount, vat) {
+  const a = parseFloat(amount) || 0;
+  const v = parseFloat(vat);
+  return a / (1 + (isNaN(v) ? 0 : v) / 100);
+}
+function sumMediaObjNetto(m) {
+  if (!m) return 0;
+  let s = mediaItemNetto(m.electricity, m.electricityVat ?? MEDIA_VAT_DEFAULTS.electricity)
+        + mediaItemNetto(m.gas, m.gasVat ?? MEDIA_VAT_DEFAULTS.gas)
+        + mediaItemNetto(m.water, m.waterVat ?? MEDIA_VAT_DEFAULTS.water);
+  if (m.others) m.others.forEach(o => { s += mediaItemNetto(o.amount, o.vat ?? MEDIA_VAT_DEFAULTS.other); });
+  else if (m.repairs) s += mediaItemNetto(m.repairs, MEDIA_VAT_DEFAULTS.other); // legacy
+  return s;
+}
+function sumRoomMediaNetto(roomId, period) {
+  return sumMediaObjNetto(getRoomMedia(roomId, period));
 }
 
 // ============================================================
@@ -2634,8 +2660,8 @@ function buildDashboard() {
   Object.entries(roomMedia).forEach(([key, m]) => {
     const [keyId, period] = key.split("__");
     if (!validLocIds.has(keyId)) return;  // skip legacy room-keyed entries
-    if (period === monthPeriod) thisMonthMedia += sumMediaObj(m);
-    if (period === prevMonthPeriod) prevMonthMedia += sumMediaObj(m);
+    if (period === monthPeriod) thisMonthMedia += sumMediaObjNetto(m);     // v3.46 — netto (dashboard netto)
+    if (period === prevMonthPeriod) prevMonthMedia += sumMediaObjNetto(m);
   });
   const thisMonthProfit = thisMonthRevenue - thisMonthMedia;       // memoriał
   const thisMonthProfitRealized = thisMonthPaid - thisMonthMedia;  // kasa
@@ -3524,8 +3550,8 @@ function buildReports() {
   Object.entries(roomMedia).forEach(([key, m]) => {
     const [keyId, period] = key.split("__");
     if (!_validLocs.has(keyId)) return;
-    if (!periodRange) { totMedia += sumMediaObj(m); return; }
-    if (periodOverlapsRange(period, periodRange.from, periodRange.to)) totMedia += sumMediaObj(m);
+    if (!periodRange) { totMedia += sumMediaObjNetto(m); return; }   // v3.46 — główny hero netto → media netto
+    if (periodOverlapsRange(period, periodRange.from, periodRange.to)) totMedia += sumMediaObjNetto(m);
   });
 
   // Data rozliczenia = ostatnia odnotowana wpłata (z paidMonths stałych najemców
@@ -3606,48 +3632,57 @@ function buildReports() {
 
     locEntries.forEach(({ loc, bookings }) => {
       // Calculate location financials
-      let locRevenue = 0, locPaid = 0, locMedia = 0;
+      // v3.46 — blok per-lokalizacja liczony w BRUTTO (operacyjnie), plus osobny
+      // wskaźnik "Zysk netto" = przychód netto − media netto (realny zysk dla obiektu).
+      let locRevenueB = 0, locRevenueN = 0, locPaidB = 0, locMediaB = 0, locMediaN = 0;
       bookings.forEach(b => {
         const room = loc.rooms.find(r=>r.id===b.roomId);
         const nights = getActualNights(b);
         const t = calcBookingTotal(b, room, nights, periodRange);
-        const _f = bookingNettoFactor(b);  // v3.38 — netto factor
-        locRevenue += t * _f;
-        // v3.19 — pro-rata clip wpłaconej kwoty
-        locPaid += bookingPaidInRange(b, room, periodRange?.from, periodRange?.to) * _f;
+        const _f = bookingNettoFactor(b);
+        locRevenueB += t;          // brutto
+        locRevenueN += t * _f;     // netto
+        // v3.19 — pro-rata clip wpłaconej kwoty (brutto)
+        locPaidB += bookingPaidInRange(b, room, periodRange?.from, periodRange?.to);
       });
-      // v3.39: media per-LOCATION (nie per room) — klucz to loc.id
+      // media per-LOCATION: brutto (bloki operacyjne) + netto (zysk netto)
       getRoomMediaPeriods(loc.id).forEach(period => {
-        if (!periodRange) { locMedia += sumRoomMedia(loc.id, period); return; }
-        if (periodOverlapsRange(period, periodRange.from, periodRange.to)) {
-          locMedia += sumRoomMedia(loc.id, period);
-        }
+        if (periodRange && !periodOverlapsRange(period, periodRange.from, periodRange.to)) return;
+        locMediaB += sumRoomMedia(loc.id, period);
+        locMediaN += sumRoomMediaNetto(loc.id, period);
       });
-      const locProfit = locRevenue - locMedia;
-      const locRemaining = Math.max(0, locRevenue - locPaid);
+      const locProfitB = locRevenueB - locMediaB;            // planowany memoriałowo (brutto)
+      const locProfitRealizedB = locPaidB - locMediaB;       // zrealizowany kasowo (brutto)
+      const locRemainingB = Math.max(0, locRevenueB - locPaidB);
+      const locProfitN = locRevenueN - locMediaN;            // ZYSK NETTO (realny)
 
       html += `
         <div class="loc-finance-block">
           <div class="loc-finance-hdr">
             <div>
               <div class="loc-finance-title">${locIcon(loc, 16)} ${esc(loc.name)}</div>
-              <div class="loc-finance-sub">${bookings.length} ${nrez(bookings.length)}</div>
+              <div class="loc-finance-sub">${bookings.length} ${nrez(bookings.length)} · <span style="color:var(--text3)">kwoty brutto</span></div>
             </div>
           </div>
           <div class="loc-finance-totals dual-hero-layout">
             <div class="loc-fin-stat hero">
-              <span class="k">Przychód planowany <span class="hero-tag">memoriałowo</span></span>
-              <span class="v">zł${locProfit.toLocaleString()}</span>
-              <span class="sub">Przychód zł${locRevenue.toLocaleString()} − Media zł${locMedia.toLocaleString()}</span>
+              <span class="k">Przychód planowany <span class="hero-tag">memoriałowo · brutto</span></span>
+              <span class="v">zł${locProfitB.toLocaleString()}</span>
+              <span class="sub">Przychód zł${locRevenueB.toLocaleString()} − Media zł${locMediaB.toLocaleString()}</span>
             </div>
             <div class="loc-fin-stat hero hero-cash">
-              <span class="k">Przychód zrealizowany <span class="hero-tag">kasowo</span></span>
-              <span class="v" style="color:${(locPaid - locMedia) < 0 ? 'var(--red)' : 'var(--blue)'}">zł${(locPaid - locMedia).toLocaleString()}</span>
-              <span class="sub">Wpłacono zł${locPaid.toLocaleString()} − Media zł${locMedia.toLocaleString()}</span>
+              <span class="k">Przychód zrealizowany <span class="hero-tag">kasowo · brutto</span></span>
+              <span class="v" style="color:${locProfitRealizedB < 0 ? 'var(--red)' : 'var(--blue)'}">zł${locProfitRealizedB.toLocaleString()}</span>
+              <span class="sub">Wpłacono zł${locPaidB.toLocaleString()} − Media zł${locMediaB.toLocaleString()}</span>
             </div>
-            <div class="loc-fin-stat"><span class="k">Przychód</span><span class="v blue">zł${locRevenue.toLocaleString()}</span></div>
-            <div class="loc-fin-stat"><span class="k">Wpłacono</span><span class="v ${locPaid>=locRevenue?"green":""}">zł${locPaid.toLocaleString()}</span></div>
-            <div class="loc-fin-stat"><span class="k">Do pobrania</span><span class="v ${locRemaining>0?"orange":"green"}">zł${locRemaining.toLocaleString()}</span></div>
+            <div class="loc-fin-stat"><span class="k">Przychód brutto</span><span class="v blue">zł${locRevenueB.toLocaleString()}</span></div>
+            <div class="loc-fin-stat"><span class="k">Wpłacono brutto</span><span class="v ${locPaidB>=locRevenueB?"green":""}">zł${locPaidB.toLocaleString()}</span></div>
+            <div class="loc-fin-stat"><span class="k">Do pobrania</span><span class="v ${locRemainingB>0?"orange":"green"}">zł${locRemainingB.toLocaleString()}</span></div>
+            <div class="loc-fin-stat" style="border:1.5px solid var(--green);background:var(--green-light)">
+              <span class="k" style="color:var(--green);font-weight:700">Zysk netto <span class="hero-tag" style="background:var(--green);color:#fff">netto</span></span>
+              <span class="v" style="color:${locProfitN < 0 ? 'var(--red)' : 'var(--green)'};font-weight:800">zł${Math.round(locProfitN).toLocaleString()}</span>
+              <span class="sub">Przychód netto zł${Math.round(locRevenueN).toLocaleString()} − Media netto zł${Math.round(locMediaN).toLocaleString()}</span>
+            </div>
           </div>`;
 
       // Group by permanent / company / individual within this location.
@@ -3858,14 +3893,14 @@ function buildReportRow(b, loc, periodRange) {
   const actualNights = getActualNights(b);
   const reservedNights = diffDays(b.from, b.to);
   const ae = getActualEnd(b); const isExtended = ae && parseDate(ae) > parseDate(b.to);
-  const _rowFactor = bookingNettoFactor(b);  // v3.38 — netto
-  const total = calcBookingTotal(b, room, actualNights, periodRange) * _rowFactor;
+  // v3.46 — wiersze rezerwacji per-lokalizacja pokazują kwoty BRUTTO (operacyjnie).
+  const total = calcBookingTotal(b, room, actualNights, periodRange);
 
   // v3.19 — używa bookingPaidInRange (pro-rata clip dla non-perm, paidMonths dla perm).
   const isPerm = b.isPermanent && b.bookingType !== "company";
   const rFrom = periodRange?.from || null;
   const rTo = periodRange?.to || null;
-  const paid = bookingPaidInRange(b, room, rFrom, rTo) * _rowFactor;
+  const paid = bookingPaidInRange(b, room, rFrom, rTo);
   const remaining = Math.max(0, total - paid);
   const overdueMonths = isPerm ? getPermanentOverdueMonths(b, b.from, b.payment?.timing) : [];
 
@@ -3965,8 +4000,8 @@ function buildMediaSectionForLoc(loc) {
   // wpisu za wybrany YYYY-MM. Aplikuje się do całego budynku jako koszt operacyjny.
   const allPeriods = getRoomMediaPeriods(loc.id);
   const hasAnyBookings = savedBookings.some(b => b.locId === loc.id);
-  let locMediaTotal = 0;
-  allPeriods.forEach(p => { locMediaTotal += sumRoomMedia(loc.id, p); });
+  let locMediaTotal = 0, locMediaTotalNetto = 0;   // v3.46 — brutto + netto
+  allPeriods.forEach(p => { locMediaTotal += sumRoomMedia(loc.id, p); locMediaTotalNetto += sumRoomMediaNetto(loc.id, p); });
 
   if (allPeriods.length === 0 && !hasAnyBookings) return "";
 
@@ -3995,33 +4030,39 @@ function buildMediaSectionForLoc(loc) {
   // Header pojedynczy summary dla całego obiektu
   html += `
     <div style="padding:10px 14px;background:var(--orange-light);border-bottom:1px dashed var(--orange-border);font-size:11px;color:var(--orange);font-weight:600">
-      ${locMediaTotal > 0 ? `Łącznie media obiektu: zł${locMediaTotal.toFixed(2)}` : "Brak wpisów media. Dodaj okres niżej."}
+      ${locMediaTotal > 0 ? `Łącznie media obiektu: <strong>zł${locMediaTotal.toFixed(2)}</strong> brutto · <strong>zł${locMediaTotalNetto.toFixed(2)}</strong> netto` : "Brak wpisów media. Dodaj okres niżej."}
     </div>`;
 
   // Editor — jeden per okres (rzędy electricity/gas/water + others)
   periods.forEach(period => {
     const m = getRoomMedia(loc.id, period);
     const periodSum = sumRoomMedia(loc.id, period);
+    const periodSumNetto = sumRoomMediaNetto(loc.id, period);   // v3.46
     const others = m.others || [];
     html += `
       <div style="border:1px solid var(--orange-border);border-radius:var(--radius);padding:10px 12px;margin:8px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
           <span style="font-size:13px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums">${period}</span>
-          <span style="font-size:11px;color:var(--orange);font-variant-numeric:tabular-nums;font-weight:600">${periodSum>0?`Suma za ten miesiąc: zł${periodSum.toFixed(2)}`:""}</span>
+          <span style="font-size:11px;color:var(--orange);font-variant-numeric:tabular-nums;font-weight:600">${periodSum>0?`Suma: zł${periodSum.toFixed(2)} brutto · zł${periodSumNetto.toFixed(2)} netto`:""}</span>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
-          ${[{field:"electricity",label:"Prąd",icon:ICONS.zap,val:m.electricity},{field:"gas",label:"Gaz",icon:ICONS.flame,val:m.gas},{field:"water",label:"Woda",icon:ICONS.droplet,val:m.water}].map(ft => {
+          ${[{field:"electricity",label:"Prąd",icon:ICONS.zap,val:m.electricity,vatField:"electricityVat",vatVal:m.electricityVat},{field:"gas",label:"Gaz",icon:ICONS.flame,val:m.gas,vatField:"gasVat",vatVal:m.gasVat},{field:"water",label:"Woda",icon:ICONS.droplet,val:m.water,vatField:"waterVat",vatVal:m.waterVat}].map(ft => {
             const linked = invoices.filter(inv => inv.roomId === loc.id && inv.period === period && stripEmoji(inv.note) === ft.label);
             const fid = `mi-${ft.field}-${loc.id}-${period}`;
             return `<div class="media-field">
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">
-                <label style="margin:0;display:inline-flex;align-items:center;gap:5px">${ft.icon(13)} ${ft.label} (zł)</label>
+                <label style="margin:0;display:inline-flex;align-items:center;gap:5px">${ft.icon(13)} ${ft.label} (zł brutto)</label>
                 <label for="${fid}" style="cursor:pointer;font-size:10px;color:var(--blue);padding:1px 6px;border-radius:4px;background:var(--blue-light);white-space:nowrap;font-weight:600;display:inline-flex;align-items:center;gap:3px">${ICONS.pin(10)}${linked.length > 0 ? linked.length : ''}</label>
               </div>
               <input type="file" id="${fid}" style="display:none" accept=".pdf,.jpg,.jpeg,.png"
                 data-mi-room="${loc.id}" data-mi-loc="${loc.id}" data-mi-period="${period}"
                 data-mi-type="${ft.label}" data-mi-field="${ft.field}" />
               <input type="number" class="media-inp" data-roomid="${loc.id}" data-period="${period}" data-field="${ft.field}" value="${ft.val||""}" placeholder="0.00" min="0" step="0.01" />
+              <div style="display:flex;align-items:center;gap:4px;margin-top:4px" title="Stawka VAT — kwotę wpisujesz brutto, netto liczone automatycznie">
+                <span style="font-size:10px;color:var(--text2);white-space:nowrap">VAT</span>
+                <input type="number" class="media-inp media-vat-inp" data-roomid="${loc.id}" data-period="${period}" data-field="${ft.vatField}" value="${ft.vatVal ?? ""}" placeholder="${MEDIA_VAT_DEFAULTS[ft.field]}" min="0" max="100" step="1" style="width:52px;padding:4px 5px;text-align:center" />
+                <span style="font-size:10px;color:var(--text2)">%</span>
+              </div>
               ${linked.map(inv => `<a href="${inv.url||"#"}" target="_blank" title="${esc(inv.filename)}"
                 style="display:flex;align-items:center;gap:3px;font-size:10px;color:var(--blue);text-decoration:none;margin-top:3px;padding:2px 6px;border-radius:4px;background:var(--blue-light);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
                 📄 ${esc(inv.filename||"Faktura")}</a>`).join("")}
@@ -4033,11 +4074,13 @@ function buildMediaSectionForLoc(loc) {
           const oLinked = invoices.filter(inv => inv.roomId === loc.id && inv.period === period && stripEmoji(inv.note) === stripEmoji(oLabel));
           const ofid = `mi-other-${loc.id}-${period}-${idx}`;
           return `
-          <div style="display:grid;grid-template-columns:1fr 110px auto auto;gap:6px;align-items:flex-end;margin-bottom:6px">
+          <div style="display:grid;grid-template-columns:1fr 100px 74px auto auto;gap:6px;align-items:flex-end;margin-bottom:6px">
             <div class="media-field"><label style="display:inline-flex;align-items:center;gap:5px">${ICONS.pin(12)} Inne — opis</label>
               <input type="text" class="media-inp" data-roomid="${loc.id}" data-period="${period}" data-field="other_label_${idx}" value="${esc(oLabel)}" placeholder="np. Naprawa…" style="font-family:inherit" /></div>
-            <div class="media-field"><label>Kwota (zł)</label>
+            <div class="media-field"><label>Kwota (zł brutto)</label>
               <input type="number" class="media-inp" data-roomid="${loc.id}" data-period="${period}" data-field="other_amount_${idx}" value="${o.amount||""}" placeholder="0.00" min="0" step="0.01" /></div>
+            <div class="media-field"><label title="Stawka VAT — kwota brutto, netto liczone automatycznie">VAT %</label>
+              <input type="number" class="media-inp media-vat-inp" data-roomid="${loc.id}" data-period="${period}" data-field="other_vat_${idx}" value="${o.vat ?? ""}" placeholder="${MEDIA_VAT_DEFAULTS.other}" min="0" max="100" step="1" style="text-align:center" /></div>
             <div style="align-self:flex-end;margin-bottom:1px">
               <input type="file" id="${ofid}" style="display:none" accept=".pdf,.jpg,.jpeg,.png"
                 data-mi-room="${loc.id}" data-mi-loc="${loc.id}" data-mi-period="${period}"
@@ -4143,7 +4186,7 @@ function buildCharts() {
   Object.entries(roomMedia).forEach(([key, m]) => {
     const [keyId, period] = key.split("__");
     if (!_validLocsK.has(keyId)) return;
-    if (periodOverlapsRange(period, chartFromExcl, chartToExcl)) kpiMedia += sumMediaObj(m);
+    if (periodOverlapsRange(period, chartFromExcl, chartToExcl)) kpiMedia += sumMediaObjNetto(m);   // v3.46 — wykresy netto
   });
   const kpiProfitPlanned = kpiRevenue - kpiMedia;
   const kpiProfitRealized = kpiPaid - kpiMedia;
@@ -5207,10 +5250,10 @@ function buildHelp() {
 
         <div style="background:var(--surface);padding:10px 12px;border-radius:6px;border-left:3px solid var(--orange);margin-bottom:12px">
           <strong style="color:var(--orange)">MEDIA (prąd / gaz / woda / inne)</strong>
-          <p style="margin:6px 0;font-size:12px">Wpisywane <strong>per pokój per miesiąc</strong> w sekcji Media w Raportach. Suma = <code>electricity + gas + water + Σ(others.amount)</code>.</p>
+          <p style="margin:6px 0;font-size:12px">Wpisywane <strong>per obiekt per miesiąc</strong> w sekcji Media w Raportach, jako kwoty <strong>brutto</strong> (z faktury) + stawka <strong>VAT</strong> per pozycja (domyślnie prąd/gaz 23%, woda 8%, inne 23% — do zmiany ręcznie). Netto liczone automatycznie: <code>brutto / (1 + VAT/100)</code> per pozycja.</p>
           <p style="margin:6px 0;font-size:12px;color:var(--red);font-weight:600">⚠ Media NIE obciążają najemcy. To wyłącznie koszt operacyjny obiektu.</p>
           <ul style="margin:6px 0 0;padding-left:20px;font-size:12px">
-            <li>Wpływa na: <strong>Zysk netto = Przychód − Media</strong></li>
+            <li>Wpływa na: <strong>Zysk netto = Przychód netto − Media netto</strong> (per obiekt) oraz główny hero (netto). Blok per-lokalizacja pokazuje kwoty brutto.</li>
             <li>NIE wpływa na: <strong>"Do pobrania" / "Wpłacono"</strong> — to są wyłącznie pieniądze należne / wpłacone PRZEZ najemcę</li>
             <li>Filtr okresu klipuje media: tylko miesiące nakładające się z filtrem są wliczane</li>
           </ul>
@@ -7067,20 +7110,19 @@ function attachEvents() {
       const roomId = inp.dataset.roomid;
       const period = inp.dataset.period;
       const key = getRoomMediaKey(roomId, period);
-      if (!roomMedia[key]) roomMedia[key] = { electricity:0, gas:0, water:0, others:[], note:"" };
+      if (!roomMedia[key]) roomMedia[key] = { electricity:0, gas:0, water:0, electricityVat:MEDIA_VAT_DEFAULTS.electricity, gasVat:MEDIA_VAT_DEFAULTS.gas, waterVat:MEDIA_VAT_DEFAULTS.water, others:[], note:"" };
       const f = inp.dataset.field;
+      const ensureOther = idx => { if (!roomMedia[key].others) roomMedia[key].others = []; if (!roomMedia[key].others[idx]) roomMedia[key].others[idx] = {label:`Inne ${idx+1}`,amount:0,vat:MEDIA_VAT_DEFAULTS.other}; return roomMedia[key].others[idx]; };
       if (f==="electricity"||f==="gas"||f==="water") {
         roomMedia[key][f] = parseFloat(inp.value)||0;
+      } else if (f==="electricityVat"||f==="gasVat"||f==="waterVat") {
+        if (inp.value !== "") roomMedia[key][f] = parseFloat(inp.value)||0;
       } else if (f.startsWith("other_amount_")) {
-        const idx = parseInt(f.replace("other_amount_",""));
-        if (!roomMedia[key].others) roomMedia[key].others = [];
-        if (!roomMedia[key].others[idx]) roomMedia[key].others[idx] = {label:`Inne ${idx+1}`,amount:0};
-        roomMedia[key].others[idx].amount = parseFloat(inp.value)||0;
+        ensureOther(parseInt(f.replace("other_amount_",""))).amount = parseFloat(inp.value)||0;
+      } else if (f.startsWith("other_vat_")) {
+        const o = ensureOther(parseInt(f.replace("other_vat_",""))); if (inp.value !== "") o.vat = parseFloat(inp.value)||0;
       } else if (f.startsWith("other_label_")) {
-        const idx = parseInt(f.replace("other_label_",""));
-        if (!roomMedia[key].others) roomMedia[key].others = [];
-        if (!roomMedia[key].others[idx]) roomMedia[key].others[idx] = {label:`Inne ${idx+1}`,amount:0};
-        roomMedia[key].others[idx].label = inp.value;
+        ensureOther(parseInt(f.replace("other_label_",""))).label = inp.value;
       }
     });
   });
@@ -8334,7 +8376,7 @@ function generatePrintReport(fromDate, toDate) {
   Object.entries(roomMedia).forEach(([key, m]) => {
     const [keyId, period] = key.split("__");
     if (!_validLocsP.has(keyId)) return;
-    if (periodOverlapsRange(period, fromDate, toDate)) totMedia += sumMediaObj(m);
+    if (periodOverlapsRange(period, fromDate, toDate)) totMedia += sumMediaObjNetto(m);   // v3.46 — raport druk/PDF netto
   });
 
   const totProfit = totRevenue - totMedia;
@@ -8573,7 +8615,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.45 · ${new Date().getFullYear()}
+          HospesAI · v3.46 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
@@ -8844,22 +8886,24 @@ async function deleteBookingAPI(bookingId) {
 
 async function saveMediaAPI(roomId, period) {
   const rows = document.querySelectorAll('.media-inp[data-roomid="' + roomId + '"][data-period="' + period + '"]');
-  const data = { electricity:0, gas:0, water:0, others:[], note:"" };
+  // v3.46 — kwoty brutto + VAT per pozycja (domyślne PL: prąd/gaz 23%, woda 8%, inne 23%).
+  const data = { electricity:0, gas:0, water:0, electricityVat:MEDIA_VAT_DEFAULTS.electricity, gasVat:MEDIA_VAT_DEFAULTS.gas, waterVat:MEDIA_VAT_DEFAULTS.water, others:[], note:"" };
   const othersMap = {};
+  const ensureOther = idx => (othersMap[idx] ||= { label:`Inne ${idx+1}`, amount:0, vat:MEDIA_VAT_DEFAULTS.other });
   rows.forEach(inp => {
     const f = inp.dataset.field;
     if (f === "electricity" || f === "gas" || f === "water") {
       data[f] = parseFloat(inp.value)||0;
+    } else if (f === "electricityVat" || f === "gasVat" || f === "waterVat") {
+      if (inp.value !== "") data[f] = parseFloat(inp.value)||0;
     } else if (f === "note") {
       data.note = inp.value || "";
     } else if (f.startsWith("other_amount_")) {
-      const idx = parseInt(f.replace("other_amount_",""));
-      if (!othersMap[idx]) othersMap[idx] = { label:`Inne ${idx+1}`, amount:0 };
-      othersMap[idx].amount = parseFloat(inp.value)||0;
+      ensureOther(parseInt(f.replace("other_amount_",""))).amount = parseFloat(inp.value)||0;
+    } else if (f.startsWith("other_vat_")) {
+      const o = ensureOther(parseInt(f.replace("other_vat_",""))); if (inp.value !== "") o.vat = parseFloat(inp.value)||0;
     } else if (f.startsWith("other_label_")) {
-      const idx = parseInt(f.replace("other_label_",""));
-      if (!othersMap[idx]) othersMap[idx] = { label:`Inne ${idx+1}`, amount:0 };
-      othersMap[idx].label = inp.value || `Inne ${idx+1}`;
+      const idx = parseInt(f.replace("other_label_","")); ensureOther(idx).label = inp.value || `Inne ${idx+1}`;
     }
   });
   Object.keys(othersMap).sort((a,b)=>a-b).forEach(k => data.others.push(othersMap[k]));
