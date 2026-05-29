@@ -8618,17 +8618,17 @@ function buildLoginScreen() {
         ${state.loginError ? `<div style="background:var(--red-light);border:1px solid var(--red-border);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--red);margin-bottom:14px;display:flex;gap:6px;align-items:flex-start"><span style="flex-shrink:0;margin-top:1px">${ICONS.alertTriangle(13)}</span> ${esc(state.loginError)}</div>` : ''}
         <div class="form-field">
           <label>Użytkownik</label>
-          <input type="text" id="loginUser" placeholder="np. admin" autocomplete="username" value="${esc(state.loginUsername||'')}" />
+          <input type="text" id="loginUser" autocomplete="username" value="${esc(state.loginUsername||'')}" />
         </div>
         <div class="form-field">
           <label>Hasło</label>
-          <input type="password" id="loginPass" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()" />
+          <input type="password" id="loginPass" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()" />
         </div>
         <button class="check-btn" onclick="doLogin()" style="margin-top:10px;display:flex;align-items:center;justify-content:center;gap:8px">
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.49 · ${new Date().getFullYear()}
+          HospesAI · v3.50 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
