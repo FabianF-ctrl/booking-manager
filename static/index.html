@@ -1664,6 +1664,32 @@ function nl(n) { return n===1 ? "łóżko" : (n%10>=2 && n%10<=4 && (n%100<10 ||
 function nm(n) { return n===1 ? "miesiąc" : (n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20)) ? "miesiące" : "miesięcy"; }
 function currentPeriod() { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}`; }
 
+// v3.41 — Walidacja + parsowanie okresu mediów (format RRRR-MM, miesiąc 01–12).
+// JEDNO źródło prawdy, używane wszędzie gdzie media wchodzą do raportów. Wcześniej
+// było 4× skopiowane `period.split("-").map(Number)` + ręczne porównanie stringów —
+// nieprawidłowy okres (np. "2026-0600" wpisany ręcznie na Firefoksie/Safari, gdzie
+// <input type=month> degraduje do pola tekstowego) psuł filtrowanie po okresie
+// (raz wliczony, raz nie, zależnie od miesiąca). Teraz: zły okres → odrzucony.
+function isValidPeriod(period) {
+  return typeof period === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(period);
+}
+// Zwraca {start, endExcl} jako "RRRR-MM-DD" (koniec wykluczony) albo null gdy zły format.
+function periodToRange(period) {
+  if (!isValidPeriod(period)) return null;
+  const [y, mn] = period.split("-").map(Number);
+  const start = `${y}-${String(mn).padStart(2, "0")}-01`;
+  const endExcl = mn === 12 ? `${y + 1}-01-01` : `${y}-${String(mn + 1).padStart(2, "0")}-01`;
+  return { start, endExcl };
+}
+// Czy okres (RRRR-MM) nakłada się z zakresem [rangeFrom, rangeTo) ("RRRR-MM-DD", koniec
+// wykluczony)? Brak zakresu (null/null) = bez filtra = true. Zły okres = false.
+function periodOverlapsRange(period, rangeFrom, rangeTo) {
+  const r = periodToRange(period);
+  if (!r) return false;
+  if (!rangeFrom || !rangeTo) return true;
+  return r.start < rangeTo && r.endExcl > rangeFrom;
+}
+
 // Format zakresu dla rezerwacji — uwzględnia stałego najemcę z otwartym końcem.
 // Stały najemca z permanentEnd=null → "od X · stały najemca"
 // Stały najemca zakończony → "od X · do Y (zakończony)"
@@ -3077,58 +3103,10 @@ function buildRoomDetailModal() {
           <span>${actualN} ${nw(actualN)} · ${b.actualDays[0]} → ${b.actualDays[b.actualDays.length-1]}</span>
         </div>` : "";
 
-    // ── Media costs for booking's months ──────────────────────
-    const bookingEnd = getActualEnd(b) || b.to;
-    const bookingPeriods = [];
-    {
-      let pd = new Date(parseDate(b.from).getFullYear(), parseDate(b.from).getMonth(), 1);
-      const pdEnd = parseDate(bookingEnd);
-      while (pd <= pdEnd) {
-        bookingPeriods.push(`${pd.getFullYear()}-${String(pd.getMonth()+1).padStart(2,"0")}`);
-        pd = new Date(pd.getFullYear(), pd.getMonth()+1, 1);
-      }
-    }
-    let totalMediaCost = 0;
-    const mediaHtml = bookingPeriods.map(period => {
-      const m = getRoomMedia(b.roomId, period);
-      const s = sumMediaObj(m);
-      totalMediaCost += s;
-      if (s === 0 && invoices.filter(inv => inv.roomId === b.roomId && inv.period === period).length === 0) return "";
-      const details = [];
-      const detailItem = (icon, value) => `<span style="display:inline-flex;align-items:center;gap:4px">${icon} ${value}</span>`;
-      if (parseFloat(m.electricity) > 0) details.push(detailItem(ICONS.zap(11), `${parseFloat(m.electricity).toFixed(2)} zł`));
-      if (parseFloat(m.gas) > 0)         details.push(detailItem(ICONS.flame(11), `${parseFloat(m.gas).toFixed(2)} zł`));
-      if (parseFloat(m.water) > 0)       details.push(detailItem(ICONS.droplet(11), `${parseFloat(m.water).toFixed(2)} zł`));
-      (m.others||[]).forEach(o => { if (parseFloat(o.amount) > 0) details.push(detailItem(ICONS.pin(10), `${esc(o.label||"Inne")}: ${parseFloat(o.amount).toFixed(2)} zł`)); });
-      const periodInvs = invoices.filter(inv => inv.roomId === b.roomId && inv.period === period);
-      return `<div style="padding:5px 8px;border-radius:var(--radius);background:var(--surface2);margin-bottom:4px">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <span style="font-size:11px;font-weight:600;color:var(--text2);font-variant-numeric:tabular-nums">${period}</span>
-          ${s > 0 ? `<span style="font-size:11px;font-weight:700;color:var(--orange)">${s.toFixed(2)} zł</span>` : ""}
-        </div>
-        ${details.length > 0 ? `<div style="font-size:10px;color:var(--text3);margin-top:2px">${details.join(" &nbsp;·&nbsp; ")}</div>` : ""}
-        ${periodInvs.length > 0 ? `<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:4px">
-          ${periodInvs.map(inv => `<a href="${inv.url||"#"}" target="_blank"
-            style="font-size:10px;color:var(--blue);text-decoration:none;padding:2px 7px;border-radius:3px;background:var(--blue-light);display:inline-flex;align-items:center;gap:4px">
-            ${ICONS.fileText(10)} ${esc(inv.filename||"Faktura")}</a>`).join("")}
-        </div>` : ""}
-      </div>`;
-    }).join("");
-
-    const mediaSection = (mediaHtml || totalMediaCost > 0) ? `
-      <div style="border-top:1px solid var(--border);margin:8px 0"></div>
-      <div style="font-size:11px;font-weight:700;color:var(--orange);margin-bottom:6px">Media / faktury</div>
-      ${mediaHtml || `<div style="font-size:11px;color:var(--text3)">Brak wpisów mediów.</div>`}
-      ${totalMediaCost > 0 ? `
-      <div class="room-booking-row" style="border-top:1px solid var(--border);margin-top:4px;padding-top:4px">
-        <span>Media łącznie</span>
-        <span style="color:var(--orange);font-weight:700">zł${totalMediaCost.toFixed(2)}</span>
-      </div>
-      <div class="room-booking-row">
-        <span>Netto <span style="color:var(--text3);font-weight:400">(przychód − media)</span></span>
-        <span style="color:var(--green);font-weight:700">zł${Math.max(0, (actualTotal ?? total) - totalMediaCost).toFixed(2)}</span>
-      </div>` : ""}
-    ` : "";
+    // v3.41 — usunięta sekcja "Media / faktury" z modalu pokoju. Media są teraz
+    // kosztem CAŁEGO budynku (per-location), więc odejmowanie pełnych mediów budynku
+    // od przychodu pojedynczego pokoju zawyżało koszt. Media budynku są poprawnie
+    // pokazane w Raportach (per budynek) i na Wykresach. Tu byłby mylący duplikat.
 
     const detailWarn = getPaymentWarning(b);
     const detailWarnBanner = detailWarn ? `
@@ -3183,8 +3161,6 @@ function buildRoomDetailModal() {
           <span style="color:var(--orange);font-weight:600">zł${remaining.toLocaleString()}</span>
         </div>` : ""}
         ${priceNote}
-
-        ${mediaSection}
 
         <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
           <button class="cal-nav-btn" data-edit-from-detail="${b.id}" style="flex:1;padding:6px 10px;font-size:12px">Edytuj</button>
@@ -3423,11 +3399,7 @@ function buildReports() {
     const [keyId, period] = key.split("__");
     if (!_validLocs.has(keyId)) return;
     if (!periodRange) { totMedia += sumMediaObj(m); return; }
-    if (!period) return;
-    const pStart = period + "-01";
-    const [y, mn] = period.split("-").map(Number);
-    const pEnd = `${mn === 12 ? y+1 : y}-${String(mn === 12 ? 1 : mn+1).padStart(2,"0")}-01`;
-    if (pStart < periodRange.to && pEnd > periodRange.from) totMedia += sumMediaObj(m);
+    if (periodOverlapsRange(period, periodRange.from, periodRange.to)) totMedia += sumMediaObj(m);
   });
 
   // Data rozliczenia = ostatnia odnotowana wpłata (z paidMonths stałych najemców
@@ -3521,10 +3493,7 @@ function buildReports() {
       // v3.39: media per-LOCATION (nie per room) — klucz to loc.id
       getRoomMediaPeriods(loc.id).forEach(period => {
         if (!periodRange) { locMedia += sumRoomMedia(loc.id, period); return; }
-        const pStart = period + "-01";
-        const [py, pm] = period.split("-").map(Number);
-        const pEnd = `${pm === 12 ? py+1 : py}-${String(pm === 12 ? 1 : pm+1).padStart(2,"0")}-01`;
-        if (pStart < periodRange.to && pEnd > periodRange.from) {
+        if (periodOverlapsRange(period, periodRange.from, periodRange.to)) {
           locMedia += sumRoomMedia(loc.id, period);
         }
       });
@@ -3773,10 +3742,6 @@ function buildReportRow(b, loc, periodRange) {
   const paid = bookingPaidInRange(b, room, rFrom, rTo) * _rowFactor;
   const remaining = Math.max(0, total - paid);
   const overdueMonths = isPerm ? getPermanentOverdueMonths(b, b.from, b.payment?.timing) : [];
-
-  // Room media for current period
-  const cp = currentPeriod();
-  const mediaAmt = sumRoomMedia(b.roomId, cp);
 
   const pmLabels = { invoice:"Faktura", cash:"Gotówka", transfer:"Przelew" };
   const pmCls = { invoice:"pm-invoice", cash:"pm-cash", transfer:"pm-transfer" };
@@ -4061,11 +4026,7 @@ function buildCharts() {
   Object.entries(roomMedia).forEach(([key, m]) => {
     const [keyId, period] = key.split("__");
     if (!_validLocsK.has(keyId)) return;
-    if (!period) return;
-    const pStart = period + "-01";
-    const [py, pm] = period.split("-").map(Number);
-    const pEnd = `${pm === 12 ? py+1 : py}-${String(pm === 12 ? 1 : pm+1).padStart(2,"0")}-01`;
-    if (pStart < chartToExcl && pEnd > chartFromExcl) kpiMedia += sumMediaObj(m);
+    if (periodOverlapsRange(period, chartFromExcl, chartToExcl)) kpiMedia += sumMediaObj(m);
   });
   const kpiProfitPlanned = kpiRevenue - kpiMedia;
   const kpiProfitRealized = kpiPaid - kpiMedia;
@@ -7086,6 +7047,10 @@ function attachEvents() {
         const [ey, em2] = earliest.split("-").map(Number);
         period = em2 === 1 ? `${ey-1}-12` : `${ey}-${String(em2-1).padStart(2,"0")}`;
       }
+      // v3.41 — walidacja okresu: na Firefoksie/Safari <input type=month> bywa polem
+      // tekstowym → user może wpisać "2026-0600". Taki wpis psuł filtrowanie w raportach,
+      // więc odrzucamy go tutaj (i po stronie backendu).
+      if (!isValidPeriod(period)) { showToast("❌ Nieprawidłowy okres — użyj formatu RRRR-MM (np. 2026-06)"); return; }
       if (roomMedia[getRoomMediaKey(roomId, period)]) { showToast("Wpis dla tego okresu już istnieje"); return; }
       const data = { electricity:0, gas:0, water:0, others:[], note:"" };
       try {
@@ -8212,11 +8177,7 @@ function generatePrintReport(fromDate, toDate) {
   Object.entries(roomMedia).forEach(([key, m]) => {
     const [keyId, period] = key.split("__");
     if (!_validLocsP.has(keyId)) return;
-    if (!period) return;
-    const pStart = period + "-01";
-    const [y, mn] = period.split("-").map(Number);
-    const pEnd = `${mn === 12 ? y+1 : y}-${String(mn === 12 ? 1 : mn+1).padStart(2,"0")}-01`;
-    if (pStart < toDate && pEnd > fromDate) totMedia += sumMediaObj(m);
+    if (periodOverlapsRange(period, fromDate, toDate)) totMedia += sumMediaObj(m);
   });
 
   const totProfit = totRevenue - totMedia;
@@ -8453,7 +8414,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.40 · ${new Date().getFullYear()}
+          HospesAI · v3.41 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>

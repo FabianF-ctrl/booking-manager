@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 import json
 import os
+import re
 import shutil
 import secrets
 import bcrypt
@@ -345,8 +346,14 @@ def save_media(media: dict):
 def get_media(user=Depends(get_current_user)):
     return load_media()
 
+_PERIOD_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")  # RRRR-MM, miesiąc 01–12
+
 @app.put("/api/media/{room_id}/{period}")
 def save_room_media(room_id: str, period: str, data: dict, user=Depends(get_current_user)):
+    # v3.41 — walidacja okresu po stronie serwera (drugi bezpiecznik obok frontu).
+    # Bez tego dowolny string trafiał jako klucz i psuł filtrowanie w raportach.
+    if not _PERIOD_RE.match(period or ""):
+        raise HTTPException(status_code=400, detail="Okres musi mieć format RRRR-MM (miesiąc 01–12)")
     media = load_media()
     key = f"{room_id}__{period}"
     media[key] = data
