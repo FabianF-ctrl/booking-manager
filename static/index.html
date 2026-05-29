@@ -3866,19 +3866,10 @@ function buildMediaSectionForLoc(loc) {
   // Wszystkie okresy zapisane dla tego obiektu + bieżący (jeśli nie ma)
   const periods = allPeriods.includes(cp) ? allPeriods : [cp, ...allPeriods];
 
-  // Łączny przychód obiektu (do "Netto" w summary, brutto*factor)
-  let locRevenueTotal = 0;
-  savedBookings.filter(b => b.locId === loc.id).forEach(b => {
-    const room = loc.rooms.find(r => r.id === b.roomId);
-    const nights = getActualNights(b);
-    locRevenueTotal += calcBookingTotal(b, room, nights) * bookingNettoFactor(b);
-  });
-  const locNet = Math.max(0, locRevenueTotal - locMediaTotal);
-
   // Header pojedynczy summary dla całego obiektu
   html += `
     <div style="padding:10px 14px;background:var(--orange-light);border-bottom:1px dashed var(--orange-border);font-size:11px;color:var(--orange);font-weight:600">
-      ${locMediaTotal > 0 ? `Łącznie media obiektu: zł${locMediaTotal.toFixed(2)} · Przychód netto (brutto-media-vat): zł${locNet.toFixed(2)}` : "Brak wpisów media. Dodaj okres niżej."}
+      ${locMediaTotal > 0 ? `Łącznie media obiektu: zł${locMediaTotal.toFixed(2)}` : "Brak wpisów media. Dodaj okres niżej."}
     </div>`;
 
   // Editor — jeden per okres (rzędy electricity/gas/water + others)
@@ -8417,7 +8408,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.42 · ${new Date().getFullYear()}
+          HospesAI · v3.43 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
