@@ -1049,7 +1049,7 @@ body {
   width: 35px; flex-shrink: 0; text-align: center; padding: 10px 0;
   font-size: 11px; font-variant-numeric: tabular-nums; color: var(--text3);
   border-right: 1px solid var(--border);
-  transition: filter 0.1s; cursor: default;
+  transition: filter 0.1s; cursor: pointer;   /* v3.44 — komórka dnia klikalna */
 }
 .preview-day:last-child { border-right: none; }
 .preview-day.is-free { background: #bbf7d0; color: #14532d; }                     /* green */
@@ -1537,6 +1537,7 @@ let state = {
   previewCompareMode: false, // v3.27: toggle — clicks add/remove (max 2) zamiast switch
   previewFilter: "all",      // v3.40 — "all"|"occupied"|"free"|"perm"|"company"|"regular"
   roomDetailModal: null, // { roomId, locId }
+  dayDetailModal: null,  // v3.44 — { roomId, locId, dateStr } — szczegóły pojedynczego dnia z Podglądu
   billingMode: "room",   // "room" | "employee" — tryb rozliczenia firmowego
   customPrice: "",        // nadpisanie ceny finalnej, pusty = brak
   vatRate: "8",           // v3.37: stawka VAT — "8" (krótkoterm) lub "23" (długoterm)
@@ -2494,6 +2495,7 @@ function buildAppCore() {
     ${state.modal ? buildModal() : ""}
     ${state.editModal ? buildEditModal() : ""}
     ${state.roomDetailModal ? buildRoomDetailModal() : ""}
+    ${state.dayDetailModal ? buildDayDetailModal() : ""}
     ${state.printReport ? buildPrintReportModal() : ""}
     ${state.imageCropModal ? buildImageCropModal() : ""}
     ${state.printReportHtml || ""}
@@ -3185,6 +3187,130 @@ function buildRoomDetailModal() {
           ${bookings.length === 0
             ? `<div class="no-results-box">Brak rezerwacji dla tego pokoju.</div>`
             : cards}
+        </div>
+      </div>
+    </div>`;
+}
+
+// v3.44 — Modal szczegółów POJEDYNCZEGO dnia (klik w komórkę kalendarza Podglądu).
+// Pokazuje status pokoju dokładnie w tym dniu: wolny / zajęty / stały najemca,
+// a dla zajętego — kartę rezerwacji obejmującej ten dzień (+ skok do pełnej historii).
+function buildDayDetailModal() {
+  const { roomId, locId, dateStr } = state.dayDetailModal;
+  const loc = DATA.locations.find(l => l.id === locId);
+  const room = loc?.rooms.find(r => r.id === roomId);
+  if (!loc || !room) return "";
+
+  const DOW_FULL = ["niedziela","poniedziałek","wtorek","środa","czwartek","piątek","sobota"];
+  const dt = parseDate(dateStr);
+  const dowName = DOW_FULL[dt.getDay()];
+  const dateLabel = `${dowName.charAt(0).toUpperCase()}${dowName.slice(1)}, ${fmtDateLong(dateStr)}`;
+
+  const s = getRoomDayStatus(roomId, dateStr);
+  const b = s.booking;
+
+  const statusBadge = s.status === "perm"
+    ? `<span class="badge" style="background:var(--blue);color:#fff;display:inline-flex;align-items:center;gap:4px">${ICONS.house(11)} Stały najemca</span>`
+    : s.status === "occupied"
+      ? `<span class="badge badge-occupied">Zajęty</span>`
+      : `<span class="badge badge-free">Wolny</span>`;
+
+  let bodyHtml;
+  if (s.status === "free" || !b) {
+    // Wolny dzień — pokaż najbliższą rezerwację po tym dniu jako kontekst (jeśli jest).
+    const future = savedBookings
+      .filter(x => x.roomId === roomId && x.locId === locId)
+      .map(x => {
+        const isP = x.isPermanent && x.bookingType !== "company";
+        const start = isP ? (x.permanentStart || x.from) : x.from;
+        return { x, start };
+      })
+      .filter(o => o.start > dateStr)
+      .sort((a, c) => a.start.localeCompare(c.start));
+    const next = future[0];
+    const nextWho = next ? (next.x.bookingType === "company"
+      ? (next.x.companyName || "—")
+      : (next.x.guests?.map(g => g.name).filter(Boolean).join(", ") || "—")) : null;
+    bodyHtml = `
+      <div class="no-results-box" style="text-align:center;padding:18px 12px">
+        <div style="font-size:14px;color:var(--green);font-weight:700">✓ Pokój wolny tego dnia</div>
+        ${next
+          ? `<div style="font-size:11px;color:var(--text2);margin-top:8px">Najbliższa rezerwacja: <strong>${fmtDate(next.start)}</strong> — ${esc(nextWho)}</div>`
+          : `<div style="font-size:11px;color:var(--text3);margin-top:8px">Brak nadchodzących rezerwacji tego pokoju.</div>`}
+      </div>`;
+  } else {
+    const isCompany = b.bookingType === "company";
+    const isPerm = b.isPermanent && b.bookingType !== "company";
+    const who = isCompany ? (b.companyName || "—") : (b.guests?.[0]?.name || "—");
+    const reservedNights = diffDays(b.from, b.to);
+
+    const methodIcons = { invoice: ICONS.receipt(12), cash: ICONS.banknote(12), transfer: ICONS.landmark(12) };
+    const methodNames = { invoice: "Faktura", cash: "Gotówka", transfer: "Przelew" };
+    const methodLabel = b.payment?.method
+      ? `<span style="display:inline-flex;align-items:center;gap:5px">${methodIcons[b.payment.method]} ${methodNames[b.payment.method]}</span>` : "—";
+    const timingLabel = { prepaid:"przed pobytem", postpaid:"po pobycie" }[b.payment?.timing] || "";
+
+    const total = calcBookingTotal(b, room, isPerm ? getActualNights(b) : reservedNights);
+    let paid;
+    if (isPerm) {
+      const bp = (b.priceAtBooking?.basePrice ?? room?.basePrice) || 0;
+      paid = getPermanentPaidRevenue(b, bp, b.from, null, null, b.payment?.timing);
+    } else {
+      const _p = parseFloat(b.payment?.amountPaid); paid = isNaN(_p) ? 0 : _p;
+    }
+    const remaining = Math.max(0, total - paid);
+    const payColor = paid >= total ? "var(--green)" : paid > 0 ? "var(--orange)" : "var(--red)";
+
+    const guestRows = !isCompany && b.guests?.length > 0
+      ? b.guests.map((g,i) => `<div class="room-booking-row"><span>${ICONS.user(13)} Gość ${i+1}</span><span style="text-align:right"><strong>${esc(g.name||"—")}</strong>${g.phone?`<br><a href="tel:${esc(g.phone)}" style="color:var(--blue);font-size:11px;text-decoration:none">${ICONS.phone(11)} ${esc(g.phone)}</a>`:""}</span></div>`).join("")
+      : isCompany ? `<div class="room-booking-row"><span style="display:inline-flex;align-items:center;gap:5px">${ICONS.building(11)} Firma</span><span><strong>${esc(b.companyName||"—")}</strong> · ${b.guests?.length||0} os.</span></div>` : "";
+
+    const warn = getPaymentWarning(b);
+    const warnBanner = warn ? `<div style="background:${warn.level==="danger"?"var(--red-light, #fee)":"var(--orange-light)"};color:${warn.level==="danger"?"var(--red)":"var(--orange)"};border:1.5px solid ${warn.level==="danger"?"var(--red)":"var(--orange-border)"};border-radius:var(--radius);padding:8px 10px;margin-bottom:8px;display:flex;align-items:flex-start;gap:8px;font-size:11px"><span style="flex-shrink:0;margin-top:1px">${ICONS.alertTriangle(13)}</span><div style="flex:1"><strong>${esc(warn.title)}.</strong> ${esc(warn.message)}</div></div>` : "";
+
+    const dateRange = isPerm
+      ? `od ${fmtDate(b.permanentStart || b.from)} · ${b.permanentEnd ? `do ${fmtDate(b.permanentEnd)}` : `<strong style="color:var(--green)">do odwołania</strong>`}`
+      : `${fmtDate(b.from)} → ${fmtDate(b.to)} · <strong>${reservedNights} ${nw(reservedNights)}</strong>`;
+
+    bodyHtml = `
+      <div class="room-booking-card" style="border-left:3px solid ${s.status==="perm"?"var(--blue)":"var(--red)"}">
+        <div class="room-booking-card-hdr">
+          <span class="room-booking-card-title">${esc(who)}</span>
+          <span class="ibadge ${isCompany?"ibadge-co":"ibadge-in"}">${isCompany?"Firma":"Indyw."}</span>
+        </div>
+        ${warnBanner}
+        <div class="room-booking-row">
+          <span style="display:inline-flex;align-items:center;gap:6px">${ICONS.calendar(12)} ${isPerm?"Stały najemca":"Rezerwacja"}</span>
+          <span>${dateRange}</span>
+        </div>
+        <div style="border-top:1px solid var(--border);margin:8px 0"></div>
+        ${guestRows}
+        <div style="border-top:1px solid var(--border);margin:8px 0"></div>
+        <div class="room-booking-row"><span>Płatność</span><span>${methodLabel}${timingLabel?" · "+timingLabel:""}</span></div>
+        <div class="room-booking-row"><span>Kwota</span><span>zł${total.toLocaleString()}</span></div>
+        <div class="room-booking-row"><span>Wpłacono</span><span style="color:${payColor};font-weight:600">zł${paid.toLocaleString()}</span></div>
+        ${remaining>0?`<div class="room-booking-row"><span>Do pobrania</span><span style="color:var(--orange);font-weight:600">zł${remaining.toLocaleString()}</span></div>`:""}
+        <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
+          <button class="cal-nav-btn" data-edit-from-detail="${b.id}" style="flex:1;padding:6px 10px;font-size:12px">Edytuj rezerwację</button>
+          <button class="cal-nav-btn" data-day-to-room="1" style="flex:1;padding:6px 10px;font-size:12px">Wszystkie rezerwacje pokoju</button>
+        </div>
+      </div>`;
+  }
+
+  return `
+    <div class="room-detail-overlay" id="dayDetailOverlay">
+      <div class="room-detail-modal" style="max-width:440px">
+        <div class="room-detail-hdr">
+          <div>
+            <h3>${locIcon(loc, 16)} ${esc(loc.name)} · ${esc(room.name)}</h3>
+            <div style="font-size:11px;color:var(--text2);margin-top:5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <span style="display:inline-flex;align-items:center;gap:4px">${ICONS.calendar(11)} ${dateLabel}</span> ${statusBadge}
+            </div>
+          </div>
+          <button class="close-btn" id="dayDetailClose">✕</button>
+        </div>
+        <div class="room-detail-body">
+          ${bodyHtml}
         </div>
       </div>
     </div>`;
@@ -4654,6 +4780,33 @@ function buildPreview() {
   `;
 }
 
+// Status pokoju w danym dniu (YYYY-MM-DD): "free" | "occupied" | "perm" + booking + guestName.
+// Jeden źródłowy stan dla: kolorów komórek Podglądu i modalu szczegółów dnia (v3.44).
+// Permanent bez końca → aktywny w nieskończoność ("9999-12-31").
+function getRoomDayStatus(roomId, dayStr) {
+  for (const b of savedBookings) {
+    if (b.roomId !== roomId) continue;
+    const isPerm = b.isPermanent && b.bookingType !== "company";
+    const hasPermGuest = (b.guests || []).some(g => g.isPermanent);
+    if (isPerm || hasPermGuest) {
+      const pStart = b.permanentStart || b.from;
+      const pEnd = b.permanentEnd || "9999-12-31";
+      if (pStart <= dayStr && pEnd > dayStr) {
+        const who = b.bookingType === "company" ? b.companyName : (b.guests?.[0]?.name || "—");
+        return { status: "perm", booking: b, guestName: who };
+      }
+    } else {
+      if (b.from <= dayStr && b.to > dayStr) {
+        const who = b.bookingType === "company"
+          ? b.companyName
+          : (b.guests || []).map(g => g.name).filter(Boolean).join(", ");
+        return { status: "occupied", booking: b, guestName: who };
+      }
+    }
+  }
+  return { status: "free" };
+}
+
 // Detail: hero + month tabs (TOP, z arrowami + compare toggle) + grid + notatki.
 // v3.27: multi-month select (max 2), weekend bolding/ramka, tabs przeniesione pod hero.
 function buildPreviewDetail(locId) {
@@ -4691,30 +4844,9 @@ function buildPreviewDetail(locId) {
     }
   });
 
-  // Helper: status komórki (room, day). Permanent bez końca → traktowany jako aktywny w nieskończoność.
-  const getCellStatus = (roomId, dayStr) => {
-    for (const b of savedBookings) {
-      if (b.roomId !== roomId) continue;
-      const isPerm = b.isPermanent && b.bookingType !== "company";
-      const hasPermGuest = (b.guests || []).some(g => g.isPermanent);
-      if (isPerm || hasPermGuest) {
-        const pStart = b.permanentStart || b.from;
-        const pEnd = b.permanentEnd || "9999-12-31";
-        if (pStart <= dayStr && pEnd > dayStr) {
-          const who = b.bookingType === "company" ? b.companyName : (b.guests?.[0]?.name || "—");
-          return { status: "perm", booking: b, guestName: who };
-        }
-      } else {
-        if (b.from <= dayStr && b.to > dayStr) {
-          const who = b.bookingType === "company"
-            ? b.companyName
-            : (b.guests || []).map(g => g.name).filter(Boolean).join(", ");
-          return { status: "occupied", booking: b, guestName: who };
-        }
-      }
-    }
-    return { status: "free" };
-  };
+  // Helper: status komórki (room, day) — deleguje do modułowego getRoomDayStatus,
+  // żeby kafelki kalendarza i modal szczegółów dnia liczyły status tak samo (v3.44).
+  const getCellStatus = (roomId, dayStr) => getRoomDayStatus(roomId, dayStr);
 
   // Revenue/paid agregowany przez wszystkie wybrane miesiące.
   const computeRoomFinances = (room) => {
@@ -4761,7 +4893,7 @@ function buildPreviewDetail(locId) {
       const tooltip = s.guestName
         ? `${dowLetters[day.dow]} ${day.day}.${String(day.mn).padStart(2,"0")} · ${s.guestName}`
         : `${dowLetters[day.dow]} ${day.day}.${String(day.mn).padStart(2,"0")} · wolny`;
-      return `<div class="preview-day ${statusCls} ${boundaryCls} ${weekendCls}" title="${esc(tooltip)}">${day.day}</div>`;
+      return `<div class="preview-day ${statusCls} ${boundaryCls} ${weekendCls}" data-pvday="${day.dateStr}" data-pvroom="${room.id}" data-pvloc="${loc.id}" title="${esc(tooltip)}">${day.day}</div>`;
     }).join("");
 
     if (filter === "occupied" && occupiedDays === 0 && permDays === 0) return "";
@@ -7262,6 +7394,36 @@ function attachEvents() {
   });
   document.getElementById("roomDetailClose")?.addEventListener("click", () => { state.roomDetailModal = null; render(); });
 
+  // v3.44 — Day detail modal: klik w pojedynczą komórkę dnia w Podglądzie.
+  // stopPropagation, żeby nie odpalił też handler wiersza ([data-room-detail]).
+  document.querySelectorAll("[data-pvday]").forEach(cell => {
+    cell.addEventListener("click", e => {
+      e.stopPropagation();
+      state.dayDetailModal = {
+        roomId: cell.dataset.pvroom,
+        locId: parseInt(cell.dataset.pvloc),
+        dateStr: cell.dataset.pvday
+      };
+      render();
+    });
+  });
+  document.getElementById("dayDetailClose")?.addEventListener("click", () => { state.dayDetailModal = null; render(); });
+  // Klik w tło (poza kartą) zamyka modal dnia — to lekki podgląd, nie formularz.
+  document.getElementById("dayDetailOverlay")?.addEventListener("click", e => {
+    if (e.target === e.currentTarget) { state.dayDetailModal = null; render(); }
+  });
+  // "Wszystkie rezerwacje pokoju" — przeskok z modalu dnia do pełnej historii pokoju.
+  document.querySelectorAll("[data-day-to-room]").forEach(btn => {
+    btn.addEventListener("click", e => {
+      e.stopPropagation();
+      if (!state.dayDetailModal) return;
+      const { roomId, locId } = state.dayDetailModal;
+      state.dayDetailModal = null;
+      state.roomDetailModal = { roomId, locId };
+      render();
+    });
+  });
+
   // "Edytuj" button inside room detail modal
   document.querySelectorAll("[data-edit-from-detail]").forEach(btn => {
     btn.addEventListener("click", e => {
@@ -7277,6 +7439,7 @@ function attachEvents() {
         while (d < end) { actualDays.push(toStr(d)); d = addDays(d, 1); }
       }
       state.roomDetailModal = null;
+      state.dayDetailModal = null;   // v3.44 — Edytuj może być wywołane też z modalu dnia
       state.editModal = {
         bookingId: b.id,
         from: b.from, to: b.to, bufferDays: b.bufferDays||0,
@@ -8408,7 +8571,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.43 · ${new Date().getFullYear()}
+          HospesAI · v3.44 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
@@ -8759,6 +8922,9 @@ async function deleteInvoiceAPI(invId) {
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && state.mobileNavOpen) {
     state.mobileNavOpen = false;
+    render();
+  } else if (e.key === "Escape" && state.dayDetailModal) {   // v3.44 — zamknij modal dnia
+    state.dayDetailModal = null;
     render();
   }
 });
