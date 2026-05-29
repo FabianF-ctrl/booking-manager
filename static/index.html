@@ -374,7 +374,8 @@ body {
 .status-loc-hdr strong { font-size: 14px; font-weight: 700; }
 .status-loc-hdr em { font-size: 11px; color: var(--text2); font-style: normal; }
 .status-loc-hdr-meta { margin-left: auto; display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--text2); font-family: inherit; font-variant-numeric: tabular-nums; }
-.status-loc-toggle { color: var(--text3); font-size: 14px; transition: transform 0.15s; }
+.status-loc-toggle { color: var(--text3); font-size: 13px; background: none; border: none; cursor: pointer; padding: 5px 9px; margin: -5px -4px -5px 0; border-radius: 7px; display: inline-flex; align-items: center; transition: transform 0.15s, background 0.12s, color 0.12s; }
+.status-loc-toggle:hover { background: var(--surface); color: var(--text); }
 
 .status-loc-body {
   padding: 0;
@@ -3019,7 +3020,7 @@ function buildStatusLocCard(loc, from, to) {
 
   return `
     <div class="status-loc-card ${isCollapsed?"is-collapsed":""}" data-status-loc="${loc.id}">
-      <div class="status-loc-hdr" data-status-toggle="${loc.id}">
+      <div class="status-loc-hdr" title="Kliknij aby otworzyć szczegóły obiektu">
         <span class="loc-icon">${locIcon(loc, 18)}</span>
         <strong>${esc(loc.name)}</strong>
         <em>· ${esc(loc.city)}</em>
@@ -3027,7 +3028,7 @@ function buildStatusLocCard(loc, from, to) {
           <span title="Zajęte / wszystkie"><span style="color:${occupiedCount>0?"var(--red)":"var(--green)"};font-weight:600">${occupiedCount}</span> / ${loc.rooms.length}</span>
           ${permanentCount > 0 ? `<span style="color:var(--green);display:inline-flex;align-items:center;gap:4px" title="Stali najemcy">${ICONS.house(13)} ${permanentCount}</span>` : ""}
           <span style="color:var(--green)">${freeCount} wolnych</span>
-          <span class="status-loc-toggle" style="transform:rotate(${isCollapsed?-90:0}deg)">▼</span>
+          <button class="status-loc-toggle" data-status-toggle="${loc.id}" title="${isCollapsed?"Rozwiń":"Zwiń"} listę pokoi" aria-label="${isCollapsed?"Rozwiń":"Zwiń"}" style="transform:rotate(${isCollapsed?-90:0}deg)">▼</button>
         </div>
       </div>
       ${isCollapsed ? "" : `<div class="status-loc-body">${rows}</div>`}
@@ -7075,8 +7076,18 @@ function attachEvents() {
         : filteredLocs.map(loc => buildStatusLocCard(loc, from, to)).join("");
       grid.querySelectorAll(".status-loc-card").forEach(card => {
         card.addEventListener("click", (e) => {
-          if (e.target.closest("[data-room-detail]")) return;
+          if (e.target.closest("[data-room-detail]") || e.target.closest("[data-status-toggle]")) return;
           state.statusDetailLocId = parseInt(card.dataset.statusLoc); render();
+        });
+      });
+      // v3.47 — po przebudowie gridu w live-search trzeba też podpiąć chevrony (zwijanie)
+      grid.querySelectorAll("[data-status-toggle]").forEach(el => {
+        el.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const locId = parseInt(el.dataset.statusToggle);
+          if (!state.statusLocCollapsed) state.statusLocCollapsed = {};
+          state.statusLocCollapsed[locId] = !state.statusLocCollapsed[locId];
+          render();
         });
       });
     }
@@ -7095,10 +7106,11 @@ function attachEvents() {
     state.statusSearched = false; state.statusFrom = ""; state.statusTo = ""; render();
   });
 
-  // Status loc cards — click to drill down (skip if click was on a room row)
+  // Status loc cards — click to drill down (skip if click był na wierszu pokoju
+  // lub na chevronie zwijania — v3.47).
   document.querySelectorAll(".status-loc-card").forEach(card => {
     card.addEventListener("click", (e) => {
-      if (e.target.closest("[data-room-detail]")) return;
+      if (e.target.closest("[data-room-detail]") || e.target.closest("[data-status-toggle]")) return;
       state.statusDetailLocId = parseInt(card.dataset.statusLoc);
       render();
     });
@@ -7154,10 +7166,11 @@ function attachEvents() {
     });
   });
 
-  // Toggle expand/collapse obiektu w Statusie
+  // Toggle expand/collapse obiektu w Statusie (chevron ▼). v3.47 — stopPropagation,
+  // żeby klik w chevron NIE wchodził też w szczegóły obiektu (handler karty niżej).
   document.querySelectorAll("[data-status-toggle]").forEach(el => {
     el.addEventListener("click", (e) => {
-      // Klik w toggle row, ale jeśli kliknięty pokój wewnętrzny — handler pokój zadziała pierwszy
+      e.stopPropagation();
       const locId = parseInt(el.dataset.statusToggle);
       if (!state.statusLocCollapsed) state.statusLocCollapsed = {};
       state.statusLocCollapsed[locId] = !state.statusLocCollapsed[locId];
@@ -8615,7 +8628,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.46 · ${new Date().getFullYear()}
+          HospesAI · v3.47 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
