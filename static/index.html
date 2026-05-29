@@ -6338,10 +6338,17 @@ function buildEditModal() {
                 // Pozwala odhaczyć przyszłe miesiące (płatność z góry, też na lata).
                 const extraYears = state.editModal.paidMonthsExtraYears || 0;
                 const startYm = previewPStart.slice(0,7);
-                const endYm = isOpenEnded ? `${now.getFullYear() + extraYears}-12` : previewPEndRaw.slice(0,7);
-                // pEnd do PRO-RATY: otwarty najemca → koniec zakresu wyświetlania (przyszłe miesiące
-                // = pełna stawka, nie 0); zamknięty → faktyczna data końca.
-                const previewPEnd = previewPEndRaw || `${now.getFullYear() + extraYears + 1}-01-01`;
+                let endYm = isOpenEnded ? `${now.getFullYear() + extraYears}-12` : previewPEndRaw.slice(0,7);
+                // v3.52 — auto-rozszerz horyzont do najpóźniejszego ODHACZONEGO miesiąca, żeby
+                // przedpłaty na przyszłość były zawsze widoczne (bez ręcznego "Dodaj rok" po ponownym
+                // wejściu w edycję) i wliczane do "Suma zaznaczonych wpłat".
+                const _paidSorted = [...paidMonths].filter(Boolean).sort();
+                const _latestPaid = _paidSorted.length ? _paidSorted[_paidSorted.length - 1] : null;
+                if (_latestPaid && _latestPaid > endYm) endYm = _latestPaid;
+                // pEnd do PRO-RATY: otwarty → koniec zakresu wyświetlania (przyszłe miesiące = pełna
+                // stawka, nie 0); zamknięty → faktyczna data końca.
+                const [_ey, _em] = endYm.split("-").map(Number);
+                const previewPEnd = previewPEndRaw || (_em === 12 ? `${_ey + 1}-01-01` : `${_ey}-${String(_em + 1).padStart(2, "0")}-01`);
                 const displayMonths = [];
                 { let yy = parseInt(startYm.slice(0,4)), mm = parseInt(startYm.slice(5,7));
                   const ey = parseInt(endYm.slice(0,4)), emo = parseInt(endYm.slice(5,7));
@@ -8659,7 +8666,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.51 · ${new Date().getFullYear()}
+          HospesAI · v3.52 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
