@@ -8162,14 +8162,15 @@ function generatePrintReport(fromDate, toDate) {
     const loc = DATA.locations.find(l => l.id === b.locId);
     const room = loc?.rooms.find(r => r.id === b.roomId);
     const t = calcBookingTotal(b, room, getActualNights(b), periodRange);
-    totRevenue += t;
+    const _factor = bookingNettoFactor(b);  // v3.42 — netto (spójnie z raportem na ekranie)
+    totRevenue += t * _factor;
     const isPermPrint = b.isPermanent && b.bookingType !== "company";
     if (isPermPrint) {
       const bp = (b.priceAtBooking?.basePrice ?? room?.basePrice) || 0;
-      totPaid += getPermanentPaidRevenue(b, bp, b.from, periodRange.from, periodRange.to, b.payment?.timing);
+      totPaid += getPermanentPaidRevenue(b, bp, b.from, periodRange.from, periodRange.to, b.payment?.timing) * _factor;
     } else {
       const p = parseFloat(b.payment?.amountPaid);
-      if (!isNaN(p)) totPaid += p;
+      if (!isNaN(p)) totPaid += p * _factor;
     }
   });
   // Media w okresie (v3.39: filtr na valid loc IDs — pomija legacy room-keyed)
@@ -8191,14 +8192,15 @@ function generatePrintReport(fromDate, toDate) {
     byLoc[loc.id].bookings.push(b);
     const room = loc.rooms.find(r => r.id === b.roomId);
     const t = calcBookingTotal(b, room, getActualNights(b), periodRange);
-    byLoc[loc.id].revenue += t;
+    const _factor = bookingNettoFactor(b);  // v3.42 — netto
+    byLoc[loc.id].revenue += t * _factor;
     const isPermLoc = b.isPermanent && b.bookingType !== "company";
     if (isPermLoc) {
       const bp = (b.priceAtBooking?.basePrice ?? room?.basePrice) || 0;
-      byLoc[loc.id].paid += getPermanentPaidRevenue(b, bp, b.from, periodRange.from, periodRange.to, b.payment?.timing);
+      byLoc[loc.id].paid += getPermanentPaidRevenue(b, bp, b.from, periodRange.from, periodRange.to, b.payment?.timing) * _factor;
     } else {
       const p = parseFloat(b.payment?.amountPaid);
-      if (!isNaN(p)) byLoc[loc.id].paid += p;
+      if (!isNaN(p)) byLoc[loc.id].paid += p * _factor;
     }
   });
 
@@ -8218,7 +8220,7 @@ function generatePrintReport(fromDate, toDate) {
 
       <h2>Podsumowanie</h2>
       <div class="pr-summary">
-        <span class="k">Przychód brutto</span><span class="v">${fmtZl(totRevenue)}</span>
+        <span class="k">Przychód netto</span><span class="v">${fmtZl(totRevenue)}</span>
         <span class="k">Koszty mediów</span><span class="v">${fmtZl(totMedia)}</span>
         <span class="k">Wpłacono</span><span class="v">${fmtZl(totPaid)}</span>
         <span class="k">Pozostało do zapłaty</span><span class="v">${fmtZl(totRemaining)}</span>
@@ -8250,15 +8252,16 @@ function generatePrintReport(fromDate, toDate) {
           ${bookings.map((b, i) => {
             const loc = DATA.locations.find(l => l.id === b.locId);
             const room = loc?.rooms.find(r => r.id === b.roomId);
-            const t = calcBookingTotal(b, room, getActualNights(b), periodRange);
+            const _factor = bookingNettoFactor(b);  // v3.42 — netto
+            const t = calcBookingTotal(b, room, getActualNights(b), periodRange) * _factor;
             const isPermRow = b.isPermanent && b.bookingType !== "company";
             let paid;
             if (isPermRow) {
               const bp = (b.priceAtBooking?.basePrice ?? room?.basePrice) || 0;
-              paid = getPermanentPaidRevenue(b, bp, b.from, periodRange.from, periodRange.to, b.payment?.timing);
+              paid = getPermanentPaidRevenue(b, bp, b.from, periodRange.from, periodRange.to, b.payment?.timing) * _factor;
             } else {
               const p = parseFloat(b.payment?.amountPaid);
-              paid = !isNaN(p) ? p : 0;
+              paid = (!isNaN(p) ? p : 0) * _factor;
             }
             const who = b.bookingType === "company"
               ? `${b.companyName || "—"} (${b.guests?.length || 0} os.)`
@@ -8414,7 +8417,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.41 · ${new Date().getFullYear()}
+          HospesAI · v3.42 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
