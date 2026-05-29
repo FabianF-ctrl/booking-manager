@@ -2931,7 +2931,7 @@ function buildStatusLocCard(loc, from, to) {
       const overlapping = getRoomStatusForRange(room.id, from, to) || [];
       if (overlapping.length === 0) {
         return `
-          <div class="status-room-row">
+          <div class="status-room-row status-room-clickable" data-room-detail="${room.id}" data-room-loc="${loc.id}" title="Kliknij aby zobaczyć szczegóły pokoju">
             <div>
               <div class="status-room-name">${esc(room.name)}</div>
             </div>
@@ -2972,7 +2972,7 @@ function buildStatusLocCard(loc, from, to) {
       const st = getRoomStatusToday(room.id);
       if (st.status === "free") {
         return `
-          <div class="status-room-row">
+          <div class="status-room-row status-room-clickable" data-room-detail="${room.id}" data-room-loc="${loc.id}" title="Kliknij aby zobaczyć szczegóły pokoju">
             <div><div class="status-room-name">${esc(room.name)}</div></div>
             <div class="status-badge-col"><span class="badge badge-free">Wolny</span></div>
           </div>`;
@@ -2994,7 +2994,7 @@ function buildStatusLocCard(loc, from, to) {
           </div>`;
       } else {
         return `
-          <div class="status-room-row">
+          <div class="status-room-row status-room-clickable" data-room-detail="${room.id}" data-room-loc="${loc.id}" title="Kliknij aby zobaczyć szczegóły pokoju">
             <div><div class="status-room-name">${esc(room.name)}</div><div class="status-room-info">Bufor do ${fmtDate(st.until)}</div></div>
             <div class="status-badge-col"><span class="badge badge-blocked">Bufor</span></div>
           </div>`;
@@ -8628,7 +8628,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.47 · ${new Date().getFullYear()}
+          HospesAI · v3.48 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
