@@ -1941,9 +1941,45 @@ function getNightsInPeriod(b, rangeFrom, rangeTo) {
 //   - Stały najemca: clipuje wartość do okresu (każdy miesiąc dostaje swoją część).
 //   - Nie-stała rezerwacja: też clipuje przez liczbę nocy które wpadają w okres.
 //   - customPrice: skalowane proporcjonalnie do liczby nocy w okresie / całości.
+// v3.56 — OKRESY ROZLICZENIOWE (billing periods): firma/indywidualna mogą mieć listę okresów
+// { id, from, to, amount, invoiceId }. Granice = półmiesiące (1./16./15./koniec). Przychód okresu
+// liczy się do MIESIĄCA daty "to". Gdy zdefiniowane → ZASTĘPUJĄ liczenie z nocy/dat.
+function bookingHasBillingPeriods(b) {
+  return Array.isArray(b?.billingPeriods) && b.billingPeriods.length > 0;
+}
+function billingPeriodAmount(b, bp) {
+  // Kwota z podpiętej faktury (jeśli ma kwotę), inaczej ręczna kwota okresu. Zawsze BRUTTO.
+  if (bp?.invoiceId) {
+    const inv = (typeof invoices !== "undefined" ? invoices : []).find(i => i.id === bp.invoiceId);
+    const ia = inv ? parseFloat(inv.amount) : NaN;
+    if (!isNaN(ia) && ia > 0) return ia;
+  }
+  const a = parseFloat(bp?.amount);
+  return isNaN(a) ? 0 : a;
+}
+// Suma BRUTTO okresów, których MIESIĄC KOŃCOWY (data "to") nakłada się na zakres raportu.
+function bookingBillingRevenueBrutto(b, rangeFrom, rangeTo) {
+  if (!bookingHasBillingPeriods(b)) return 0;
+  return b.billingPeriods.reduce((s, bp) => {
+    const endMonth = (bp.to || "").slice(0, 7);
+    if (!endMonth) return s;
+    if (rangeFrom && rangeTo && !periodOverlapsRange(endMonth, rangeFrom, rangeTo)) return s;
+    return s + billingPeriodAmount(b, bp);
+  }, 0);
+}
+// Czy rezerwacja z okresami "należy" do zakresu raportu — po MIESIĄCU KOŃCOWYM okresu (nie po datach pobytu).
+function billingMatchesRange(b, rFrom, rTo) {
+  if (!bookingHasBillingPeriods(b)) return false;
+  if (!rFrom || !rTo) return true;
+  return b.billingPeriods.some(bp => { const em = (bp.to || "").slice(0, 7); return em && periodOverlapsRange(em, rFrom, rTo); });
+}
+
 function calcBookingTotal(b, room, nights, periodRange) {
   const rFrom = periodRange?.from || null;
   const rTo   = periodRange?.to   || null;
+
+  // v3.56 — okresy rozliczeniowe zastępują liczenie z nocy/dat (gdy zdefiniowane). Zwraca BRUTTO.
+  if (bookingHasBillingPeriods(b)) return bookingBillingRevenueBrutto(b, rFrom, rTo);
 
   if (typeof b?.customPrice === "number" && b.customPrice >= 0) {
     // Pro-rate customPrice do okresu (jeśli podany) dla rezerwacji nie-stałych
@@ -2331,6 +2367,15 @@ function bookingPaidInRange(b, room, rangeFrom, rangeTo) {
     const bp = (b.priceAtBooking?.basePrice ?? room?.basePrice) || 0;
     return getPermanentPaidRevenue(b, bp, b.from, rangeFrom, rangeTo, b.payment?.timing);
   }
+  // v3.56 — billing periods: wpłatę przypisz proporcjonalnie do przychodu okresów w zakresie raportu.
+  if (bookingHasBillingPeriods(b)) {
+    const tp = parseFloat(b.payment?.amountPaid);
+    if (isNaN(tp) || tp === 0) return 0;
+    const totalRev = bookingBillingRevenueBrutto(b, null, null);
+    if (totalRev <= 0) return 0;
+    if (!rangeFrom || !rangeTo) return tp;
+    return tp * Math.min(1, bookingBillingRevenueBrutto(b, rangeFrom, rangeTo) / totalRev);
+  }
   const totalPaid = parseFloat(b.payment?.amountPaid);
   if (isNaN(totalPaid) || totalPaid === 0) return 0;
   if (!rangeFrom || !rangeTo) return totalPaid;
@@ -2615,6 +2660,7 @@ function buildDashboard() {
   const monthEndExcl = toStr(addDays(parseDate(monthEnd), 1)); // first of next month exclusive
   const prevMonthEndExcl = toStr(addDays(parseDate(prevMonthEnd), 1));
   const thisMonthBookings = savedBookings.filter(b => {
+    if (bookingHasBillingPeriods(b)) return billingMatchesRange(b, monthStartExcl, monthEndExcl);  // v3.56
     if (b.isPermanent && b.bookingType !== "company") {
       const ps = b.permanentStart || b.from;
       const pe = b.permanentEnd || endOfCurrentMonthExclusive();
@@ -2635,6 +2681,7 @@ function buildDashboard() {
   }, 0);
 
   const prevMonthBookings = savedBookings.filter(b => {
+    if (bookingHasBillingPeriods(b)) return billingMatchesRange(b, prevMonthStart, prevMonthEndExcl);  // v3.56
     if (b.isPermanent && b.bookingType !== "company") {
       const ps = b.permanentStart || b.from;
       const pe = b.permanentEnd || endOfCurrentMonthExclusive();
@@ -3491,6 +3538,8 @@ function buildReports() {
   // Zwykła rezerwacja: od b.from do b.to.
   const bookingMatchesPeriod = (b) => {
     if (!periodRange) return true;
+    // v3.56 — okresy rozliczeniowe: pasuje jeśli MA okres kończący się w tym miesiącu (po dacie "to").
+    if (bookingHasBillingPeriods(b)) return billingMatchesRange(b, periodRange.from, periodRange.to);
     const hasPermBooking = !!b.isPermanent;
     const hasPermGuest = Array.isArray(b.guests) && b.guests.some(g => g.isPermanent);
     let bStart, bEnd;
@@ -4160,7 +4209,9 @@ function buildCharts() {
     if (selLoc !== "all" && b.locId !== parseInt(selLoc)) return;
     // Dla permanent: weź pod uwagę overlap z chart range (nie tylko b.from)
     const isPerm = b.isPermanent && b.bookingType !== "company";
-    if (isPerm) {
+    if (bookingHasBillingPeriods(b)) {                            // v3.56 — po miesiącu końcowym okresu
+      if (!billingMatchesRange(b, chartFromExcl, chartToExcl)) return;
+    } else if (isPerm) {
       const pStart = b.permanentStart || b.from;
       // v3.28: open-ended → effectivePermanentEnd(chartToExcl) zamiast endOfCurrentMonthExclusive
       const pEnd = effectivePermanentEnd(b, chartToExcl);
@@ -6496,7 +6547,40 @@ function buildEditModal() {
                   Stali najemcy (${permanentGuests.map(g => esc(g.name||"—")).join(", ")}) rozliczają się osobno do końca miesiąca.
                 </div></div>` : "";
 
+            // v3.56 — OKRESY ROZLICZENIOWE (firma/indywidualna). Gdy zdefiniowane → zastępują liczenie z nocy.
+            const bpList = (em.billingPeriods !== undefined ? em.billingPeriods : (b.billingPeriods || [])) || [];
+            const bpTotal = bpList.reduce((s, bp) => s + billingPeriodAmount(b, bp), 0);
+            const locInvoices = invoices.filter(inv => inv.locId == b.locId);
+            const _inpS = "padding:5px 7px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:11px;color:var(--text);font-family:inherit;outline:none";
+            const bpSection = `
+              <div class="divider"></div>
+              <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:6px;display:flex;align-items:center;gap:6px">${ICONS.fileText(13)} Okresy rozliczeniowe</div>
+              <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Gdy dodasz okresy, przychód tej rezerwacji liczy się <strong>z nich</strong> (każdy do <strong>miesiąca daty „do"</strong>), zamiast z nocy. Granice: początek (1.) / połowa (16.) / koniec miesiąca.</div>
+              <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:8px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius)">
+                <div><div style="font-size:10px;color:var(--text2);margin-bottom:2px">Od</div><div style="display:flex;gap:3px"><input type="month" id="bpFromMonth" value="${currentPeriod()}" style="${_inpS};font-variant-numeric:tabular-nums" /><select id="bpFromHalf" style="${_inpS}"><option value="01">1.</option><option value="16">16.</option></select></div></div>
+                <div><div style="font-size:10px;color:var(--text2);margin-bottom:2px">Do</div><div style="display:flex;gap:3px"><input type="month" id="bpToMonth" value="${currentPeriod()}" style="${_inpS};font-variant-numeric:tabular-nums" /><select id="bpToHalf" style="${_inpS}"><option value="end">koniec</option><option value="15">15.</option></select></div></div>
+                <div><div style="font-size:10px;color:var(--text2);margin-bottom:2px">Kwota brutto zł</div><input type="number" id="bpAmount" min="0" step="0.01" placeholder="0" style="${_inpS};width:90px;font-variant-numeric:tabular-nums" /></div>
+                <div><div style="font-size:10px;color:var(--text2);margin-bottom:2px">Faktura (opcj. — kwota z niej)</div><select id="bpInvoice" style="${_inpS};max-width:160px"><option value="">— brak —</option>${locInvoices.map(inv => `<option value="${inv.id}">${esc((inv.filename||"Faktura").slice(0,28))}${inv.amount?` · zł${inv.amount}`:""}</option>`).join("")}</select></div>
+                <button class="cal-nav-btn" id="bpAddBtn" style="font-size:11px;padding:6px 12px">${ICONS.plus?ICONS.plus(11):"+"} Dodaj okres</button>
+              </div>
+              ${bpList.length > 0 ? `<div style="display:flex;flex-direction:column;gap:5px;margin-bottom:6px">
+                ${bpList.map((bp, i) => {
+                  const amt = Math.round(billingPeriodAmount(b, bp));
+                  const endMonth = (bp.to||"").slice(0,7);
+                  const endLabel = endMonth ? `${MONTHS[parseInt(endMonth.slice(5,7))-1]} ${endMonth.slice(0,4)}` : "—";
+                  const inv = bp.invoiceId ? invoices.find(iv => iv.id===bp.invoiceId) : null;
+                  return `<div style="display:flex;align-items:center;gap:8px;font-size:11px;padding:6px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);flex-wrap:wrap">
+                    <span style="font-variant-numeric:tabular-nums">${fmtDate(bp.from)} → ${fmtDate(bp.to)}</span>
+                    <span style="background:var(--blue-light);color:var(--blue);padding:1px 7px;border-radius:99px;font-weight:600">rozliczenie: ${endLabel}</span>
+                    <strong style="font-variant-numeric:tabular-nums">zł${amt.toLocaleString()}</strong>
+                    ${inv ? `<a href="${esc(inv.url||"#")}" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:none;display:inline-flex;align-items:center;gap:3px">${ICONS.eye(11)} ${esc((inv.filename||"faktura").slice(0,20))}</a>` : ""}
+                    <button class="bp-remove-btn" data-bp-remove="${i}" style="margin-left:auto;font-size:10px;padding:2px 8px;color:var(--red);background:none;border:1px solid var(--red);border-radius:var(--radius);cursor:pointer">Usuń</button>
+                  </div>`;
+                }).join("")}
+                <div style="font-size:12px;font-weight:700;color:var(--text);margin-top:2px">Razem z okresów: zł${Math.round(bpTotal).toLocaleString()} brutto</div>
+              </div>` : `<div style="font-size:11px;color:var(--text3);font-style:italic;margin-bottom:6px">Brak okresów — przychód liczony z dat/nocy rezerwacji.</div>`}`;
             return `
+              ${bpSection}
               <div class="divider"></div>
               <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;display:flex;align-items:center;gap:6px">${ICONS.house(13)} Faktyczny pobyt</div>
               ${scopeNote}
@@ -8108,6 +8192,36 @@ function attachEditEvents() {
       render();
     });
   });
+  // v3.56 — okresy rozliczeniowe: dodaj okres (granice w półmiesiącach)
+  document.getElementById("bpAddBtn")?.addEventListener("click", () => {
+    const em = state.editModal;
+    const b = savedBookings.find(x => x.id === em.bookingId);
+    const fm = document.getElementById("bpFromMonth")?.value;     // YYYY-MM
+    const fh = document.getElementById("bpFromHalf")?.value;       // "01" | "16"
+    const tm = document.getElementById("bpToMonth")?.value;        // YYYY-MM
+    const th = document.getElementById("bpToHalf")?.value;         // "end" | "15"
+    const amount = parseFloat(document.getElementById("bpAmount")?.value);
+    const invoiceId = document.getElementById("bpInvoice")?.value || null;
+    if (!isValidPeriod(fm) || !isValidPeriod(tm)) { showToast("Wybierz miesiąc Od i Do (RRRR-MM)"); return; }
+    const from = `${fm}-${fh}`;
+    const [ty, tmo] = tm.split("-").map(Number);
+    const to = th === "end" ? `${tm}-${String(new Date(ty, tmo, 0).getDate()).padStart(2,"0")}` : `${tm}-15`;
+    if (from > to) { showToast("Data Od jest późniejsza niż Do"); return; }
+    if ((isNaN(amount) || amount <= 0) && !invoiceId) { showToast("Wpisz kwotę albo podepnij fakturę z kwotą"); return; }
+    if (em.billingPeriods === undefined) em.billingPeriods = Array.isArray(b?.billingPeriods) ? b.billingPeriods.map(p=>({...p})) : [];
+    em.billingPeriods.push({ id: "bp" + (em.billingPeriods.length + 1) + "_" + from + "_" + to, from, to, amount: isNaN(amount) ? 0 : amount, invoiceId });
+    em.billingPeriods.sort((a, c) => (a.to || "").localeCompare(c.to || ""));
+    render();
+  });
+  document.querySelectorAll("[data-bp-remove]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const em = state.editModal;
+      const b = savedBookings.find(x => x.id === em.bookingId);
+      if (em.billingPeriods === undefined) em.billingPeriods = Array.isArray(b?.billingPeriods) ? b.billingPeriods.map(p=>({...p})) : [];
+      em.billingPeriods.splice(parseInt(btn.dataset.bpRemove), 1);
+      render();
+    });
+  });
 
   document.getElementById("editSaveBtn")?.addEventListener("click", () => {
     if (API_CREDS) return;
@@ -8141,6 +8255,10 @@ function attachEditEvents() {
     // v3.55 — trasza: kwoty częściowe per miesiąc
     if (em.partialPaid !== undefined) {
       b.partialPaid = (em.partialPaid && typeof em.partialPaid === "object") ? { ...em.partialPaid } : {};
+    }
+    // v3.56 — okresy rozliczeniowe
+    if (em.billingPeriods !== undefined) {
+      b.billingPeriods = Array.isArray(em.billingPeriods) ? em.billingPeriods.map(p=>({...p})) : [];
     }
     // Clear legacy fields
     delete b.actualFrom; delete b.actualTo;
@@ -8749,7 +8867,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.55 · ${new Date().getFullYear()}
+          HospesAI · v3.56 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
@@ -8973,6 +9091,10 @@ async function saveEditAPI() {
   // v3.55 — trasza: kwoty częściowe per miesiąc
   if (em.partialPaid !== undefined) {
     updated.partialPaid = (em.partialPaid && typeof em.partialPaid === "object") ? { ...em.partialPaid } : {};
+  }
+  // v3.56 — okresy rozliczeniowe
+  if (em.billingPeriods !== undefined) {
+    updated.billingPeriods = Array.isArray(em.billingPeriods) ? em.billingPeriods.map(p=>({...p})) : [];
   }
   // Także permanentMonthlyRate gdy edytowane
   if (em.permanentMonthlyRate !== undefined) {
