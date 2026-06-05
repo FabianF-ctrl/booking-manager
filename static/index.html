@@ -2247,32 +2247,31 @@ function getPermanentPaidRevenue(entity, defaultDailyRate, fallbackFrom, rangeFr
     return periodExpected * ratio;
   }
 
-  // PRIORYTET 2/3: granular paidMonths (v3.51 — koniec auto-opłacania prepaid;
-  // każdy miesiąc wymaga potwierdzenia pracownika, niezależnie od trybu rozliczenia).
-  const paidMonths = Array.isArray(entity.paidMonths) ? entity.paidMonths.filter(m => activeMonths.includes(m)) : [];
-  if (paidMonths.length === 0) return 0;
-
+  // PRIORYTET 2/3: granular per miesiąc — pełna wpłata (paidMonths) ALBO częściowa (partialPaid).
+  // v3.55 — trasza: miesiąc może być opłacony częściowo (mniej niż pełna stawka miesiąca).
+  const paidSet = new Set(Array.isArray(entity.paidMonths) ? entity.paidMonths : []);
+  const partial = (entity.partialPaid && typeof entity.partialPaid === "object") ? entity.partialPaid : {};
   const monthlyRate = parseFloat(entity.permanentMonthlyRate);
   const pStart = entity.permanentStart || fallbackFrom;
   const pEnd = entity.permanentEnd || endOfCurrentMonthExclusive();
-  if (!isNaN(monthlyRate) && monthlyRate > 0) {
-    // Pro-rata — każdy zapłacony miesiąc liczy się jako pełna stawka lub proporcjonalnie
-    // (jeśli najemca obejmuje tylko część tego miesiąca).
-    return paidMonths.reduce((sum, ym) => sum + prorataMonthPrice(monthlyRate, ym, pStart, pEnd), 0);
-  }
-  // Per-day mode — zsumuj dni dla zapłaconych miesięcy
+  const hasMonthly = !isNaN(monthlyRate) && monthlyRate > 0;
   const customDaily = parseFloat(entity.dailyRate);
-  const rate = (!isNaN(customDaily) && customDaily >= 0) ? customDaily : defaultDailyRate;
-  let totalDays = 0;
-  for (const ym of paidMonths) {
+  const dailyRate = (!isNaN(customDaily) && customDaily >= 0) ? customDaily : defaultDailyRate;
+  // Cena (pro-rata) danego miesiąca — wg stawki miesięcznej albo dziennej.
+  const monthPriceOf = (ym) => {
+    if (hasMonthly) return prorataMonthPrice(monthlyRate, ym, pStart, pEnd);
     const [y, m] = ym.split('-').map(Number);
-    const monthStart = toStr(new Date(y, m - 1, 1));
-    const monthEnd = toStr(new Date(y, m, 1));
-    const ds = monthStart > pStart ? monthStart : pStart;
-    const de = monthEnd < pEnd ? monthEnd : pEnd;
-    if (ds < de) totalDays += diffDays(ds, de);
+    const ms = toStr(new Date(y, m - 1, 1)), me = toStr(new Date(y, m, 1));
+    const ds = ms > pStart ? ms : pStart, de = me < pEnd ? me : pEnd;
+    return ds < de ? dailyRate * diffDays(ds, de) : 0;
+  };
+  let total = 0;
+  for (const ym of activeMonths) {
+    if (paidSet.has(ym)) { total += monthPriceOf(ym); continue; }   // pełna wpłata
+    const pa = parseFloat(partial[ym]);                              // wpłata częściowa (cap do ceny miesiąca)
+    if (pa > 0) total += Math.min(pa, monthPriceOf(ym));
   }
-  return rate * totalDays;
+  return total;
 }
 
 // Miesiące zaległe (active ale nie zapłacone, w przeszłości).
@@ -2628,6 +2627,12 @@ function buildDashboard() {
     const room = loc?.rooms.find(r=>r.id===b.roomId);
     return s + calcBookingTotal(b, room, diffDays(b.from,b.to), { from: monthStartExcl, to: monthEndExcl }) * bookingNettoFactor(b);
   }, 0);
+  // v3.55 — Przychód (brutto) bieżącego miesiąca (bez netto factor)
+  const thisMonthRevenueBrutto = thisMonthBookings.reduce((s, b) => {
+    const loc = DATA.locations.find(l=>l.id===b.locId);
+    const room = loc?.rooms.find(r=>r.id===b.roomId);
+    return s + calcBookingTotal(b, room, diffDays(b.from,b.to), { from: monthStartExcl, to: monthEndExcl });
+  }, 0);
 
   const prevMonthBookings = savedBookings.filter(b => {
     if (b.isPermanent && b.bookingType !== "company") {
@@ -2769,9 +2774,9 @@ function buildDashboard() {
           <div style="font-size:11px;color:var(--text3);margin-top:4px">${occupancyPct}% obłożenia</div>
         </div>
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px 18px">
-          <div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;margin-bottom:6px">Przychód planowany — ten miesiąc <span class="hero-tag">memoriałowo</span></div>
-          <div style="font-size:26px;font-weight:700;font-variant-numeric:tabular-nums">zł${thisMonthProfit.toLocaleString()}</div>
-          <div style="font-size:11px;color:var(--text3);margin-top:4px">Przychód zł${thisMonthRevenue.toLocaleString()} − Media zł${thisMonthMedia.toLocaleString()}${profitDeltaHtml}</div>
+          <div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;margin-bottom:6px">Zysk — ten miesiąc <span class="hero-tag">obrót − media</span></div>
+          <div style="font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;color:${thisMonthProfit<0?"var(--red)":"var(--green)"}">zł${Math.round(thisMonthProfit).toLocaleString()}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:4px">Obrót netto zł${Math.round(thisMonthRevenue).toLocaleString()} − Media netto zł${Math.round(thisMonthMedia).toLocaleString()}${profitDeltaHtml}</div>
         </div>
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px 18px">
           <div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;margin-bottom:6px">Zaległości po pobycie</div>
@@ -2779,9 +2784,9 @@ function buildDashboard() {
           <div style="font-size:11px;color:var(--text3);margin-top:4px">${unpaid.length > 0 ? `zł${unpaidTotal.toLocaleString()} do ściągnięcia` : "Wszystkie pobyty rozliczone"}</div>
         </div>
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px 18px">
-          <div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;margin-bottom:6px">Przychód zrealizowany — ten miesiąc <span class="hero-tag">kasowo</span></div>
-          <div style="font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;color:${thisMonthProfitRealized<0?"var(--red)":"var(--blue)"}">zł${thisMonthProfitRealized.toLocaleString()}</div>
-          <div style="font-size:11px;color:var(--text3);margin-top:4px">Wpłacono zł${Math.round(thisMonthPaid).toLocaleString()} − Media zł${thisMonthMedia.toLocaleString()} · ${realizedPct}% planowanego</div>
+          <div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;margin-bottom:6px">Przychód — ten miesiąc <span class="hero-tag">brutto</span></div>
+          <div style="font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--blue)">zł${Math.round(thisMonthRevenueBrutto).toLocaleString()}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:4px">Obrót netto zł${Math.round(thisMonthRevenue).toLocaleString()} · Wpłacono zł${Math.round(thisMonthPaid).toLocaleString()}${revDeltaHtml}</div>
         </div>
       </div>
 
@@ -4143,7 +4148,7 @@ function buildCharts() {
   // ── KPI computation ──────────────────────────────────────────
   // Dla stałego najemcy: liczymy nights = miesiące, ale wyświetlamy je osobno (żeby
   // "61 nocy" nie było mylące dla permanent z monthly rate).
-  let kpiRevenue = 0, kpiNights = 0, kpiBookings = 0, kpiPaid = 0;
+  let kpiRevenueBrutto = 0, kpiRevenue = 0, kpiNights = 0, kpiBookings = 0, kpiPaid = 0, kpiPaidBrutto = 0;
   let kpiPermMonths = 0, kpiPermBookings = 0;
   const kpiBuckets = {}; // YYYY-MM → revenue
   const kpiFromD = parseDate(chartFrom), kpiToD = parseDate(chartTo);
@@ -4169,10 +4174,13 @@ function buildCharts() {
     const nights = getActualNights(b);
     const rev = calcBookingTotal(b, room, nights, { from: chartFromExcl, to: chartToExcl });
     const _kf = bookingNettoFactor(b);  // v3.38 — netto factor
-    kpiRevenue += rev * _kf;
+    kpiRevenueBrutto += rev;        // v3.55 — Przychód (brutto)
+    kpiRevenue += rev * _kf;        // Obrót (netto)
     kpiBookings++;
     // v3.19 — pro-rata clip wpłaconej kwoty do okresu wykresu
-    kpiPaid += bookingPaidInRange(b, room, chartFromExcl, chartToExcl) * _kf;
+    const _kpaid = bookingPaidInRange(b, room, chartFromExcl, chartToExcl);
+    kpiPaidBrutto += _kpaid;        // Wpłacono (brutto)
+    kpiPaid += _kpaid * _kf;
     if (isPerm) {
       kpiPermBookings++;
       kpiPermMonths += getPermanentMonths(b, b.from, chartFromExcl, chartToExcl);
@@ -4206,32 +4214,36 @@ function buildCharts() {
   // Dual-hero (Przychód planowany + zrealizowany) + 3 detale (Przychód, Wpłacono, Do pobrania).
   // Wcześniej: hero "Przychód w okresie" + 3 detale (Wpłacono / Do pobrania / Najlepszy mies).
   // "Najlepszy miesiąc" usunięty — informacja zawarta w wykresie pod spodem.
+  const _kzl = n => `${Math.round(n).toLocaleString()} zł`;
+  const kpiZysk = kpiRevenue - kpiMedia;                                  // Zysk = Obrót netto − Media netto
+  const kpiRemainingBrutto = Math.max(0, kpiRevenueBrutto - kpiPaidBrutto);
+  const kpiPaidPctB = kpiRevenueBrutto > 0 ? Math.round((kpiPaidBrutto/kpiRevenueBrutto)*100) : 0;
   const kpiCards = hasData ? `
     <div class="summary-strip dual-hero-layout" style="margin-bottom:18px">
-      <div class="sum-card hero">
-        <div class="lbl">Przychód planowany w okresie <span class="hero-tag">memoriałowo</span></div>
-        <div class="val">${kpiProfitPlanned.toLocaleString()} zł</div>
-        <div class="sub">Przychód ${kpiRevenue.toLocaleString()} zł − Media ${kpiMedia.toLocaleString()} zł · ${kpiAvg.toLocaleString()} zł/mies śr.</div>
-      </div>
-      <div class="sum-card hero hero-cash">
-        <div class="lbl">Przychód zrealizowany w okresie <span class="hero-tag">kasowo</span></div>
-        <div class="val" style="color:${kpiProfitRealized<0?"var(--red)":"var(--blue)"}">${kpiProfitRealized.toLocaleString()} zł</div>
-        <div class="sub">Wpłacono ${Math.round(kpiPaid).toLocaleString()} zł − Media ${kpiMedia.toLocaleString()} zł</div>
+      <div class="sum-card hero" style="border:1.5px solid var(--green)">
+        <div class="lbl">Zysk w okresie <span class="hero-tag">obrót − media</span></div>
+        <div class="val" style="color:${kpiZysk<0?"var(--red)":"var(--green)"}">${_kzl(kpiZysk)}</div>
+        <div class="sub">Obrót netto ${_kzl(kpiRevenue)} − Media netto ${_kzl(kpiMedia)} · ${kpiAvg.toLocaleString()} zł/mies śr.</div>
       </div>
       <div class="sum-card">
-        <div class="lbl">Przychód</div>
-        <div class="val" style="color:var(--blue)">${kpiRevenue.toLocaleString()} zł</div>
+        <div class="lbl">Przychód <span class="hero-tag">brutto</span></div>
+        <div class="val" style="color:var(--blue)">${_kzl(kpiRevenueBrutto)}</div>
         <div class="sub">${kpiBookings} ${nrez(kpiBookings)}${kpiPermBookings > 0 ? ` · ${kpiPermBookings} ${kpiPermBookings===1?"stały":"stali"}` : ""}</div>
       </div>
       <div class="sum-card">
-        <div class="lbl">Wpłacono</div>
-        <div class="val" style="color:${kpiPaid>=kpiRevenue?"var(--green)":"var(--text)"}">${Math.round(kpiPaid).toLocaleString()} zł</div>
-        <div class="sub">${kpiPaidPct}% przychodu</div>
+        <div class="lbl">Obrót <span class="hero-tag">netto</span></div>
+        <div class="val">${_kzl(kpiRevenue)}</div>
+        <div class="sub">przychód bez VAT</div>
       </div>
       <div class="sum-card">
-        <div class="lbl">Do pobrania</div>
-        <div class="val" style="color:${kpiRemaining>0?"var(--orange)":"var(--green)"}">${kpiRemaining.toLocaleString()} zł</div>
-        <div class="sub">${kpiRemaining > 0 ? "do ściągnięcia" : "wszystko opłacone"}</div>
+        <div class="lbl">Wpłacono <span class="hero-tag">brutto</span></div>
+        <div class="val" style="color:${kpiPaidBrutto>=kpiRevenueBrutto?"var(--green)":"var(--text)"}">${_kzl(kpiPaidBrutto)}</div>
+        <div class="sub">${kpiPaidPctB}% przychodu</div>
+      </div>
+      <div class="sum-card">
+        <div class="lbl">Do pobrania <span class="hero-tag">brutto</span></div>
+        <div class="val" style="color:${kpiRemainingBrutto>0?"var(--orange)":"var(--green)"}">${_kzl(kpiRemainingBrutto)}</div>
+        <div class="sub">${kpiRemainingBrutto > 0 ? "do ściągnięcia" : "wszystko opłacone"}</div>
       </div>
     </div>` : "";
 
@@ -6336,6 +6348,8 @@ function buildEditModal() {
                 const paidMonths = new Set(em.paidMonths !== undefined
                   ? (em.paidMonths || [])
                   : (b.paidMonths || []));
+                // v3.55 — trasza: kwoty częściowe per miesiąc { "YYYY-MM": kwota }
+                const partialMap = (em.partialPaid !== undefined ? em.partialPaid : (b.partialPaid || {})) || {};
                 const now = new Date();
                 const currentYm = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
                 // Pro-rata context — używamy edytowanych dat (em.permanentEnd etc.)
@@ -6381,22 +6395,22 @@ function buildEditModal() {
                     <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:4px">
                       ${months.map(({ ym, m }) => {
                         const isPaid = paidMonths.has(ym);
-                        const isOverdue = ym < currentYm && !isPaid;
+                        const partialAmt = (!isPaid && parseFloat(partialMap[ym]) > 0) ? parseFloat(partialMap[ym]) : 0;
+                        const isPartial = partialAmt > 0;   // v3.55 — trasza: opłacony częściowo
+                        const isOverdue = ym < currentYm && !isPaid;  // częściowy z przeszłości nadal coś winien
                         const isFuture = ym > currentYm;
-                        const bg = isPaid ? "var(--green)" : (isOverdue ? "var(--red)" : (isFuture ? "var(--surface2)" : "var(--surface3)"));
-                        const color = (isPaid || isOverdue) ? "#fff" : "var(--text2)";
+                        const bg = isPaid ? "var(--green)" : (isPartial ? "var(--orange)" : (isOverdue ? "var(--red)" : (isFuture ? "var(--surface2)" : "var(--surface3)")));
+                        const color = (isPaid || isOverdue || isPartial) ? "#fff" : "var(--text2)";
                         // Pro-rata szczegóły dla tego miesiąca
                         const info = prorataMonthInfo(ym, previewPStart, previewPEnd);
                         const amt = hasMonthly ? prorataMonthPrice(monthly, ym, previewPStart, previewPEnd) : 0;
-                        const subLabel = !hasMonthly
-                          ? ""
-                          : (info.isPartial
-                            ? `${info.daysUsed}/${info.daysInMonth}d · zł${amt}`
-                            : `zł${amt}`);
+                        const subLabel = isPartial
+                          ? (hasMonthly ? `zł${Math.round(partialAmt)}/${amt}` : `zł${Math.round(partialAmt)}`)
+                          : (!hasMonthly ? "" : (info.isPartial ? `${info.daysUsed}/${info.daysInMonth}d · zł${amt}` : `zł${amt}`));
                         return `<button class="paid-month-btn" data-paid-month="${ym}"
                           style="padding:8px 4px;font-size:11px;font-weight:700;border:1px solid var(--border);border-radius:var(--radius);background:${bg};color:${color};cursor:pointer;font-family:inherit;display:flex;flex-direction:column;align-items:center;gap:2px;min-height:48px"
-                          title="${isPaid?'Zapłacone — kliknij by cofnąć':isOverdue?'ZALEGŁOŚĆ — kliknij gdy opłacone':isFuture?'Przyszły miesiąc — kliknij by zaznaczyć przedpłatę':'Bieżący — kliknij gdy opłacone'}${hasMonthly && info.isPartial ? ` · pro-rata ${info.daysUsed}/${info.daysInMonth} dni` : ''}">
-                          <span>${MONTHS[m-1].slice(0,3)}${isPaid?' ✓':isOverdue?' !':''}</span>
+                          title="${isPaid?'Zapłacone — kliknij by cofnąć':isPartial?`Częściowo zł${Math.round(partialAmt)} — kliknij by oznaczyć pełną wpłatę`:isOverdue?'ZALEGŁOŚĆ — kliknij gdy opłacone':isFuture?'Przyszły miesiąc — kliknij by zaznaczyć przedpłatę':'Bieżący — kliknij gdy opłacone'}${hasMonthly && info.isPartial ? ` · pro-rata ${info.daysUsed}/${info.daysInMonth} dni` : ''}">
+                          <span>${MONTHS[m-1].slice(0,3)}${isPaid?' ✓':isPartial?' ½':isOverdue?' !':''}</span>
                           ${subLabel ? `<span style="font-size:9px;font-weight:500;opacity:0.85;font-variant-numeric:tabular-nums">${subLabel}</span>` : ""}
                         </button>`;
                       }).join("")}
@@ -6404,11 +6418,16 @@ function buildEditModal() {
                   </div>
                 `).join("");
 
-                // Suma wpłat — pro-rata za zaznaczone (zapłacone) miesiące spośród pokazanych.
-                const selectedMonths = displayMonths.filter(m => paidMonths.has(m));
+                // Suma wpłat — pełne (paidMonths) + częściowe (partialMap, cap do ceny miesiąca).
                 const totalPaidAmt = hasMonthly
-                  ? selectedMonths.reduce((s, ym) => s + prorataMonthPrice(monthly, ym, previewPStart, previewPEnd), 0)
+                  ? displayMonths.reduce((s, ym) => {
+                      const price = prorataMonthPrice(monthly, ym, previewPStart, previewPEnd);
+                      if (paidMonths.has(ym)) return s + price;
+                      const pa = parseFloat(partialMap[ym]); return s + (pa > 0 ? Math.min(pa, price) : 0);
+                    }, 0)
                   : 0;
+                // Lista miesięcy z wpłatą częściową (do edytora poniżej gridu)
+                const partialList = Object.keys(partialMap).filter(ym => parseFloat(partialMap[ym]) > 0 && !paidMonths.has(ym)).sort();
 
                 return `
                 <div class="divider"></div>
@@ -6424,7 +6443,28 @@ function buildEditModal() {
                     <button class="cal-nav-btn" id="paidMonthsNone" style="font-size:11px;padding:5px 12px;color:var(--red);border-color:var(--red)">Wyczyść</button>
                     ${isOpenEnded ? `<button class="cal-nav-btn" id="paidMonthsAddYear" style="font-size:11px;padding:5px 12px;display:inline-flex;align-items:center;gap:5px">${ICONS.plus ? ICONS.plus(11) : "+"} Dodaj rok</button>` : ""}
                   </div>
-                  ${hasMonthly ? `<div style="font-size:11px;color:var(--text2);margin-bottom:4px;font-weight:600">Suma zaznaczonych wpłat: zł${totalPaidAmt.toLocaleString()}</div>` : ""}
+                  ${hasMonthly ? `<div style="font-size:11px;color:var(--text2);margin-bottom:4px;font-weight:600">Suma zaznaczonych wpłat: zł${Math.round(totalPaidAmt).toLocaleString()}</div>` : ""}
+                  <div style="margin-top:8px;padding:8px 10px;background:var(--orange-light);border:1px solid var(--orange-border);border-radius:6px">
+                    <div style="font-size:11px;font-weight:600;color:var(--orange);margin-bottom:6px">½ Wpłata częściowa (najemca zapłacił MNIEJ niż pełna stawka miesiąca)</div>
+                    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+                      <select id="partialMonthSel" style="padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-size:11px;color:var(--text);font-family:inherit;outline:none">
+                        ${displayMonths.map(ym => `<option value="${ym}">${MONTHS[parseInt(ym.slice(5,7))-1].slice(0,3)} ${ym.slice(0,4)}</option>`).join("")}
+                      </select>
+                      <input type="number" id="partialAmountInp" min="0" step="0.01" placeholder="kwota zł" style="width:110px;padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-size:11px;color:var(--text);font-variant-numeric:tabular-nums;outline:none" />
+                      <button class="cal-nav-btn" id="partialAddBtn" style="font-size:11px;padding:5px 12px">Zapisz częściową</button>
+                    </div>
+                    ${partialList.length > 0 ? `<div style="margin-top:8px;display:flex;flex-direction:column;gap:4px">
+                      ${partialList.map(ym => {
+                        const price = hasMonthly ? Math.round(prorataMonthPrice(monthly, ym, previewPStart, previewPEnd)) : 0;
+                        const pa = Math.round(parseFloat(partialMap[ym]));
+                        return `<div style="display:flex;align-items:center;gap:8px;font-size:11px">
+                          <span style="background:var(--orange);color:#fff;padding:2px 8px;border-radius:99px;font-weight:600;font-variant-numeric:tabular-nums">${MONTHS[parseInt(ym.slice(5,7))-1].slice(0,3)} ${ym.slice(0,4)}: zł${pa}${hasMonthly?` z zł${price}`:""}</span>
+                          ${hasMonthly && price>pa ? `<span style="color:var(--red);font-size:10px">brakuje zł${price-pa}</span>` : ""}
+                          <button class="partial-remove-btn" data-partial-remove="${ym}" style="font-size:10px;padding:2px 8px;color:var(--red);background:none;border:1px solid var(--red);border-radius:var(--radius);cursor:pointer;margin-left:auto">Usuń</button>
+                        </div>`;
+                      }).join("")}
+                    </div>` : ""}
+                  </div>
                   ${(() => {
                     // Wskazówka jeśli user wpisał amountPaid (override mode)
                     const ap = parseFloat(em.amountPaid !== undefined ? em.amountPaid : (b.payment?.amountPaid || ""));
@@ -6691,7 +6731,8 @@ function buildEditModal() {
               permanentMonthlyRate: em.permanentMonthlyRate !== undefined
                 ? (em.permanentMonthlyRate === "" ? undefined : parseFloat(em.permanentMonthlyRate))
                 : b.permanentMonthlyRate,
-              paidMonths: em.paidMonths !== undefined ? em.paidMonths : (b.paidMonths || [])
+              paidMonths: em.paidMonths !== undefined ? em.paidMonths : (b.paidMonths || []),
+              partialPaid: em.partialPaid !== undefined ? em.partialPaid : (b.partialPaid || {})
             };
             const warn = getPaymentWarning(previewB);
             if (!warn) return "";
@@ -8019,7 +8060,12 @@ function attachEditEvents() {
       if (em.paidMonths === undefined) em.paidMonths = Array.isArray(b?.paidMonths) ? [...b.paidMonths] : [];
       const idx = em.paidMonths.indexOf(ym);
       if (idx >= 0) em.paidMonths.splice(idx, 1);
-      else em.paidMonths.push(ym);
+      else {
+        em.paidMonths.push(ym);
+        // v3.55 — pełna wpłata kasuje ewentualną częściową dla tego miesiąca
+        if (em.partialPaid === undefined && b?.partialPaid) em.partialPaid = { ...b.partialPaid };
+        if (em.partialPaid && em.partialPaid[ym] !== undefined) delete em.partialPaid[ym];
+      }
       render();
     });
   });
@@ -8037,6 +8083,30 @@ function attachEditEvents() {
   document.getElementById("paidMonthsAddYear")?.addEventListener("click", () => {
     state.editModal.paidMonthsExtraYears = (state.editModal.paidMonthsExtraYears || 0) + 1;
     render();
+  });
+  // v3.55 — trasza: zapisz wpłatę CZĘŚCIOWĄ za miesiąc (mniej niż pełna stawka)
+  document.getElementById("partialAddBtn")?.addEventListener("click", () => {
+    const em = state.editModal;
+    const b = savedBookings.find(x => x.id === em.bookingId);
+    const ym = document.getElementById("partialMonthSel")?.value;
+    const amt = parseFloat(document.getElementById("partialAmountInp")?.value);
+    if (!ym || isNaN(amt) || amt <= 0) { showToast("Wybierz miesiąc i wpisz kwotę > 0"); return; }
+    if (em.partialPaid === undefined) em.partialPaid = { ...(b?.partialPaid || {}) };
+    em.partialPaid[ym] = amt;
+    // częściowa wyklucza pełną — usuń ym z paidMonths jeśli był
+    if (em.paidMonths === undefined) em.paidMonths = Array.isArray(b?.paidMonths) ? [...b.paidMonths] : [];
+    em.paidMonths = em.paidMonths.filter(m => m !== ym);
+    render();
+  });
+  document.querySelectorAll("[data-partial-remove]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const em = state.editModal;
+      const b = savedBookings.find(x => x.id === em.bookingId);
+      const ym = btn.dataset.partialRemove;
+      if (em.partialPaid === undefined) em.partialPaid = { ...(b?.partialPaid || {}) };
+      delete em.partialPaid[ym];
+      render();
+    });
   });
 
   document.getElementById("editSaveBtn")?.addEventListener("click", () => {
@@ -8067,6 +8137,10 @@ function attachEditEvents() {
     // PaidMonths dla stałego najemcy indywidualnego
     if (em.paidMonths !== undefined) {
       b.paidMonths = Array.isArray(em.paidMonths) ? [...em.paidMonths] : [];
+    }
+    // v3.55 — trasza: kwoty częściowe per miesiąc
+    if (em.partialPaid !== undefined) {
+      b.partialPaid = (em.partialPaid && typeof em.partialPaid === "object") ? { ...em.partialPaid } : {};
     }
     // Clear legacy fields
     delete b.actualFrom; delete b.actualTo;
@@ -8675,7 +8749,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.54 · ${new Date().getFullYear()}
+          HospesAI · v3.55 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
@@ -8895,6 +8969,10 @@ async function saveEditAPI() {
   // PaidMonths dla stałego najemcy indywidualnego
   if (em.paidMonths !== undefined) {
     updated.paidMonths = Array.isArray(em.paidMonths) ? [...em.paidMonths] : [];
+  }
+  // v3.55 — trasza: kwoty częściowe per miesiąc
+  if (em.partialPaid !== undefined) {
+    updated.partialPaid = (em.partialPaid && typeof em.partialPaid === "object") ? { ...em.partialPaid } : {};
   }
   // Także permanentMonthlyRate gdy edytowane
   if (em.permanentMonthlyRate !== undefined) {
