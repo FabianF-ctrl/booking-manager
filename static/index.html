@@ -3523,8 +3523,8 @@ function buildReports() {
     ${filterBar}
     <div class="no-results-box">Brak rezerwacji${fy||fm?` dla okresu: ${periodLabel}`:""}.<br><small>${savedBookings.length===0?"Dodaj pierwszą rezerwację, aby zobaczyć raport.":"Zmień filtr okresu."}</small></div>`;
 
-  // Global totals (for filtered set)
-  let totRevenue=0, totPaid=0, totMedia=0;
+  // Global totals (for filtered set). v3.54 — Przychód=BRUTTO, Obrót=NETTO, Zysk=Obrót−media(netto).
+  let totRevenueBrutto=0, totRevenue=0, totPaid=0, totPaidBrutto=0, totMedia=0;
   let lastPaymentDate = null;
   filteredByPeriod.forEach(b => {
     const loc = DATA.locations.find(l=>l.id===b.locId);
@@ -3532,9 +3532,12 @@ function buildReports() {
     const nights = getActualNights(b);
     const t = calcBookingTotal(b, room, nights, periodRange);
     const _factor = bookingNettoFactor(b);  // v3.38 — netto factor
-    totRevenue += t * _factor;
+    totRevenueBrutto += t;          // Przychód (brutto)
+    totRevenue += t * _factor;      // Obrót (netto)
     // v3.19 — pro-rata clip wpłaconej kwoty do okresu filtra
-    totPaid += bookingPaidInRange(b, room, periodRange?.from, periodRange?.to) * _factor;
+    const _pInRange = bookingPaidInRange(b, room, periodRange?.from, periodRange?.to);
+    totPaidBrutto += _pInRange;     // Wpłacono (brutto — realna gotówka)
+    totPaid += _pInRange * _factor;
     const isPerm = b.isPermanent && b.bookingType !== "company";
     if (isPerm) {
       // Najnowsza data wpłaty (z paidMonths YYYY-MM, traktujemy jako ostatni dzień miesiąca)
@@ -3569,8 +3572,8 @@ function buildReports() {
     </div>
     ${filterBar}
     ${(() => {
-      const totRemaining = Math.max(0, totRevenue - totPaid);
-      const totProfit = totRevenue - totMedia;
+      const totZysk = totRevenue - totMedia;                              // Zysk = Obrót netto − Media netto
+      const totRemaining = Math.max(0, totRevenueBrutto - totPaidBrutto);  // Do pobrania (brutto)
       const unpaidCount = filteredByPeriod.filter(b => {
         const loc = DATA.locations.find(l=>l.id===b.locId);
         const room = loc?.rooms.find(r=>r.id===b.roomId);
@@ -3578,35 +3581,34 @@ function buildReports() {
         const paid = bookingPaidInRange(b, room, periodRange?.from, periodRange?.to);
         return Math.max(0, t - paid) > 0;
       }).length;
-      const paidPct = totRevenue > 0 ? Math.round((totPaid / totRevenue) * 100) : 0;
-      // v3.17 — Dual profit hero: memoriałowy (Przychód−Media) + kasowy (Wpłacono−Media).
-      // User chciał odróżnić "ile zarobiłem księgowo" od "ile mam już na koncie".
-      const totProfitRealized = totPaid - totMedia;
+      const paidPct = totRevenueBrutto > 0 ? Math.round((totPaidBrutto / totRevenueBrutto) * 100) : 0;
+      const zl = n => `zł${Math.round(n).toLocaleString()}`;
+      // v3.54 — model: Przychód (brutto) · Obrót (netto) · Zysk = Obrót − Media (netto).
       return `
       <div class="summary-strip dual-hero-layout">
         <div class="sum-card hero">
-          <div class="lbl">Przychód planowany <span class="hero-tag">memoriałowo</span></div>
-          <div class="val">zł${totProfit.toLocaleString()}</div>
-          <div class="sub">Przychód zł${totRevenue.toLocaleString()} − Media zł${totMedia.toLocaleString()}</div>
-        </div>
-        <div class="sum-card hero hero-cash">
-          <div class="lbl">Przychód zrealizowany <span class="hero-tag">kasowo</span></div>
-          <div class="val" style="color:${totProfitRealized < 0 ? "var(--red)" : "var(--blue)"}">zł${totProfitRealized.toLocaleString()}</div>
-          <div class="sub">Wpłacono zł${totPaid.toLocaleString()} − Media zł${totMedia.toLocaleString()}</div>
+          <div class="lbl">Zysk <span class="hero-tag">obrót − media</span></div>
+          <div class="val" style="color:${totZysk < 0 ? "var(--red)" : "var(--green)"}">${zl(totZysk)}</div>
+          <div class="sub">Obrót netto ${zl(totRevenue)} − Media netto ${zl(totMedia)}</div>
         </div>
         <div class="sum-card">
-          <div class="lbl">Przychód</div>
-          <div class="val" style="color:var(--blue)">zł${totRevenue.toLocaleString()}</div>
+          <div class="lbl">Przychód <span class="hero-tag">brutto</span></div>
+          <div class="val" style="color:var(--blue)">${zl(totRevenueBrutto)}</div>
           <div class="sub">${filteredByPeriod.length} ${nrez(filteredByPeriod.length)}</div>
         </div>
         <div class="sum-card">
-          <div class="lbl">Wpłacono</div>
-          <div class="val" style="color:${totPaid>=totRevenue?"var(--green)":"var(--text)"}">zł${totPaid.toLocaleString()}</div>
+          <div class="lbl">Obrót <span class="hero-tag">netto</span></div>
+          <div class="val">${zl(totRevenue)}</div>
+          <div class="sub">przychód bez VAT</div>
+        </div>
+        <div class="sum-card">
+          <div class="lbl">Wpłacono <span class="hero-tag">brutto</span></div>
+          <div class="val" style="color:${totPaidBrutto>=totRevenueBrutto?"var(--green)":"var(--text)"}">${zl(totPaidBrutto)}</div>
           <div class="sub">${paidPct}% przychodu</div>
         </div>
         <div class="sum-card">
-          <div class="lbl">Do pobrania</div>
-          <div class="val" style="color:${totRemaining>0?"var(--orange)":"var(--green)"}">zł${totRemaining.toLocaleString()}</div>
+          <div class="lbl">Do pobrania <span class="hero-tag">brutto</span></div>
+          <div class="val" style="color:${totRemaining>0?"var(--orange)":"var(--green)"}">${zl(totRemaining)}</div>
           <div class="sub">${unpaidCount > 0 ? `${unpaidCount} ${nrez(unpaidCount)} z zaległością` : "wszystko opłacone"}</div>
         </div>
       </div>`;
@@ -3652,38 +3654,28 @@ function buildReports() {
         locMediaB += sumRoomMedia(loc.id, period);
         locMediaN += sumRoomMediaNetto(loc.id, period);
       });
-      const locProfitB = locRevenueB - locMediaB;            // planowany memoriałowo (brutto)
-      const locProfitRealizedB = locPaidB - locMediaB;       // zrealizowany kasowo (brutto)
-      const locRemainingB = Math.max(0, locRevenueB - locPaidB);
-      const locProfitN = locRevenueN - locMediaN;            // ZYSK NETTO (realny)
+      const locZysk = locRevenueN - locMediaN;                    // Zysk = Obrót netto − Media netto
+      const locRemainingB = Math.max(0, locRevenueB - locPaidB);  // Do pobrania (brutto)
+      const _zl = n => `zł${Math.round(n).toLocaleString()}`;
 
       html += `
         <div class="loc-finance-block">
           <div class="loc-finance-hdr">
             <div>
               <div class="loc-finance-title">${locIcon(loc, 16)} ${esc(loc.name)}</div>
-              <div class="loc-finance-sub">${bookings.length} ${nrez(bookings.length)} · <span style="color:var(--text3)">kwoty brutto</span></div>
+              <div class="loc-finance-sub">${bookings.length} ${nrez(bookings.length)}</div>
             </div>
           </div>
           <div class="loc-finance-totals dual-hero-layout">
-            <div class="loc-fin-stat hero">
-              <span class="k">Przychód planowany <span class="hero-tag">memoriałowo · brutto</span></span>
-              <span class="v">zł${locProfitB.toLocaleString()}</span>
-              <span class="sub">Przychód zł${locRevenueB.toLocaleString()} − Media zł${locMediaB.toLocaleString()}</span>
+            <div class="loc-fin-stat hero" style="border:1.5px solid var(--green);background:var(--green-light)">
+              <span class="k" style="color:var(--green);font-weight:700">Zysk <span class="hero-tag" style="background:var(--green);color:#fff">obrót − media</span></span>
+              <span class="v" style="color:${locZysk < 0 ? 'var(--red)' : 'var(--green)'};font-weight:800">${_zl(locZysk)}</span>
+              <span class="sub">Obrót netto ${_zl(locRevenueN)} − Media netto ${_zl(locMediaN)}</span>
             </div>
-            <div class="loc-fin-stat hero hero-cash">
-              <span class="k">Przychód zrealizowany <span class="hero-tag">kasowo · brutto</span></span>
-              <span class="v" style="color:${locProfitRealizedB < 0 ? 'var(--red)' : 'var(--blue)'}">zł${locProfitRealizedB.toLocaleString()}</span>
-              <span class="sub">Wpłacono zł${locPaidB.toLocaleString()} − Media zł${locMediaB.toLocaleString()}</span>
-            </div>
-            <div class="loc-fin-stat"><span class="k">Przychód brutto</span><span class="v blue">zł${locRevenueB.toLocaleString()}</span></div>
-            <div class="loc-fin-stat"><span class="k">Wpłacono brutto</span><span class="v ${locPaidB>=locRevenueB?"green":""}">zł${locPaidB.toLocaleString()}</span></div>
-            <div class="loc-fin-stat"><span class="k">Do pobrania</span><span class="v ${locRemainingB>0?"orange":"green"}">zł${locRemainingB.toLocaleString()}</span></div>
-            <div class="loc-fin-stat" style="border:1.5px solid var(--green);background:var(--green-light)">
-              <span class="k" style="color:var(--green);font-weight:700">Zysk netto <span class="hero-tag" style="background:var(--green);color:#fff">netto</span></span>
-              <span class="v" style="color:${locProfitN < 0 ? 'var(--red)' : 'var(--green)'};font-weight:800">zł${Math.round(locProfitN).toLocaleString()}</span>
-              <span class="sub">Przychód netto zł${Math.round(locRevenueN).toLocaleString()} − Media netto zł${Math.round(locMediaN).toLocaleString()}</span>
-            </div>
+            <div class="loc-fin-stat"><span class="k">Przychód <span class="hero-tag">brutto</span></span><span class="v blue">${_zl(locRevenueB)}</span></div>
+            <div class="loc-fin-stat"><span class="k">Obrót <span class="hero-tag">netto</span></span><span class="v">${_zl(locRevenueN)}</span></div>
+            <div class="loc-fin-stat"><span class="k">Wpłacono <span class="hero-tag">brutto</span></span><span class="v ${locPaidB>=locRevenueB?"green":""}">${_zl(locPaidB)}</span></div>
+            <div class="loc-fin-stat"><span class="k">Do pobrania <span class="hero-tag">brutto</span></span><span class="v ${locRemainingB>0?"orange":"green"}">${_zl(locRemainingB)}</span></div>
           </div>`;
 
       // Group by permanent / company / individual within this location.
@@ -6117,6 +6109,15 @@ function buildSuccess(loc) {
   const pmLabels = { invoice:"Faktura", cash:"Gotówka", transfer:"Przelew" };
   const timLabels = { prepaid:"Przed pobytem", postpaid:"Po pobycie" };
 
+  // v3.54 — info dla stałego najemcy: rozliczenie miesięczne, brak daty końca ("do odwołania"),
+  // wstępna wartość (custom price albo stawka miesięczna).
+  const isPerm = last.isPermanent && last.bookingType !== "company";
+  const permMonthly = parseFloat(last.permanentMonthlyRate);
+  const hasPermMonthly = isPerm && !isNaN(permMonthly) && permMonthly > 0;
+  const permStart = last.permanentStart || last.from;
+  const customPriceVal = parseFloat(last.customPrice);
+  const hasCustomPrice = !isNaN(customPriceVal) && customPriceVal > 0;
+
   // For multi-room company bookings, show all booked rooms
   const allNewRooms = isCompany && state.selectedRooms?.length > 1
     ? state.selectedRooms.map(rid => loc.rooms.find(r=>r.id===rid)).filter(Boolean)
@@ -6132,14 +6133,18 @@ function buildSuccess(loc) {
         ${allNewRooms
           ? `<div class="success-row"><span>Pokoje</span><span>${allNewRooms.map(r=>esc(r.name)).join(", ")}</span></div>`
           : `<div class="success-row"><span>Pokój</span><span>${room?esc(room.name):""}</span></div>`}
-        <div class="success-row"><span>Blokada od</span><span>${fmtDate(last.from)}</span></div>
-        <div class="success-row"><span>Blokada do</span><span>${fmtDate(last.to)}</span></div>
-        <div class="success-row"><span>Nocy</span><span>${nights} ${nw(nights)}</span></div>
-        ${last.bufferDays>0?`<div class="success-row"><span>Bufor</span><span>+${last.bufferDays} dni</span></div>`:""}
-        <div class="success-row"><span>Typ</span><span style="display:inline-flex;align-items:center;gap:5px">${isCompany?ICONS.building(13):ICONS.user(13)} ${isCompany?"Firmowa":"Indywidualna"}</span></div>
+        ${isPerm
+          ? `<div class="success-row"><span>Najem od</span><span>${fmtDate(permStart)}</span></div>
+             <div class="success-row"><span>Najem do</span><span>${last.permanentEnd ? fmtDate(last.permanentEnd) : `<strong style="color:var(--green)">do odwołania</strong>`}</span></div>
+             <div class="success-row"><span>Rozliczenie</span><span style="display:inline-flex;align-items:center;gap:5px">${ICONS.house(13)} ${hasPermMonthly ? `Miesięczne · <strong>zł${permMonthly}/mies.</strong>` : "Za dobę (wg cennika)"}</span></div>`
+          : `<div class="success-row"><span>Blokada od</span><span>${fmtDate(last.from)}</span></div>
+             <div class="success-row"><span>Blokada do</span><span>${fmtDate(last.to)}</span></div>
+             <div class="success-row"><span>Nocy</span><span>${nights} ${nw(nights)}</span></div>
+             ${last.bufferDays>0?`<div class="success-row"><span>Bufor</span><span>+${last.bufferDays} dni</span></div>`:""}`}
+        <div class="success-row"><span>Typ</span><span style="display:inline-flex;align-items:center;gap:5px">${isPerm?ICONS.house(13):isCompany?ICONS.building(13):ICONS.user(13)} ${isPerm?"Stały najemca":isCompany?"Firmowa":"Indywidualna"}</span></div>
         <div class="success-row"><span>${isCompany?"Firma":"Gość"}</span><span>${esc(who)}</span></div>
         ${last.payment?.method?`<div class="success-row"><span>Płatność</span><span>${pmLabels[last.payment.method]||"—"} · ${timLabels[last.payment.timing]||"—"}</span></div>`:""}
-        <div class="success-row"><span>Wstępna wartość</span><span>zł${total.toLocaleString()}</span></div>
+        <div class="success-row"><span>Wstępna wartość</span><span>${hasCustomPrice ? `zł${customPriceVal.toLocaleString()}` : (hasPermMonthly ? `zł${permMonthly.toLocaleString()}/mies.` : `zł${total.toLocaleString()}`)}</span></div>
       </div>
       <button class="done-btn" id="doneBtn">Gotowe</button>
     </div>`;
@@ -8670,7 +8675,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.53 · ${new Date().getFullYear()}
+          HospesAI · v3.54 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
