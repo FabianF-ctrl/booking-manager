@@ -8231,17 +8231,13 @@ function attachEditEvents() {
     }
     const b = savedBookings.find(x=>x.id===em.bookingId);
     if (!b) return;
-    {
+    // v3.57 — pojemność sprawdzamy tylko gdy zmieniają się daty (edycja metadanych nie rusza zajętości).
+    if (em.from !== b.from || em.to !== b.to) {
       const free = getFreeBeds(b.roomId, em.from, em.to, em.bookingId);
       const need = bedsUsedByBooking(b);
       if (free < need) {
-        if (b.bookingType === "company") {
-          document.getElementById("editConflict").textContent = `⚠️ Brak miejsc: ta rezerwacja zajmuje ${need} ${nl(need)}, a w nowym terminie wolne tylko ${free}.`;
-          return;
-        }
-        // Individual — soft confirm
         if (!state.editModal._overcapAck && !confirm(
-          `⚠️ Uwaga — przekroczona pojemność pokoju.\n\nTa rezerwacja zajmuje ${need} ${nl(need)}, a w nowym terminie wolne tylko ${free}.\n\nZapisać mimo to?`
+          `⚠️ Uwaga — przekroczona pojemność pokoju w nowym terminie.\n\nTa rezerwacja zajmuje ${need} ${nl(need)}, a wolne tylko ${free}.\n\nZapisać mimo to?`
         )) return;
         state.editModal._overcapAck = true;
       }
@@ -8867,7 +8863,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.56 · ${new Date().getFullYear()}
+          HospesAI · v3.57 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
@@ -9012,19 +9008,16 @@ async function saveEditAPI() {
   if (!em.from||!em.to||em.from>=em.to) {
     document.getElementById("editConflict").textContent="Daty blokady są nieprawidłowe."; return;
   }
-  {
+  // v3.57 — sprawdzaj pojemność TYLKO gdy zmieniają się daty. Edycja metadanych
+  // (kwota, płatność, paidMonths, okresy) nie rusza zajętości — rezerwacja już "siedzi"
+  // w swoim terminie, więc blokowanie zapisu gdy pokój jest pełny to fałszywy alarm.
+  if (em.from !== b.from || em.to !== b.to) {
     const free = getFreeBeds(b.roomId, em.from, em.to, em.bookingId);
     const need = bedsUsedByBooking(b);
-    // Firmowa: blokujemy. Indywidualna: tylko ostrzegamy w confirm dialog,
-    // user może świadomie zapisać nadkomplet (np. rodzina, dziecko śpi z rodzicami).
     if (free < need) {
-      if (b.bookingType === "company") {
-        document.getElementById("editConflict").textContent = `⚠️ Brak miejsc: ta rezerwacja zajmuje ${need} ${nl(need)}, a w nowym terminie wolne tylko ${free}.`;
-        return;
-      }
-      // Individual — soft warning + confirm
+      // Soft confirm (też firmowe) — user może świadomie zapisać nadkomplet / przenosiny.
       if (!state.editModal._overcapAck && !confirm(
-        `⚠️ Uwaga — przekroczona pojemność pokoju.\n\nTa rezerwacja zajmuje ${need} ${nl(need)}, a w nowym terminie wolne tylko ${free}.\n\nZapisać mimo to? (np. rodzina śpi razem)`
+        `⚠️ Uwaga — przekroczona pojemność pokoju w nowym terminie.\n\nTa rezerwacja zajmuje ${need} ${nl(need)}, a wolne tylko ${free}.\n\nZapisać mimo to?`
       )) return;
       state.editModal._overcapAck = true;
     }
