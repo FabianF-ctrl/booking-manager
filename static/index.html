@@ -6590,23 +6590,29 @@ function buildEditModal() {
                       ${months.map(({ ym, m }) => {
                         const cov = coverage[ym];
                         const explicitFull = !hasOverride && paidMonths.has(ym);
-                        const isCovered = cov.fullyCovered;              // pełne pokrycie (wprost lub kumulacyjnie z rat)
+                        const isCovered = cov.fullyCovered;              // pełne pokrycie KUMULACYJNE (wprost lub z nadwyżki innego miesiąca)
                         const isPartialCov = !isCovered && cov.covered > 0.01;
                         const isOverdue = ym < currentYm && !isCovered;
                         const isFuture = ym > currentYm;
+                        // v3.64 "oba widoki" — KOLOR wg pokrycia kumulacyjnego, ale ETYKIETA pokazuje ile faktycznie
+                        // wpłynęło ZA ten miesiąc (nie rozsmarowane z nadpłat innych miesięcy). ↩ = pokryty z nadwyżki.
+                        const collected = hasOverride ? cov.covered : (paidMonths.has(ym) ? cov.due : (parseFloat(partialMap[ym]) || 0));
+                        const ownFull = cov.due > 0.01 && collected >= cov.due - 0.01;
+                        const overflowCovered = isCovered && !ownFull && cov.due > 0.01;   // zielony dzięki nadpłacie innego miesiąca
                         const bg = isCovered ? "var(--green)" : (isPartialCov ? "var(--orange)" : (isOverdue ? "var(--red)" : (isFuture ? "var(--surface2)" : "var(--surface3)")));
                         const color = (isCovered || isOverdue || isPartialCov) ? "#fff" : "var(--text2)";
                         const info = prorataMonthInfo(ym, previewPStart, previewPEnd);
                         const subLabel = !hasMonthly
-                          ? (isCovered ? "✓" : (isPartialCov ? `zł${Math.round(cov.covered)}` : ""))
-                          : (isCovered ? `zł${Math.round(cov.due)}`
-                            : (isPartialCov ? `zł${Math.round(cov.covered)}/${Math.round(cov.due)}`
-                              : (info.isPartial ? `${info.daysUsed}/${info.daysInMonth}d · zł${Math.round(cov.due)}` : `zł${Math.round(cov.due)}`)));
-                        const mark = (explicitFull || isCovered) ? ' ✓' : (isPartialCov ? ' ½' : (isOverdue ? ' !' : ''));
-                        const title = explicitFull ? 'Zapłacone (pełna wpłata) — kliknij by cofnąć'
-                          : isCovered ? 'Pokryte z wpłat (kumulacyjnie) — kliknij by oznaczyć pełną wpłatę wprost'
-                          : isPartialCov ? `Częściowo pokryte zł${Math.round(cov.covered)} z zł${Math.round(cov.due)} — kliknij by oznaczyć pełną wpłatę`
-                          : isOverdue ? 'ZALEGŁOŚĆ — brak pokrycia, kliknij gdy opłacone'
+                          ? (ownFull ? "✓" : (collected > 0.01 ? `zł${Math.round(collected)}` : (isCovered ? "✓" : "")))
+                          : (ownFull ? `zł${Math.round(cov.due)}`
+                            : (collected > 0.01 ? `zł${Math.round(collected)}/${Math.round(cov.due)}`
+                              : (overflowCovered ? `0/${Math.round(cov.due)}`
+                                : (info.isPartial ? `${info.daysUsed}/${info.daysInMonth}d · zł${Math.round(cov.due)}` : `zł${Math.round(cov.due)}`))));
+                        const mark = (explicitFull || ownFull) ? ' ✓' : (overflowCovered ? ' ↩' : (isPartialCov ? ' ½' : (isOverdue ? ' !' : '')));
+                        const title = (explicitFull || ownFull) ? `Zapłacone za ten miesiąc (zł${Math.round(collected)}) — kliknij by cofnąć`
+                          : overflowCovered ? `↩ Pokryte z nadpłaty INNEGO miesiąca. Za ten miesiąc wpłacono tylko zł${Math.round(collected)} z zł${Math.round(cov.due)}`
+                          : isPartialCov ? `Za ten miesiąc wpłacono zł${Math.round(collected)} z zł${Math.round(cov.due)} — kliknij by oznaczyć pełną wpłatę`
+                          : isOverdue ? 'ZALEGŁOŚĆ — brak wpłaty, kliknij gdy opłacone'
                           : isFuture ? 'Przyszły miesiąc — kliknij by zaznaczyć przedpłatę' : 'Bieżący — kliknij gdy opłacone';
                         return `<button class="paid-month-btn" data-paid-month="${ym}"
                           style="padding:8px 4px;font-size:11px;font-weight:700;border:1px solid var(--border);border-radius:var(--radius);background:${bg};color:${color};cursor:pointer;font-family:inherit;display:flex;flex-direction:column;align-items:center;gap:2px;min-height:48px"
@@ -6641,7 +6647,8 @@ function buildEditModal() {
                     <span>Pokryte do bież. mies.: <strong>zł${Math.round(coveredToDate).toLocaleString()}</strong> z zł${Math.round(dueToDate).toLocaleString()}</span>
                     ${overdueAmt > 0.5 ? `<span style="color:var(--red);font-weight:700">Zaległość zł${Math.round(overdueAmt).toLocaleString()}</span>` : ""}
                     ${advanceAmt > 0.5 ? `<span style="color:var(--blue);font-weight:700">Zaliczka zł${advanceAmt.toLocaleString()}</span>` : ""}
-                  </div>` : ""}
+                  </div>
+                  <div style="font-size:10px;color:var(--text3);margin-bottom:6px">Etykieta na kafelku = ile wpłynęło ZA dany miesiąc (np. <strong>1000/1500</strong>). <strong>↩</strong> = miesiąc zielony, bo pokryty z nadpłaty innego miesiąca (suma się zgadza, ale za ten miesiąc wpłynęło mniej).</div>` : ""}
                   <div style="margin-top:8px;padding:8px 10px;background:var(--orange-light);border:1px solid var(--orange-border);border-radius:6px">
                     <div style="font-size:11px;font-weight:600;color:var(--orange);margin-bottom:6px">½ Wpłata częściowa / rata — dowolna kwota (nadpłata pokrywa kolejne miesiące, FIFO od najstarszego)</div>
                     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
@@ -9019,7 +9026,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.63 · ${new Date().getFullYear()}
+          HospesAI · v3.64 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
