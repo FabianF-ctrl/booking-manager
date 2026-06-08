@@ -1006,6 +1006,7 @@ body {
 .preview-legend-box.is-free { background: #bbf7d0; border-color: #16a34a; }       /* green */
 .preview-legend-box.is-occupied { background: #fecaca; border-color: #dc2626; }   /* red */
 .preview-legend-box.is-perm { background: #93c5fd; border-color: #2563eb; }       /* blue */
+.preview-legend-box.is-block { background: repeating-linear-gradient(45deg, #d1d5db, #d1d5db 3px, #9ca3af 3px, #9ca3af 6px); border-color: #6b7280; }  /* v3.65 gray stripes */
 
 /* Grid (rooms × days) */
 .preview-grid-wrap {
@@ -1056,6 +1057,7 @@ body {
 .preview-day.is-free { background: #bbf7d0; color: #14532d; }                     /* green */
 .preview-day.is-occupied { background: #fecaca; color: #7f1d1d; font-weight: 600; }/* red */
 .preview-day.is-perm { background: #93c5fd; color: #1e3a8a; font-weight: 600; }   /* blue */
+.preview-day.is-block { background: repeating-linear-gradient(45deg, #d1d5db, #d1d5db 4px, #9ca3af 4px, #9ca3af 8px); color: #1f2937; font-weight: 600; }  /* v3.65 — pokój wyłączony: szare pasy */
 .preview-day:hover { filter: brightness(1.08); }
 
 /* v3.34 — Weekendy: header BIAŁY tekst + outline (spójność z data cells).
@@ -1881,8 +1883,12 @@ function getRoomStatusForRange(roomId, fromStr, toStr2) {
 
 function getRoomStatusToday(roomId) {
   const today = todayStr();
+  // v3.65 — wyłączenie pokoju (remont/budowa) ma priorytet i własny status (nie liczy się jako zajęty gościem).
+  const _td = parseDate(today);
+  const block = savedBookings.find(b => b.roomId === roomId && b.outOfService && parseDate(b.from) <= _td && _td < parseDate(b.to));
+  if (block) return { status: "block", reason: OS_REASON_LABELS[block.osReason] || "Wyłączony", until: block.to, booking: block };
   const active = savedBookings.find(b => {
-    if (b.roomId !== roomId) return false;
+    if (b.roomId !== roomId || b.outOfService) return false;
     const bs = parseDate(b.from);
     const reservedEnd = parseDate(getEffectiveTo(b));
     const ae = getActualEnd(b);
@@ -1976,6 +1982,8 @@ function billingMatchesRange(b, rFrom, rTo) {
 }
 
 function calcBookingTotal(b, room, nights, periodRange) {
+  // v3.65 — pokój wyłączony (remont/budowa) nie generuje przychodu.
+  if (b?.outOfService) return 0;
   const rFrom = periodRange?.from || null;
   const rTo   = periodRange?.to   || null;
 
@@ -2116,6 +2124,10 @@ const MEDIA_VAT_DEFAULTS = { electricity: 23, gas: 23, water: 8, other: 23 };
 const PM_LABELS = { invoice:"Faktura", cash:"Gotówka", transfer:"Przelew", invoice_transfer:"Faktura przelew", invoice_cash:"Faktura gotówka" };
 const PM_CLS = { invoice:"pm-invoice", cash:"pm-cash", transfer:"pm-transfer", invoice_transfer:"pm-invoice", invoice_cash:"pm-invoice" };
 function pmIconMap(sz) { return { invoice:ICONS.receipt(sz), cash:ICONS.banknote(sz), transfer:ICONS.landmark(sz), invoice_transfer:ICONS.receipt(sz), invoice_cash:ICONS.receipt(sz) }; }
+
+// v3.65 — pokój wyłączony z użytku (remont/budowa). Przechowywany jak booking z outOfService:true,
+// ale 0 przychodu, osobny kolor, blokuje pokój, nie liczy się w statystykach rezerwacji.
+const OS_REASON_LABELS = { remont: "Remont", budowa: "Budowa", inne: "Wyłączony" };
 function getRoomMedia(roomId, period) {
   const m = roomMedia[getRoomMediaKey(roomId, period)];
   if (!m) return { electricity: 0, gas: 0, water: 0, electricityVat: 23, gasVat: 23, waterVat: 8, others: [], note: "" };
@@ -3087,6 +3099,12 @@ function buildStatusLocCard(loc, from, to) {
               <span class="badge badge-occupied">Zajęty${st.isExtended?'<span class="ext-badge">+</span>':''}</span>
             </div>
           </div>`;
+      } else if (st.status === "block") {
+        return `
+          <div class="status-room-row status-room-clickable" data-room-detail="${room.id}" data-room-loc="${loc.id}" title="Pokój wyłączony — ${esc(st.reason)}">
+            <div><div class="status-room-name">${esc(room.name)}</div><div class="status-room-info" style="color:var(--text3)">${ICONS.settings(10)} Wyłączony do ${fmtDate(st.until)}</div></div>
+            <div class="status-badge-col"><span class="badge" style="background:var(--text3);color:#fff">${esc(st.reason)}</span></div>
+          </div>`;
       } else {
         return `
           <div class="status-room-row status-room-clickable" data-room-detail="${room.id}" data-room-loc="${loc.id}" title="Kliknij aby zobaczyć szczegóły pokoju">
@@ -3987,6 +4005,23 @@ function buildReportGroupRow(groupBookings, loc, companyName, periodRange) {
 
 function buildReportRow(b, loc, periodRange) {
   const room = loc?.rooms.find(r=>r.id===b.roomId) || DATA.locations.find(l=>l.id===b.locId)?.rooms.find(r=>r.id===b.roomId);
+  // v3.65 — pokój wyłączony (remont/budowa): osobny szary wiersz, 0 przychodu, z przyciskiem usunięcia.
+  if (b.outOfService) {
+    const roomLabel = room ? (/^\d+$/.test(room.name||"") ? `Pokój ${room.name}` : room.name) : "—";
+    return `
+      <div class="report-row" style="background:repeating-linear-gradient(45deg,var(--surface2),var(--surface2) 6px,var(--surface3) 6px,var(--surface3) 12px)">
+        <div>
+          <div style="font-size:11px;font-weight:700;color:var(--text2);letter-spacing:0.3px;margin-bottom:2px">${esc(roomLabel)}</div>
+          <div class="report-guest" style="display:flex;align-items:center;gap:6px">${ICONS.settings(13)} <strong>Pokój wyłączony</strong> <span style="background:var(--text3);color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:99px">${OS_REASON_LABELS[b.osReason]||"Wyłączony"}</span></div>
+        </div>
+        <div><div class="report-dates-cell">${fmtDate(b.from)} → ${fmtDate(b.to)} (${diffDays(b.from,b.to)} ${nw(diffDays(b.from,b.to))})</div>${b.osNote?`<div class="report-dates-cell" style="color:var(--text3);font-style:italic">${esc(b.osNote)}</div>`:""}</div>
+        <div><span class="pm-badge pm-pending">—</span><div class="report-sub">niedostępny</div></div>
+        <div>
+          <div class="report-amount" style="color:var(--text3)">zł0</div>
+          <div class="action-row" style="margin-top:4px"><button class="act-btn danger" data-del-block="${b.id}" title="Przywróć pokój (usuń wyłączenie)">Przywróć</button></div>
+        </div>
+      </div>`;
+  }
   const actualNights = getActualNights(b);
   const reservedNights = diffDays(b.from, b.to);
   const ae = getActualEnd(b); const isExtended = ae && parseDate(ae) > parseDate(b.to);
@@ -4956,8 +4991,15 @@ function buildPreview() {
 // Jeden źródłowy stan dla: kolorów komórek Podglądu i modalu szczegółów dnia (v3.44).
 // Permanent bez końca → aktywny w nieskończoność ("9999-12-31").
 function getRoomDayStatus(roomId, dayStr) {
+  // v3.65 — wyłączenia (remont/budowa) mają PRIORYTET: pokój wyłączony pokazujemy jako "block"
+  // niezależnie od kolejności w savedBookings (np. gdy jest też stara rezerwacja na tym pokoju).
   for (const b of savedBookings) {
-    if (b.roomId !== roomId) continue;
+    if (b.roomId === roomId && b.outOfService && b.from <= dayStr && b.to > dayStr) {
+      return { status: "block", booking: b, guestName: OS_REASON_LABELS[b.osReason] || "Wyłączony" };
+    }
+  }
+  for (const b of savedBookings) {
+    if (b.roomId !== roomId || b.outOfService) continue;
     const isPerm = b.isPermanent && b.bookingType !== "company";
     const hasPermGuest = (b.guests || []).some(g => g.isPermanent);
     if (isPerm || hasPermGuest) {
@@ -5050,13 +5092,14 @@ function buildPreviewDetail(locId) {
   // Build rows
   const filter = state.previewFilter || "all";
   const roomsHtml = loc.rooms.map(room => {
-    let occupiedDays = 0, permDays = 0, companyDays = 0, regularDays = 0;
+    let occupiedDays = 0, permDays = 0, companyDays = 0, regularDays = 0, blockDays = 0;
     const dayCells = allDays.map(day => {
       const s = getCellStatus(room.id, day.dateStr);
-      const statusCls = s.status === "perm" ? "is-perm" : s.status === "occupied" ? "is-occupied" : "is-free";
+      const statusCls = s.status === "block" ? "is-block" : s.status === "perm" ? "is-perm" : s.status === "occupied" ? "is-occupied" : "is-free";
       const boundaryCls = day.isMonthStart ? "is-month-boundary" : "";
       const weekendCls = day.isWeekend ? "is-weekend" : "";   // v3.40 — ciemniejszy odcień statusu
-      if (s.status === "perm") permDays++;
+      if (s.status === "block") blockDays++;
+      else if (s.status === "perm") permDays++;
       else if (s.status === "occupied") occupiedDays++;
       // v3.40 — liczniki dla filtra firmy/zwykli: firma = bookingType company;
       // zwykły najemca = zajęte (czasowe), nie firma, nie stały.
@@ -5203,6 +5246,7 @@ function buildPreviewDetail(locId) {
           <span><span class="preview-legend-box is-free"></span> Wolny</span>
           <span><span class="preview-legend-box is-occupied"></span> Rezerwacja</span>
           <span><span class="preview-legend-box is-perm"></span> Stały najemca</span>
+          <span><span class="preview-legend-box is-block"></span> Wyłączony (remont/budowa)</span>
         </div>
         <div class="preview-filter-wrap">
           <label style="font-size:11px;color:var(--text2);font-weight:600">Pokaż:</label>
@@ -5583,9 +5627,10 @@ function buildModal() {
   if (state.step==="success") body = buildSuccess(loc);
   else if (state.step==="booking") { body = buildBookingForm(loc); footer = buildFooter(); }
   else if (state.step==="calendar") body = buildCalendar(loc);
+  else if (state.step==="block") body = buildBlockForm(loc);   // v3.65 — wyłączenie pokoju
   else body = buildTypeSelector();
 
-  const showSteps = state.step !== "success" && state.step !== "type";
+  const showSteps = state.step !== "success" && state.step !== "type" && state.step !== "block";
   return `
     <div class="overlay" id="overlay">
       <div class="modal" id="modalBox">
@@ -5625,19 +5670,73 @@ function buildTypeSelector() {
         <span class="type-lbl">Firmowa</span>
         <span class="type-desc">Pracownicy firmy</span>
       </button>
+      <button class="type-btn ${state.bookingType==="block"?"sel":""}" data-type="block">
+        <span class="type-icon">${ICONS.wrench ? ICONS.wrench(20) : ICONS.settings(20)}</span>
+        <span class="type-lbl">Wyłącz pokój</span>
+        <span class="type-desc">Remont / budowa</span>
+      </button>
     </div>
     ${state.bookingType==="company" ? `
       <div class="form-field">
         <label>Nazwa firmy *</label>
         <input type="text" id="companyNameInput" value="${esc(state.companyName)}" placeholder="np. ABC Sp. z o.o." autocomplete="off" />
       </div>` : ""}
+    ${state.bookingType==="block" ? `
+      <div style="font-size:12px;padding:9px 11px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--text2);margin-top:4px;display:flex;gap:7px;align-items:flex-start">
+        <span style="flex-shrink:0;margin-top:1px">${ICONS.info(13)}</span><div>Pokój będzie <strong>niedostępny do rezerwacji</strong> w wybranym terminie, oznaczony osobnym kolorem w Podglądzie i Raportach. <strong>Nie liczy się do przychodu</strong>.</div>
+      </div>` : ""}
     ${state.bookingType ? `
       <button class="check-btn" id="typeNextBtn" ${state.bookingType==="company"&&!state.companyName.trim()?"disabled":""}>
-        Wybierz termin rezerwacji →
+        ${state.bookingType==="block" ? "Wybierz pokoje i termin →" : "Wybierz termin rezerwacji →"}
       </button>` : ""}
     <div style="margin-top:12px;padding:10px 12px;background:var(--blue-light);border-radius:var(--radius);font-size:12px;color:var(--blue)">
       ℹ️ <strong>Jak to działa:</strong> Najpierw rezerwujesz pokój (blokujesz termin). Faktyczny czas pobytu i kwoty wpisujesz później w Raportach.
     </div>`;
+}
+
+// v3.65 — Formularz wyłączenia pokoju (remont/budowa). Prosty: pokoje + termin + powód + notatka.
+function buildBlockForm(loc) {
+  const sel = state.selectedRooms || [];
+  const reason = state.osReason || "remont";
+  const reasons = [{v:"remont",l:"Remont"},{v:"budowa",l:"Budowa"},{v:"inne",l:"Inne"}];
+  const _inp = "width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:14px;color:var(--text);font-variant-numeric:tabular-nums;outline:none";
+  const canSave = sel.length > 0 && state.calStart && state.calEnd && state.calStart < state.calEnd;
+  return `
+    <div style="font-size:13px;color:var(--text2);margin-bottom:12px;display:flex;align-items:center;gap:6px">${ICONS.settings(15)} Wyłącz pokój(e) z użytku — będą niedostępne do rezerwacji w tym terminie.</div>
+
+    <div class="form-field">
+      <label>Powód</label>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        ${reasons.map(r => `<button type="button" class="os-reason-btn" data-os-reason="${r.v}" style="flex:1;min-width:90px;padding:8px;border:1px solid ${reason===r.v?"var(--blue)":"var(--border)"};border-radius:var(--radius);background:${reason===r.v?"var(--blue-light)":"var(--surface)"};color:${reason===r.v?"var(--blue)":"var(--text)"};cursor:pointer;font-family:inherit;font-size:13px;font-weight:600">${r.l}</button>`).join("")}
+      </div>
+    </div>
+
+    <div class="form-field">
+      <label>Pokoje do wyłączenia (${sel.length} zazn.)</label>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px;max-height:220px;overflow-y:auto;padding:2px">
+        ${loc.rooms.map(r => {
+          const on = sel.includes(r.id);
+          const label = /^\d+$/.test(r.name||"") ? `Pokój ${r.name}` : r.name;
+          return `<button type="button" class="os-room-btn" data-os-room="${r.id}" style="padding:8px 6px;border:1px solid ${on?"var(--orange)":"var(--border)"};border-radius:var(--radius);background:${on?"var(--orange-light)":"var(--surface)"};color:${on?"var(--orange)":"var(--text)"};cursor:pointer;font-family:inherit;font-size:12px;font-weight:600;text-align:left;display:flex;align-items:center;gap:5px">${on?ICONS.checkCircle(13):ICONS.square?ICONS.square(13):""}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(label)}</span></button>`;
+        }).join("")}
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px">
+      <div class="form-field" style="flex:1"><label>Od (włącznie)</label><input type="date" id="blockFrom" value="${esc(state.calStart||todayStr())}" style="${_inp}" /></div>
+      <div class="form-field" style="flex:1"><label>Do (wyłącznie)</label><input type="date" id="blockTo" value="${esc(state.calEnd||"")}" style="${_inp}" /></div>
+    </div>
+
+    <div class="form-field">
+      <label>Notatka (opcjonalna)</label>
+      <input type="text" id="blockNote" value="${esc(state.osNote||"")}" placeholder="np. wymiana łazienki" style="${_inp}" />
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn-back" id="blockBackBtn" style="flex:1">← Wróć</button>
+      <button class="btn-confirm" id="blockConfirmBtn" style="flex:2" ${!canSave?"disabled":""}>${ICONS.settings(14)} Wyłącz ${sel.length>1?`${sel.length} pokoi`:"pokój"}</button>
+    </div>
+    ${!canSave ? `<div style="font-size:11px;color:var(--text3);margin-top:6px;text-align:center">${sel.length===0?"Zaznacz co najmniej 1 pokój":(!state.calStart||!state.calEnd)?"Wybierz termin od–do":"Data Od musi być wcześniejsza niż Do"}</div>` : ""}`;
 }
 
 function buildCalendar(loc) {
@@ -7874,7 +7973,34 @@ function attachEvents() {
       });
     }
     document.getElementById("typeNextBtn")?.addEventListener("click", () => {
-      state.step="calendar"; render();
+      // v3.65 — wyłączenie pokoju ma własny, prosty krok (pokoje + termin + powód), bez gości/płatności.
+      state.step = (state.bookingType === "block") ? "block" : "calendar";
+      if (state.bookingType === "block" && !state.osReason) state.osReason = "remont";
+      render();
+    });
+  }
+
+  // v3.65 — formularz wyłączenia pokoju (remont/budowa)
+  if (state.step==="block") {
+    document.querySelectorAll("[data-os-reason]").forEach(btn => {
+      btn.addEventListener("click", () => { state.osReason = btn.dataset.osReason; render(); });
+    });
+    document.querySelectorAll("[data-os-room]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        if (!state.selectedRooms) state.selectedRooms = [];
+        const rid = btn.dataset.osRoom;
+        state.selectedRooms = state.selectedRooms.includes(rid)
+          ? state.selectedRooms.filter(r => r !== rid)
+          : [...state.selectedRooms, rid];
+        render();
+      });
+    });
+    document.getElementById("blockFrom")?.addEventListener("change", e => { state.calStart = e.target.value; render(); });
+    document.getElementById("blockTo")?.addEventListener("change", e => { state.calEnd = e.target.value; render(); });
+    document.getElementById("blockNote")?.addEventListener("input", e => { state.osNote = e.target.value; });
+    document.getElementById("blockBackBtn")?.addEventListener("click", () => { state.step = "type"; render(); });
+    document.getElementById("blockConfirmBtn")?.addEventListener("click", () => {
+      if (!API_CREDS) confirmBlock(); else confirmBlockAPI();
     });
   }
 
@@ -8582,7 +8708,44 @@ function closeModal() {
   state.calEndWasPlaceholder = false;
   state.bookingType = null;
   state.companyName = "";
+  state.osReason = null; state.osNote = "";   // v3.65
   render();
+}
+
+// v3.65 — utworzenie wyłączenia pokoju (remont/budowa). Jeden rekord per pokój, outOfService:true, 0 przychodu.
+function makeBlockObj(loc, roomId, withId) {
+  const room = loc.rooms.find(r => r.id === roomId);
+  const obj = {
+    locId: state.modal, roomId,
+    from: state.calStart, to: state.calEnd, bufferDays: 0,
+    bookingType: "block", outOfService: true,
+    osReason: state.osReason || "remont", osNote: (state.osNote || "").trim(),
+    guests: [], bedsUsed: room?.capacity || 1,
+    payment: { method: null, timing: null }, vatRate: "8", priceAtBooking: null,
+  };
+  if (withId) { bookingCounter++; obj.id = "sb" + bookingCounter; }
+  return obj;
+}
+function afterBlockSaved(loc, n) {
+  showToast(`${ICONS.settings ? "🔧" : ""} Wyłączono ${n} ${n === 1 ? "pokój" : (n < 5 ? "pokoje" : "pokoi")} (${OS_REASON_LABELS[state.osReason] || "remont"})`);
+  const locId = loc.id;
+  closeModal();   // resetuje state + render
+  state.activeTab = "preview"; state.previewLocId = locId;
+  render();
+}
+function confirmBlock() {
+  const loc = DATA.locations.find(l => l.id === state.modal);
+  const rooms = state.selectedRooms || [];
+  rooms.forEach(rid => savedBookings.push(makeBlockObj(loc, rid, true)));
+  afterBlockSaved(loc, rooms.length);
+}
+async function confirmBlockAPI() {
+  const loc = DATA.locations.find(l => l.id === state.modal);
+  const rooms = (state.selectedRooms || []).slice();
+  try {
+    for (const rid of rooms) { const b = await apiPost("/api/bookings", makeBlockObj(loc, rid, false)); savedBookings.push(b); }
+    afterBlockSaved(loc, rooms.length);
+  } catch (e) { showToast("❌ Błąd zapisu: " + e.message); }
 }
 
 function confirmBooking() {
@@ -9026,7 +9189,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.64 · ${new Date().getFullYear()}
+          HospesAI · v3.65 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
@@ -9532,6 +9695,19 @@ document.addEventListener("click", async (e) => {
   if (e.target.dataset.delInv) {
     e.stopImmediatePropagation();
     await deleteInvoiceAPI(e.target.dataset.delInv);
+    return;
+  }
+  // v3.65 — "Przywróć pokój" = usuń wyłączenie (block)
+  const delBlockBtn = e.target.closest("[data-del-block]");
+  if (delBlockBtn) {
+    e.stopImmediatePropagation();
+    const bid = delBlockBtn.dataset.delBlock;
+    if (API_CREDS) {
+      try { await apiDelete("/api/bookings/" + bid); savedBookings = savedBookings.filter(x=>x.id!==bid); showToast("🔧 Pokój przywrócony"); render(); }
+      catch(err){ showToast(err.message.includes("403") ? "Brak uprawnień — tylko admin" : "❌ Błąd: " + err.message); }
+    } else {
+      savedBookings = savedBookings.filter(x=>x.id!==bid); showToast("🔧 Pokój przywrócony"); render();
+    }
     return;
   }
   const mediaBtn = e.target.closest("[data-media-save]");
