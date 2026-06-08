@@ -2608,6 +2608,7 @@ function buildAppCore() {
           <div class="tab-pane ${state.activeTab==="status"?"active":""}" id="pane-status">${state.activeTab==="status"?buildStatus():""}</div>
           <div class="tab-pane ${state.activeTab==="preview"?"active":""}" id="pane-preview">${state.activeTab==="preview"?buildPreview():""}</div>
           <div class="tab-pane ${state.activeTab==="reports"?"active":""}" id="pane-reports">${state.activeTab==="reports"?buildReports():""}</div>
+          <div class="tab-pane ${state.activeTab==="earnings"?"active":""}" id="pane-earnings">${state.activeTab==="earnings"?buildEarnings():""}</div>
           <div class="tab-pane ${state.activeTab==="charts"?"active":""}" id="pane-charts">${state.activeTab==="charts"?buildCharts():""}</div>
           <div class="tab-pane ${state.activeTab==="invoices"?"active":""}" id="pane-invoices">${state.activeTab==="invoices"?buildInvoices():""}</div>
           <div class="tab-pane ${state.activeTab==="notes"?"active":""}" id="pane-notes">${state.activeTab==="notes"?buildNotes():""}</div>
@@ -2636,6 +2637,7 @@ function buildSidebar() {
     { id:"status",    icon: ICONS.grid(),     lbl:"Status" },
     { id:"preview",   icon: ICONS.eye(),      lbl:"Podgląd" },
     { id:"reports",   icon: ICONS.fileText(), lbl:"Raporty" },
+    { id:"earnings",  icon: ICONS.bed(),      lbl:"Rentowność łóżek" },
     { id:"charts",    icon: ICONS.barChart(), lbl:"Wykresy" },
     { id:"invoices",  icon: ICONS.receipt(),  lbl:"Faktury" },
     { id:"notes",     icon: ICONS.notebook(), lbl:"Notatki" },
@@ -4267,6 +4269,107 @@ function buildMediaSectionForLoc(loc) {
 
 // Legacy full media section (no longer used but kept for reference)
 function buildMediaSection() { return ""; }
+
+// ─── RENTOWNOŚĆ ŁÓŻEK (v3.66) ─────────────────────────────────
+// Tylko PODGLĄD do decyzji cenowych: ile zarabia pokój / łóżko + % obłożenia + porównanie do średniej.
+function buildEarnings() {
+  const now = new Date();
+  const year = state.earnYear || String(now.getFullYear());
+  const month = state.earnMonth || "";   // "" = cały rok
+  let from, to, periodLabel;
+  if (month) {
+    const y = +year, m = +month;
+    from = `${year}-${month}-01`; to = toStr(new Date(y, m, 1));
+    periodLabel = `${MONTHS[m-1]} ${year}`;
+  } else {
+    from = `${year}-01-01`; to = `${+year + 1}-01-01`; periodLabel = `Rok ${year}`;
+  }
+  const periodRange = { from, to };
+  const daysInPeriod = Math.max(1, diffDays(from, to));
+  const locFilter = state.earnLoc || "all";
+
+  const years = new Set([String(now.getFullYear()), String(now.getFullYear()-1)]);
+  savedBookings.forEach(b => { if (b.from) years.add(b.from.slice(0,4)); });
+  const yearOpts = [...years].sort();
+
+  const overlapNights = (b) => {
+    const isPerm = b.isPermanent && b.bookingType !== "company";
+    const bStart = isPerm ? (b.permanentStart || b.from) : b.from;
+    const bEnd = isPerm ? (b.permanentEnd || to) : (getEffectiveTo(b) || b.to);
+    if (!bStart || !bEnd) return 0;
+    const s = bStart > from ? bStart : from;
+    const e = bEnd < to ? bEnd : to;
+    return s < e ? diffDays(s, e) : 0;
+  };
+
+  const locs = DATA.locations.filter(l => locFilter === "all" || String(l.id) === String(locFilter));
+  let grandRev = 0, grandBeds = 0, sectionsHtml = "";
+
+  locs.forEach(loc => {
+    const rows = loc.rooms.map(room => {
+      const beds = room.capacity || 1;
+      let revenue = 0, occBedNights = 0, blockedNights = 0;
+      savedBookings.forEach(b => {
+        if (b.roomId !== room.id) return;
+        if (b.outOfService) { blockedNights += overlapNights(b); return; }
+        revenue += calcBookingTotal(b, room, getActualNights(b), periodRange);
+        occBedNights += bedsUsedByBooking(b) * overlapNights(b);
+      });
+      const availBedNights = beds * daysInPeriod;
+      const occPct = availBedNights > 0 ? Math.min(100, occBedNights / availBedNights * 100) : 0;
+      return { room, beds, revenue, perBed: beds > 0 ? revenue / beds : 0, occPct, blockedNights };
+    });
+    const totRev = rows.reduce((s,r)=>s+r.revenue,0);
+    const totBeds = rows.reduce((s,r)=>s+r.beds,0);
+    const avgPerBed = totBeds > 0 ? totRev / totBeds : 0;
+    grandRev += totRev; grandBeds += totBeds;
+    rows.sort((a,b) => b.perBed - a.perBed);
+    const tableRows = rows.map((r, i) => {
+      const vs = avgPerBed > 0 ? Math.round((r.perBed - avgPerBed) / avgPerBed * 100) : 0;
+      const vsColor = vs > 5 ? "var(--green)" : vs < -5 ? "var(--red)" : "var(--text2)";
+      const occColor = r.occPct >= 70 ? "var(--green)" : r.occPct >= 40 ? "var(--orange)" : "var(--red)";
+      const roomLabel = /^\d+$/.test(r.room.name||"") ? `Pokój ${r.room.name}` : r.room.name;
+      return `<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:8px 6px;font-weight:600">${i+1}. ${esc(roomLabel)}${r.blockedNights>0?` <span style="font-size:10px;color:var(--text3)" title="${r.blockedNights} dni wyłączenia w okresie">${ICONS.settings(10)}</span>`:""}</td>
+        <td style="padding:8px 6px;text-align:center;color:var(--text2)">${r.beds}</td>
+        <td style="padding:8px 6px;text-align:right;font-variant-numeric:tabular-nums">zł${Math.round(r.revenue).toLocaleString()}</td>
+        <td style="padding:8px 6px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums">zł${Math.round(r.perBed).toLocaleString()}</td>
+        <td style="padding:8px 6px;text-align:center"><span style="color:${occColor};font-weight:600">${Math.round(r.occPct)}%</span></td>
+        <td style="padding:8px 6px;text-align:right;color:${vsColor};font-weight:700;font-variant-numeric:tabular-nums">${vs>0?"+":""}${vs}%</td>
+      </tr>`;
+    }).join("");
+    sectionsHtml += `
+      <div style="margin-bottom:18px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
+        <div style="padding:10px 14px;background:var(--surface2);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <div style="font-weight:700;display:flex;align-items:center;gap:7px">${locIcon(loc,15)} ${esc(loc.name)}</div>
+          <div style="font-size:12px;color:var(--text2)">Śr. na łóżko: <strong>zł${Math.round(avgPerBed).toLocaleString()}</strong> · ${totBeds} łóżek · przychód zł${Math.round(totRev).toLocaleString()}</div>
+        </div>
+        <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead><tr style="background:var(--surface2);color:var(--text2);font-size:11px;text-transform:uppercase;letter-spacing:0.3px">
+            <th style="padding:8px 6px;text-align:left">Pokój (ranking)</th><th style="padding:8px 6px;text-align:center">Łóżek</th>
+            <th style="padding:8px 6px;text-align:right">Przychód</th><th style="padding:8px 6px;text-align:right">Na łóżko</th>
+            <th style="padding:8px 6px;text-align:center">Obłożenie</th><th style="padding:8px 6px;text-align:right">vs średnia</th>
+          </tr></thead>
+          <tbody>${tableRows || `<tr><td colspan="6" style="padding:12px;text-align:center;color:var(--text3)">Brak pokoi.</td></tr>`}</tbody>
+        </table></div>
+      </div>`;
+  });
+  const grandAvg = grandBeds > 0 ? grandRev / grandBeds : 0;
+
+  const _sel = "padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:13px;color:var(--text);font-family:inherit;outline:none";
+  return `
+    <div class="reports-toolbar"><div class="reports-title" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${ICONS.bed(22)} Rentowność łóżek <span style="font-size:12px;font-weight:400;color:var(--text2)">${periodLabel}</span></div></div>
+    <div style="padding:10px 12px;background:var(--blue-light);border:1px solid var(--blue-mid);border-radius:var(--radius);font-size:12px;color:var(--blue);margin-bottom:12px">
+      ${ICONS.info(13)} Podgląd do <strong>decyzji cenowych</strong>: porównaj ile zarabia każde łóżko i jakie ma obłożenie. „Na łóżko" = przychód pokoju ÷ liczba łóżek (sprawiedliwe porównanie pokoi różnej wielkości). „vs średnia" = odchylenie od średniego przychodu na łóżko w obiekcie. Pokoje wyraźnie poniżej średniej (czerwone) + niskie obłożenie = kandydaci do zmiany ceny. Kwoty BRUTTO.
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center">
+      <select id="earnYear" style="${_sel}">${yearOpts.map(y => `<option value="${y}" ${y===year?"selected":""}>${y}</option>`).join("")}</select>
+      <select id="earnMonth" style="${_sel}"><option value="" ${month===""?"selected":""}>Cały rok</option>${MONTHS.map((mn,i) => `<option value="${String(i+1).padStart(2,"0")}" ${month===String(i+1).padStart(2,"0")?"selected":""}>${mn}</option>`).join("")}</select>
+      <select id="earnLoc" style="${_sel}"><option value="all" ${locFilter==="all"?"selected":""}>Wszystkie obiekty</option>${DATA.locations.map(l => `<option value="${l.id}" ${String(locFilter)===String(l.id)?"selected":""}>${esc(l.name)}</option>`).join("")}</select>
+      <span style="margin-left:auto;font-size:12px;color:var(--text2)">Średnia na łóżko (wszystko): <strong>zł${Math.round(grandAvg).toLocaleString()}</strong></span>
+    </div>
+    ${sectionsHtml || `<div class="no-results-box">Brak danych dla wybranego okresu.</div>`}`;
+}
 
 // ─── CHARTS TAB ──────────────────────────────────────────────
 function buildCharts() {
@@ -7761,6 +7864,10 @@ function attachEvents() {
   document.getElementById("reportsSort")?.addEventListener("change", e => {
     state.reportsSort = e.target.value; render();
   });
+  // v3.66 — filtry zakładki Rentowność łóżek
+  document.getElementById("earnYear")?.addEventListener("change", e => { state.earnYear = e.target.value; render(); });
+  document.getElementById("earnMonth")?.addEventListener("change", e => { state.earnMonth = e.target.value; render(); });
+  document.getElementById("earnLoc")?.addEventListener("change", e => { state.earnLoc = e.target.value; render(); });
 
   // v3.21+27 — Podgląd handlers (multi-month support)
   document.querySelectorAll("[data-preview-loc]").forEach(btn => {
@@ -9189,7 +9296,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.65 · ${new Date().getFullYear()}
+          HospesAI · v3.66 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
