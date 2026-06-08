@@ -3906,14 +3906,19 @@ function buildReportGroupRow(groupBookings, loc, companyName, periodRange) {
   const reservedNights = diffDays(first.from, first.to);
 
   // Suma kwoty i wpłat (z clip do okresu raportu, v3.19).
-  let totalCost = 0, totalPaid = 0;
+  // v3.61 — pokazujemy OBIE kwoty: brutto (= suma wierszy pokoi) i netto (= Obrót, ÷VAT),
+  // żeby grupa i rozwinięte pokoje sumowały się w obu kolumnach. Wpłacono/Pozostało = brutto (realna gotówka).
+  let totalBrutto = 0, totalNetto = 0, totalPaid = 0;
   groupBookings.forEach(b => {
     const room = loc.rooms.find(r=>r.id===b.roomId);
     const _f = bookingNettoFactor(b);  // v3.38 — netto
-    totalCost += calcBookingTotal(b, room, getActualNights(b), periodRange) * _f;
-    totalPaid += bookingPaidInRange(b, room, periodRange?.from, periodRange?.to) * _f;
+    const t = calcBookingTotal(b, room, getActualNights(b), periodRange);
+    totalBrutto += t;
+    totalNetto += t * _f;
+    totalPaid += bookingPaidInRange(b, room, periodRange?.from, periodRange?.to);   // brutto
   });
-  const totalRemaining = Math.max(0, totalCost - totalPaid);
+  const totalCost = totalBrutto;   // wiersz główny pokazuje brutto (spójnie z pokojami), netto obok
+  const totalRemaining = Math.max(0, totalBrutto - totalPaid);
 
   // Lista pokoi (etykietki)
   const roomChips = groupBookings.map(b => {
@@ -3952,15 +3957,17 @@ function buildReportGroupRow(groupBookings, loc, companyName, periodRange) {
         <div class="report-sub">${timLabels[first.payment?.timing]||"—"}</div>
       </div>
       <div>
-        <div class="report-amount">zł${totalCost.toLocaleString()}</div>
+        <div class="report-amount">zł${Math.round(totalBrutto).toLocaleString()}</div>
+        <div style="font-size:10px;color:var(--text2);font-variant-numeric:tabular-nums;margin-top:1px" title="Obrót netto (÷VAT)">netto zł${Math.round(totalNetto).toLocaleString()}</div>
         <div style="font-size:10px;color:var(--text2);margin-top:2px">${isExpanded ? "Kliknij aby zwinąć" : "Kliknij aby zobaczyć szczegóły"}</div>
       </div>
     </div>
     ${totalPaid > 0 || totalRemaining > 0 ? `
       <div class="pay-strip" data-group-toggle="${groupId}" style="cursor:pointer">
-        <div class="pay-strip-item"><span class="pay-strip-key">Łącznie</span><span class="pay-strip-val">zł${totalCost.toLocaleString()}</span></div>
-        <div class="pay-strip-item"><span class="pay-strip-key">Wpłacono</span><span class="pay-strip-val ok">zł${totalPaid.toLocaleString()}</span></div>
-        <div class="pay-strip-item"><span class="pay-strip-key">Pozostało</span><span class="pay-strip-val ${totalRemaining>0?"warn":"ok"}">zł${totalRemaining.toLocaleString()}</span></div>
+        <div class="pay-strip-item"><span class="pay-strip-key">Łącznie brutto</span><span class="pay-strip-val">zł${Math.round(totalBrutto).toLocaleString()}</span></div>
+        <div class="pay-strip-item"><span class="pay-strip-key">netto</span><span class="pay-strip-val">zł${Math.round(totalNetto).toLocaleString()}</span></div>
+        <div class="pay-strip-item"><span class="pay-strip-key">Wpłacono</span><span class="pay-strip-val ok">zł${Math.round(totalPaid).toLocaleString()}</span></div>
+        <div class="pay-strip-item"><span class="pay-strip-key">Pozostało</span><span class="pay-strip-val ${totalRemaining>0?"warn":"ok"}">zł${Math.round(totalRemaining).toLocaleString()}</span></div>
       </div>` : ""}
     ${isExpanded ? `
       <div style="padding:0 0 0 24px;border-left:3px solid var(--blue-mid);margin:0 0 8px 14px;background:var(--surface2)">
@@ -4065,6 +4072,7 @@ function buildReportRow(b, loc, periodRange) {
         </div>
         <div>
           <div class="report-amount">zł${total.toLocaleString()}</div>
+          <div style="font-size:10px;color:var(--text2);font-variant-numeric:tabular-nums;margin-top:1px" title="Kwota netto (Przychód brutto ÷ VAT)">netto zł${Math.round(total * bookingNettoFactor(b)).toLocaleString()}</div>
           <div class="action-row" style="margin-top:4px">
             <button class="act-btn" data-edit="${b.id}">Edytuj</button>
           </div>
@@ -8974,7 +8982,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.60 · ${new Date().getFullYear()}
+          HospesAI · v3.61 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
