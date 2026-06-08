@@ -822,7 +822,7 @@ body {
 /* Payment section — simplified (no amount in booking step) */
 .payment-section { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 12px 14px; margin-bottom: 12px; }
 .payment-sec-title { font-size: 11px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 8px; }
-.pm-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 6px; margin-bottom: 10px; }
+.pm-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px,1fr)); gap: 6px; margin-bottom: 10px; }
 .pm-btn {
   padding: 7px 4px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
   cursor: pointer; font-family: inherit; font-variant-numeric: tabular-nums; text-align: center; transition: all 0.12s; color: var(--text); font-size: 12px; font-weight: 500;
@@ -1541,6 +1541,7 @@ let state = {
   dayDetailModal: null,  // v3.44 — { roomId, locId, dateStr } — szczegóły pojedynczego dnia z Podglądu
   billingMode: "room",   // "room" | "employee" — tryb rozliczenia firmowego
   customPrice: "",        // nadpisanie ceny finalnej, pusty = brak
+  customPriceMode: "perRoom", // v3.62: "perRoom" (cena × pokoje) | "total" (cena = za wszystkie pokoje razem, dzielona równo)
   vatRate: "8",           // v3.37: stawka VAT — "8" (krótkoterm) lub "23" (długoterm)
   isPermanent: false,     // stały najemca (rezerwacja indywidualna open-ended)
   permanentMonthlyRate: "", // stawka miesięczna stałego najemcy (pusty = liczyć za dobę z cennika)
@@ -2109,6 +2110,12 @@ function buildBookingBreakdown(b, room, nights) {
 function getRoomMediaKey(roomId, period) { return `${roomId}__${period}`; }
 // v3.46 — domyślne stawki VAT mediów (PL): prąd/gaz 23%, woda/ścieki 8%, inne 23%.
 const MEDIA_VAT_DEFAULTS = { electricity: 23, gas: 23, water: 8, other: 23 };
+
+// v3.62 — formy płatności (centralnie, żeby etykiety/ikony/klasy były spójne wszędzie).
+// invoice_transfer / invoice_cash = faktura opłacona przelewem / gotówką (dodane na życzenie).
+const PM_LABELS = { invoice:"Faktura", cash:"Gotówka", transfer:"Przelew", invoice_transfer:"Faktura przelew", invoice_cash:"Faktura gotówka" };
+const PM_CLS = { invoice:"pm-invoice", cash:"pm-cash", transfer:"pm-transfer", invoice_transfer:"pm-invoice", invoice_cash:"pm-invoice" };
+function pmIconMap(sz) { return { invoice:ICONS.receipt(sz), cash:ICONS.banknote(sz), transfer:ICONS.landmark(sz), invoice_transfer:ICONS.receipt(sz), invoice_cash:ICONS.receipt(sz) }; }
 function getRoomMedia(roomId, period) {
   const m = roomMedia[getRoomMediaKey(roomId, period)];
   if (!m) return { electricity: 0, gas: 0, water: 0, electricityVat: 23, gasVat: 23, waterVat: 8, others: [], note: "" };
@@ -3183,8 +3190,8 @@ function buildRoomDetailModal() {
           </div>`).join("") : ""}`;
 
     // Payment display — SVG ikona per metoda
-    const methodIcons = { invoice: ICONS.receipt(12), cash: ICONS.banknote(12), transfer: ICONS.landmark(12) };
-    const methodNames = { invoice: "Faktura", cash: "Gotówka", transfer: "Przelew" };
+    const methodIcons = pmIconMap(12);
+    const methodNames = PM_LABELS;
     const methodLabel = b.payment?.method
       ? `<span style="display:inline-flex;align-items:center;gap:5px">${methodIcons[b.payment.method]} ${methodNames[b.payment.method]}</span>`
       : "—";
@@ -3356,8 +3363,8 @@ function buildDayDetailModal() {
     const who = isCompany ? (b.companyName || "—") : (b.guests?.[0]?.name || "—");
     const reservedNights = diffDays(b.from, b.to);
 
-    const methodIcons = { invoice: ICONS.receipt(12), cash: ICONS.banknote(12), transfer: ICONS.landmark(12) };
-    const methodNames = { invoice: "Faktura", cash: "Gotówka", transfer: "Przelew" };
+    const methodIcons = pmIconMap(12);
+    const methodNames = PM_LABELS;
     const methodLabel = b.payment?.method
       ? `<span style="display:inline-flex;align-items:center;gap:5px">${methodIcons[b.payment.method]} ${methodNames[b.payment.method]}</span>` : "—";
     const timingLabel = { prepaid:"przed pobytem", postpaid:"po pobycie" }[b.payment?.timing] || "";
@@ -3932,8 +3939,8 @@ function buildReportGroupRow(groupBookings, loc, companyName, periodRange) {
   groupBookings.forEach(b => (b.guests || []).forEach(g => g.name && uniqueGuestNames.add(g.name)));
   const totalPeople = uniqueGuestNames.size;
 
-  const pmLabels = { invoice:"Faktura", cash:"Gotówka", transfer:"Przelew" };
-  const pmCls = { invoice:"pm-invoice", cash:"pm-cash", transfer:"pm-transfer" };
+  const pmLabels = PM_LABELS;
+  const pmCls = PM_CLS;
   const timLabels = { prepaid:"Przed pobytem", postpaid:"Po pobycie" };
 
   // Ile osób ma status stałego najemcy
@@ -3991,8 +3998,8 @@ function buildReportRow(b, loc, periodRange) {
   const remaining = Math.max(0, total - paid);
   const overdueMonths = isPerm ? getPermanentOverdueMonths(b, b.from, b.payment?.timing) : [];
 
-  const pmLabels = { invoice:"Faktura", cash:"Gotówka", transfer:"Przelew" };
-  const pmCls = { invoice:"pm-invoice", cash:"pm-cash", transfer:"pm-transfer" };
+  const pmLabels = PM_LABELS;
+  const pmCls = PM_CLS;
   const timLabels = { prepaid:"Przed pobytem", postpaid:"Po pobycie" };
 
   // Dla firmy multi-room (bedsUsed) pokazujemy liczbę pracowników przypisanych DO TEGO pokoju, nie wszystkich z bookingu
@@ -5796,12 +5803,15 @@ function buildBookingForm(loc) {
   // Szacunkowa cena: dla firmowej sumujemy per pracownik
   const customPriceNum = state.customPrice !== "" ? parseFloat(state.customPrice) : NaN;
   const hasCustom = !isNaN(customPriceNum) && customPriceNum >= 0;
+  // v3.62 — firma multi-pokój: cena finalna może być "za pokój" (×N) albo "za wszystkie razem".
+  const isMultiCompany = isCompany && selectedRooms.length > 1;
+  const customTotalMode = isMultiCompany && state.customPriceMode === "total";
   // Indywidualna per-guest: ktokolwiek z gości ma explicit dailyRate
   const hasGuestRatesIndiv = !isCompany && !state.isPermanent
     && state.guests.some(g => g.dailyRate != null && g.dailyRate !== "" && !isNaN(parseFloat(g.dailyRate)));
   let total;
   if (hasCustom) {
-    total = customPriceNum * Math.max(1, selectedRooms.length);
+    total = customTotalMode ? customPriceNum : customPriceNum * Math.max(1, selectedRooms.length);
   } else if (hasGuestRatesIndiv) {
     // Per-gość: brak fallbacku, puste = 0
     total = 0;
@@ -5834,7 +5844,11 @@ function buildBookingForm(loc) {
   // Krótki opis przeliczenia
   let breakdownTxt = "";
   if (hasCustom) {
-    breakdownTxt = selectedRooms.length > 1 ? `zł${customPriceNum} × ${selectedRooms.length} pokoi (cena nadpisana per pokój)` : `cena nadpisana: zł${customPriceNum}`;
+    breakdownTxt = isMultiCompany
+      ? (customTotalMode
+          ? `zł${customPriceNum} za wszystkie ${selectedRooms.length} pokoje razem (≈ zł${(customPriceNum/selectedRooms.length).toFixed(2)}/pokój)`
+          : `zł${customPriceNum} × ${selectedRooms.length} pokoi (cena per pokój)`)
+      : `cena nadpisana: zł${customPriceNum}`;
   } else if (hasGuestRatesIndiv) {
     breakdownTxt = `Per-gość: ${state.guests.length} ${state.guests.length===1?"osoba":"osób"} × ${nights} ${nw(nights)} (każdy gość rozliczany osobno)`;
   } else if (isCompany) {
@@ -5863,8 +5877,17 @@ function buildBookingForm(loc) {
 
     <div class="buffer-field">
       <label>Nadpisz cenę finalną (opcjonalne)</label>
+      ${isMultiCompany ? `
+        <div style="display:flex;gap:6px;margin-bottom:8px">
+          <button type="button" class="cprice-mode-btn ${state.customPriceMode!=="total"?"sel":""}" data-cprice-mode="perRoom" style="flex:1;padding:7px 8px;border:1px solid ${state.customPriceMode!=="total"?"var(--blue)":"var(--border)"};border-radius:var(--radius);background:${state.customPriceMode!=="total"?"var(--blue-light)":"var(--surface)"};color:${state.customPriceMode!=="total"?"var(--blue)":"var(--text)"};cursor:pointer;font-family:inherit;font-size:12px;font-weight:600">Cena za pokój (× ${selectedRooms.length})</button>
+          <button type="button" class="cprice-mode-btn ${state.customPriceMode==="total"?"sel":""}" data-cprice-mode="total" style="flex:1;padding:7px 8px;border:1px solid ${state.customPriceMode==="total"?"var(--blue)":"var(--border)"};border-radius:var(--radius);background:${state.customPriceMode==="total"?"var(--blue-light)":"var(--surface)"};color:${state.customPriceMode==="total"?"var(--blue)":"var(--text)"};cursor:pointer;font-family:inherit;font-size:12px;font-weight:600">Cena za wszystkie razem</button>
+        </div>` : ""}
       <input type="number" id="customPriceInput" min="0" step="0.01" value="${esc(state.customPrice)}" placeholder="np. 1200 — zostaw puste żeby liczyć z cennika" />
-      <div class="buffer-hint">${isCompany && selectedRooms.length > 1 ? "Wartość zapisze się dla każdego z wybranych pokoi (jako cena finalna per pokój)." : "Jeśli wypełnisz, zostanie zapisana jako finalna cena rezerwacji."} Edytowalne potem w Raportach. <strong>Stawka VAT wybrana niżej zostanie zaaplikowana</strong>.</div>
+      <div class="buffer-hint">${isMultiCompany
+        ? (customTotalMode
+            ? `Wpisana kwota = cena za <strong>wszystkie ${selectedRooms.length} pokoje razem</strong>, podzielona równo (≈ zł${state.customPrice!==""&&!isNaN(customPriceNum)?(customPriceNum/selectedRooms.length).toFixed(2):"…"}/pokój).`
+            : `Wpisana kwota zapisze się dla <strong>każdego</strong> z ${selectedRooms.length} pokoi (cena finalna per pokój → łącznie × ${selectedRooms.length}).`)
+        : "Jeśli wypełnisz, zostanie zapisana jako finalna cena rezerwacji."} Edytowalne potem w Raportach. <strong>Stawka VAT wybrana niżej zostanie zaaplikowana</strong>.</div>
     </div>
 
     <div class="buffer-field">
@@ -5904,6 +5927,8 @@ function buildBookingForm(loc) {
         <button class="pm-btn ${p.method==="invoice"?"sel":""}" data-method="invoice"><span class="pmi">${ICONS.receipt(14)}</span>Faktura</button>
         <button class="pm-btn ${p.method==="cash"?"sel":""}" data-method="cash"><span class="pmi">${ICONS.banknote(14)}</span>Gotówka</button>
         <button class="pm-btn ${p.method==="transfer"?"sel":""}" data-method="transfer"><span class="pmi">${ICONS.landmark(14)}</span>Przelew</button>
+        <button class="pm-btn ${p.method==="invoice_transfer"?"sel":""}" data-method="invoice_transfer"><span class="pmi">${ICONS.receipt(14)}</span>Faktura przelew</button>
+        <button class="pm-btn ${p.method==="invoice_cash"?"sel":""}" data-method="invoice_cash"><span class="pmi">${ICONS.receipt(14)}</span>Faktura gotówka</button>
       </div>
       ${p.method ? `
         <div style="font-size:10px;color:var(--text2);margin-bottom:6px;">Termin płatności</div>
@@ -6227,7 +6252,7 @@ function buildSuccess(loc) {
   const who = isCompany
     ? `${last.companyName} (${last.guests.length} os.${isCompanyMulti ? `, ${newBookings.length} pokoi` : ""})`
     : (last.guests.find(g=>g.name.trim())?.name || "—");
-  const pmLabels = { invoice:"Faktura", cash:"Gotówka", transfer:"Przelew" };
+  const pmLabels = PM_LABELS;
   const timLabels = { prepaid:"Przed pobytem", postpaid:"Po pobycie" };
 
   // v3.54 — info dla stałego najemcy: rozliczenie miesięczne, brak daty końca ("do odwołania"),
@@ -6956,9 +6981,7 @@ function buildEditModal() {
             <label>Metoda płatności</label>
             <select id="editPayMethod">
               <option value="">— wybierz —</option>
-              <option value="invoice" ${(em.payMethod||b.payment?.method)==="invoice"?"selected":""}>Faktura</option>
-              <option value="cash" ${(em.payMethod||b.payment?.method)==="cash"?"selected":""}>Gotówka</option>
-              <option value="transfer" ${(em.payMethod||b.payment?.method)==="transfer"?"selected":""}>Przelew</option>
+              ${["invoice","cash","transfer","invoice_transfer","invoice_cash"].map(mv => `<option value="${mv}" ${(em.payMethod||b.payment?.method)===mv?"selected":""}>${PM_LABELS[mv]}</option>`).join("")}
             </select>
           </div>
           <div class="edit-field">
@@ -8082,6 +8105,10 @@ function attachEvents() {
       state.customPrice = e.target.value;
     });
     document.getElementById("customPriceInput")?.addEventListener("change", () => render());
+    // v3.62 — tryb ceny finalnej firmy multi-pokój: za pokój vs za wszystkie razem
+    document.querySelectorAll("[data-cprice-mode]").forEach(btn => {
+      btn.addEventListener("click", () => { state.customPriceMode = btn.dataset.cpriceMode; render(); });
+    });
     // v3.37 — VAT checkboxes: mutually exclusive, klik na unchecked → switch
     document.querySelectorAll("[data-vat]").forEach(cb => {
       cb.addEventListener("change", e => {
@@ -8519,7 +8546,7 @@ function openModal(locId) {
   state.payment = { method:null, timing:null };
   state.viewMonth = new Date();
   state.billingMode = "room";
-  state.customPrice = "";
+  state.customPrice = ""; state.customPriceMode = "perRoom";
   state.vatRate = "8";
   state.isPermanent = false;
   state.permanentMonthlyRate = "";
@@ -8530,7 +8557,7 @@ function openModal(locId) {
 function closeModal() {
   state.modal = null;
   state.billingMode = "room";
-  state.customPrice = "";
+  state.customPrice = ""; state.customPriceMode = "perRoom";
   state.vatRate = "8";
   // Defensywny reset — wczesniej zostawiało selectedRooms[], guests[], calStart/End z
   // poprzedniej sesji. Otwarcie modalu pokoju via openModal i tak resetuje, ale jeśli
@@ -8556,6 +8583,13 @@ function confirmBooking() {
 
   const customPriceNum = state.customPrice !== "" ? parseFloat(state.customPrice) : NaN;
   const hasCustom = !isNaN(customPriceNum) && customPriceNum >= 0;
+  // v3.62 — firma multi-pokój "cena za wszystkie razem": dziel równo na pokoje (reszta na ostatni).
+  const _customTotalMode = isCompany && selectedRooms.length > 1 && state.customPriceMode === "total";
+  const customPriceForRoom = (roomId) => {
+    if (!_customTotalMode) return customPriceNum;
+    const N = selectedRooms.length, base = Math.round(customPriceNum / N * 100) / 100;
+    return selectedRooms.indexOf(roomId) === N - 1 ? Math.round((customPriceNum - base * (N - 1)) * 100) / 100 : base;
+  };
 
   // Czy którykolwiek gość/booking ma status stałego najemcy?
   const indivPermanent = !isCompany && !!state.isPermanent;
@@ -8610,7 +8644,7 @@ function confirmBooking() {
       billingMode,
       ...(isPerm ? { isPermanent: true, permanentStart: state.calStart, permanentEnd: null } : {}),
       ...(hasPermMonthly ? { permanentMonthlyRate: permanentMonthly } : {}),
-      ...(hasCustom ? { customPrice: customPriceNum } : {}),
+      ...(hasCustom ? { customPrice: customPriceForRoom(roomId) } : {}),
       vatRate: state.vatRate || "8",   // v3.37 — stawka VAT (8/23%)
       payment: { ...state.payment },
       actualFrom: null, actualTo: null, priceAtBooking,
@@ -8881,7 +8915,7 @@ function exportCSV_DEAD() {
       b.from, b.to, reservedN, b.bufferDays||0,
       actualN !== reservedN ? actualN : "",
       gstr, adults, children,
-      {invoice:"Faktura",cash:"Gotówka",transfer:"Przelew"}[b.payment?.method]||"",
+      PM_LABELS[b.payment?.method]||"",
       {prepaid:"Przed pobytem",postpaid:"Po pobycie"}[b.payment?.timing]||"",
       paid, total
     ]);
@@ -8982,7 +9016,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.61 · ${new Date().getFullYear()}
+          HospesAI · v3.62 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
@@ -9045,6 +9079,13 @@ async function confirmBookingAPI() {
 
   const customPriceNum = state.customPrice !== "" ? parseFloat(state.customPrice) : NaN;
   const hasCustom = !isNaN(customPriceNum) && customPriceNum >= 0;
+  // v3.62 — firma multi-pokój "cena za wszystkie razem": dziel równo na pokoje (reszta na ostatni).
+  const _customTotalMode = isCompany && selectedRooms.length > 1 && state.customPriceMode === "total";
+  const customPriceForRoom = (roomId) => {
+    if (!_customTotalMode) return customPriceNum;
+    const N = selectedRooms.length, base = Math.round(customPriceNum / N * 100) / 100;
+    return selectedRooms.indexOf(roomId) === N - 1 ? Math.round((customPriceNum - base * (N - 1)) * 100) / 100 : base;
+  };
   const indivPermanent = !isCompany && !!state.isPermanent;
   const makeObj = (roomId) => {
     const room = loc.rooms.find(r => r.id === roomId);
@@ -9091,7 +9132,7 @@ async function confirmBookingAPI() {
       billingMode,
       ...(isPerm ? { isPermanent: true, permanentStart: state.calStart, permanentEnd: null } : {}),
       ...(hasPermMonthly ? { permanentMonthlyRate: permanentMonthly } : {}),
-      ...(hasCustom ? { customPrice: customPriceNum } : {}),
+      ...(hasCustom ? { customPrice: customPriceForRoom(roomId) } : {}),
       vatRate: state.vatRate || "8",   // v3.37 — stawka VAT
       payment: { ...state.payment },
       actualFrom: null, actualTo: null, priceAtBooking,
