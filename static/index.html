@@ -2588,18 +2588,21 @@ function buildAppCore() {
       <div class="main-area">
         ${buildTopbar()}
         <div class="main">
-          <div class="tab-pane ${state.activeTab==="dashboard"?"active":""}" id="pane-dashboard">${buildDashboard()}</div>
-          <div class="tab-pane ${state.activeTab==="locations"?"active":""}" id="pane-locations">${buildLocations()}</div>
-          <div class="tab-pane ${state.activeTab==="status"?"active":""}" id="pane-status">${buildStatus()}</div>
-          <div class="tab-pane ${state.activeTab==="preview"?"active":""}" id="pane-preview">${buildPreview()}</div>
-          <div class="tab-pane ${state.activeTab==="reports"?"active":""}" id="pane-reports">${buildReports()}</div>
-          <div class="tab-pane ${state.activeTab==="charts"?"active":""}" id="pane-charts">${buildCharts()}</div>
-          <div class="tab-pane ${state.activeTab==="invoices"?"active":""}" id="pane-invoices">${buildInvoices()}</div>
-          <div class="tab-pane ${state.activeTab==="notes"?"active":""}" id="pane-notes">${buildNotes()}</div>
-          <div class="tab-pane ${state.activeTab==="sms"?"active":""}" id="pane-sms">${buildSms()}</div>
-          <div class="tab-pane ${state.activeTab==="ai"?"active":""}" id="pane-ai">${buildAiAgent()}</div>
-          <div class="tab-pane ${state.activeTab==="help"?"active":""}" id="pane-help">${buildHelp()}</div>
-          <div class="tab-pane ${state.activeTab==="settings"?"active":""}" id="pane-settings">${buildSettings()}</div>
+          <!-- v3.63 PERF: budujemy TYLKO aktywną zakładkę (wcześniej każdy render() budował wszystkie 12,
+               w tym ciężki Podgląd ~290KB dla obiektu z 33 pokojami → potężne ścinanie). Zmiana zakładki
+               i tak woła render(), więc nowa aktywna zakładka zawsze się przebuduje. -->
+          <div class="tab-pane ${state.activeTab==="dashboard"?"active":""}" id="pane-dashboard">${state.activeTab==="dashboard"?buildDashboard():""}</div>
+          <div class="tab-pane ${state.activeTab==="locations"?"active":""}" id="pane-locations">${state.activeTab==="locations"?buildLocations():""}</div>
+          <div class="tab-pane ${state.activeTab==="status"?"active":""}" id="pane-status">${state.activeTab==="status"?buildStatus():""}</div>
+          <div class="tab-pane ${state.activeTab==="preview"?"active":""}" id="pane-preview">${state.activeTab==="preview"?buildPreview():""}</div>
+          <div class="tab-pane ${state.activeTab==="reports"?"active":""}" id="pane-reports">${state.activeTab==="reports"?buildReports():""}</div>
+          <div class="tab-pane ${state.activeTab==="charts"?"active":""}" id="pane-charts">${state.activeTab==="charts"?buildCharts():""}</div>
+          <div class="tab-pane ${state.activeTab==="invoices"?"active":""}" id="pane-invoices">${state.activeTab==="invoices"?buildInvoices():""}</div>
+          <div class="tab-pane ${state.activeTab==="notes"?"active":""}" id="pane-notes">${state.activeTab==="notes"?buildNotes():""}</div>
+          <div class="tab-pane ${state.activeTab==="sms"?"active":""}" id="pane-sms">${state.activeTab==="sms"?buildSms():""}</div>
+          <div class="tab-pane ${state.activeTab==="ai"?"active":""}" id="pane-ai">${state.activeTab==="ai"?buildAiAgent():""}</div>
+          <div class="tab-pane ${state.activeTab==="help"?"active":""}" id="pane-help">${state.activeTab==="help"?buildHelp():""}</div>
+          <div class="tab-pane ${state.activeTab==="settings"?"active":""}" id="pane-settings">${state.activeTab==="settings"?buildSettings():""}</div>
         </div>
       </div>
     </div>
@@ -9016,7 +9019,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.62 · ${new Date().getFullYear()}
+          HospesAI · v3.63 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
