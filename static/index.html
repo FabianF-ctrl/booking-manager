@@ -2257,63 +2257,98 @@ function getPermanentActiveMonths(entity, fallbackFrom, rangeFrom, rangeTo) {
   return months;
 }
 
-// Kwota zapłacona przez stałego najemcę za miesiące mieszczące się w okresie.
-// Trzy źródła w kolejności priorytetu:
-// 1. entity.payment.amountPaid — jeśli > 0, traktuj jako manual override (kwota rozdzielana pro-rata
-//    między okresy aktywności). User-friendly dla "po prostu wpisz ile zapłacił".
-// 2. payment.timing === "prepaid" — zakłada że wszystkie aktywne miesiące są zapłacone.
-// 3. entity.paidMonths — granularny picker per miesiąc.
-function getPermanentPaidRevenue(entity, defaultDailyRate, fallbackFrom, rangeFrom, rangeTo, payTiming) {
-  const activeMonths = getPermanentActiveMonths(entity, fallbackFrom, rangeFrom, rangeTo);
-  if (activeMonths.length === 0) return 0;
+// ============================================================
+// POKRYCIE KUMULACYJNE (v3.59) — model raty: suma wpłat vs suma należności.
+// ============================================================
+// Pojedyncze źródło prawdy dla "ile pokryto" u stałego najemcy. Wpłaty traktujemy
+// KUMULACYJNIE: pełne miesiące (paidMonths) są zaliczone wprost, a wpłaty częściowe
+// (partialPaid) tworzą wspólną pulę „rat" rozdzielaną na pozostałe miesiące od
+// NAJSTARSZEGO (FIFO). Dzięki temu nierówne raty (np. luty 2000, marzec 1000, kwiecień
+// 1000, maj 4000) NIE generują fałszywych zaległości, jeśli suma wpłat pokrywa sumę
+// należności (item 4). Każdy miesiąc pokrywany jest max do swojej należności, więc
+// nadpłata jednego miesiąca pokrywa zaległości innych zamiast zawyżać Przychód (item 5).
+//
+// Override amountPaid: gdy wpisana kwota > 0, całość traktujemy jako jedną pulę
+// (ignorujemy zaznaczenia per-miesiąc — spójnie z UI) rozdzielaną FIFO.
+//
+// Zwraca: { months:[{ym, due, covered, fullyCovered, isPast}], pool, totalDue,
+//           totalCovered, overdueMonths, leftover }. Miesiące chronologicznie.
+function getPermanentCoverage(entity, defaultDailyRate, fallbackFrom) {
+  const activeMonths = getPermanentActiveMonths(entity, fallbackFrom, null, null);
+  if (activeMonths.length === 0) return { months: [], pool: 0, totalDue: 0, totalCovered: 0, overdueMonths: [], leftover: 0 };
 
-  // PRIORYTET 1: manual override z amountPaid (rozdzielany pro-rata)
-  const explicit = parseFloat(entity?.payment?.amountPaid);
-  if (!isNaN(explicit) && explicit > 0) {
-    const totalExpected = getPermanentRevenue(entity, defaultDailyRate, fallbackFrom, null, null);
-    if (totalExpected <= 0) return 0;
-    const periodExpected = getPermanentRevenue(entity, defaultDailyRate, fallbackFrom, rangeFrom, rangeTo);
-    const ratio = Math.min(1, explicit / totalExpected);
-    return periodExpected * ratio;
-  }
-
-  // PRIORYTET 2/3: granular per miesiąc — pełna wpłata (paidMonths) ALBO częściowa (partialPaid).
-  // v3.55 — trasza: miesiąc może być opłacony częściowo (mniej niż pełna stawka miesiąca).
-  const paidSet = new Set(Array.isArray(entity.paidMonths) ? entity.paidMonths : []);
-  const partial = (entity.partialPaid && typeof entity.partialPaid === "object") ? entity.partialPaid : {};
   const monthlyRate = parseFloat(entity.permanentMonthlyRate);
+  const hasMonthly = !isNaN(monthlyRate) && monthlyRate > 0;
   const pStart = entity.permanentStart || fallbackFrom;
   const pEnd = entity.permanentEnd || endOfCurrentMonthExclusive();
-  const hasMonthly = !isNaN(monthlyRate) && monthlyRate > 0;
   const customDaily = parseFloat(entity.dailyRate);
   const dailyRate = (!isNaN(customDaily) && customDaily >= 0) ? customDaily : defaultDailyRate;
-  // Cena (pro-rata) danego miesiąca — wg stawki miesięcznej albo dziennej.
-  const monthPriceOf = (ym) => {
+  const dueOf = (ym) => {
     if (hasMonthly) return prorataMonthPrice(monthlyRate, ym, pStart, pEnd);
     const [y, m] = ym.split('-').map(Number);
     const ms = toStr(new Date(y, m - 1, 1)), me = toStr(new Date(y, m, 1));
     const ds = ms > pStart ? ms : pStart, de = me < pEnd ? me : pEnd;
     return ds < de ? dailyRate * diffDays(ds, de) : 0;
   };
-  let total = 0;
-  for (const ym of activeMonths) {
-    if (paidSet.has(ym)) { total += monthPriceOf(ym); continue; }   // pełna wpłata
-    const pa = parseFloat(partial[ym]);                              // wpłata częściowa (cap do ceny miesiąca)
-    if (pa > 0) total += Math.min(pa, monthPriceOf(ym));
-  }
-  return total;
-}
 
-// Miesiące zaległe (active ale nie zapłacone, w przeszłości).
-// Bieżący miesiąc nie liczy się jako zaległy (jeszcze trwa).
-function getPermanentOverdueMonths(entity, fallbackFrom, payTiming) {
-  // v3.51 — prepaid też może mieć zaległości (koniec auto-opłacania): miesiąc z przeszłości
-  // bez potwierdzonej wpłaty = zaległość, niezależnie od trybu rozliczenia.
-  const activeMonths = getPermanentActiveMonths(entity, fallbackFrom, null, null);
-  const paid = Array.isArray(entity.paidMonths) ? entity.paidMonths : [];
+  const explicit = parseFloat(entity?.payment?.amountPaid);
+  const hasOverride = !isNaN(explicit) && explicit > 0;
+  const paidSet = hasOverride ? new Set() : new Set(Array.isArray(entity.paidMonths) ? entity.paidMonths : []);
+  const partial = (!hasOverride && entity.partialPaid && typeof entity.partialPaid === "object") ? entity.partialPaid : {};
+
+  // Pula rat = override (cała kwota) ALBO suma wpłat częściowych (bez capowania — nadpłata spływa dalej FIFO).
+  let pool;
+  if (hasOverride) {
+    pool = explicit;
+  } else {
+    pool = 0;
+    for (const ym of Object.keys(partial)) {
+      if (paidSet.has(ym)) continue;
+      const pa = parseFloat(partial[ym]);
+      if (pa > 0) pool += pa;
+    }
+  }
+  const poolStart = pool;
+
   const now = new Date();
   const currentYm = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-  return activeMonths.filter(m => m < currentYm && !paid.includes(m));
+  const months = [];
+  let totalDue = 0, totalCovered = 0;
+  for (const ym of activeMonths) {            // chronologicznie — FIFO (najstarsze najpierw)
+    const due = dueOf(ym);
+    totalDue += due;
+    let covered;
+    if (paidSet.has(ym)) {
+      covered = due;                          // pełna wpłata oznaczona wprost (zablokowana na zielono)
+    } else {
+      const take = Math.min(pool, due);       // rata pokrywa do wysokości należności tego miesiąca
+      covered = take; pool -= take;
+    }
+    totalCovered += covered;
+    months.push({ ym, due, covered, fullyCovered: due <= 0.01 ? true : covered >= due - 0.01, isPast: ym < currentYm });
+  }
+  const overdueMonths = months.filter(m => m.isPast && !m.fullyCovered).map(m => m.ym);
+  return { months, pool: poolStart, totalDue, totalCovered, overdueMonths, leftover: pool };
+}
+
+// Kwota zapłacona (Wpłacono) przypisana do okresu [rangeFrom, rangeTo) — z modelu kumulacyjnego.
+// Każdy miesiąc liczy się max do swojej należności (item 5: nadpłata nie zawyża Przychodu,
+// spływa FIFO na inne miesiące). Bez range = suma pokrycia za cały okres najmu.
+function getPermanentPaidRevenue(entity, defaultDailyRate, fallbackFrom, rangeFrom, rangeTo, payTiming) {
+  const cov = getPermanentCoverage(entity, defaultDailyRate, fallbackFrom);
+  if (cov.months.length === 0) return 0;
+  if (!rangeFrom && !rangeTo) return cov.totalCovered;
+  const inRange = new Set(getPermanentActiveMonths(entity, fallbackFrom, rangeFrom, rangeTo));
+  return cov.months.reduce((s, m) => s + (inRange.has(m.ym) ? m.covered : 0), 0);
+}
+
+// Miesiące zaległe — model KUMULACYJNY (v3.59): przeszły miesiąc jest zaległy TYLKO gdy
+// suma wpłat (raty + pełne + override) nie pokrywa skumulowanej należności aż do tego
+// miesiąca (FIFO). Nierówne raty pokrywające łącznie należność NIE generują zaległości
+// (item 4). Bieżący miesiąc nie liczy się jako zaległy (jeszcze trwa).
+function getPermanentOverdueMonths(entity, fallbackFrom, payTiming) {
+  const bp = (entity.priceAtBooking?.basePrice) || 0;
+  return getPermanentCoverage(entity, bp, fallbackFrom).overdueMonths;
 }
 
 // Przychód stałego najemcy — ujednolicony wybór trybu:
@@ -2411,32 +2446,27 @@ function getPaymentWarning(b) {
       };
     }
 
-    const overdueMonths = getPermanentOverdueMonths(b, b.from, b.payment?.timing);
-    const activeMonths = getPermanentActiveMonths(b, b.from, null, null);
-    const paidArr = Array.isArray(b.paidMonths) ? b.paidMonths : [];
+    // v3.59 — model KUMULACYJNY: zaległość liczona z pokrycia (raty + pełne + override),
+    // nie z samych pełnych zaznaczeń. Nierówne raty pokrywające łącznie należność = brak zaległości.
+    const bp = (b.priceAtBooking?.basePrice ?? 0);
+    const cov = getPermanentCoverage(b, bp, b.from);
+    const activeMonths = cov.months.map(m => m.ym);
     const isEnded = !!b.permanentEnd;
-    const unpaidActive = activeMonths.filter(m => !paidArr.includes(m));
-    // Jeśli zakończony — patrzymy na WSZYSTKIE active months, nie tylko przeszłe.
-    // Jeśli aktywny — patrzymy tylko na przeszłe (overdue, bieżący jeszcze trwa).
-    const missing = isEnded ? unpaidActive : overdueMonths;
+    // Zakończony → WSZYSTKIE niepokryte miesiące; aktywny → tylko przeszłe niepokryte (bieżący jeszcze trwa).
+    const missingRows = isEnded ? cov.months.filter(m => !m.fullyCovered) : cov.months.filter(m => m.isPast && !m.fullyCovered);
+    const missing = missingRows.map(m => m.ym);
     if (missing.length === 0) return null;
 
-    const rate = parseFloat(b.permanentMonthlyRate);
-    // Pro-rata: każdy zaległy miesiąc po cenie odpowiadającej jego części aktywnej.
-    const pStart = b.permanentStart || b.from;
-    const pEnd = b.permanentEnd || endOfCurrentMonthExclusive();
-    const owed = (!isNaN(rate) && rate > 0)
-      ? missing.reduce((s, ym) => s + prorataMonthPrice(rate, ym, pStart, pEnd), 0)
-      : 0;
-    const paidCount = isEnded ? activeMonths.length - unpaidActive.length : paidArr.filter(m => activeMonths.includes(m)).length;
+    // Brakująca kwota = należność minus to, co już pokryte (raty częściowe wliczone).
+    const owed = missingRows.reduce((s, m) => s + (m.due - m.covered), 0);
     const monthsLabel = missing.slice(0, 6).join(", ") + (missing.length > 6 ? `, … (+${missing.length - 6})` : "");
     return {
       level: missing.length > activeMonths.length / 2 ? "danger" : "warning",
       title: isEnded ? "Najemca zakończony — są zaległe miesiące" : "Zaległe miesiące",
-      message: `Brak wpłaty za ${missing.length} ${nm(missing.length)}: ${monthsLabel}.${owed > 0 ? ` Do zapłaty: zł${owed.toLocaleString()}.` : ""}`,
-      owed,
-      paid: 0,
-      total: owed,
+      message: `Niepełne pokrycie za ${missing.length} ${nm(missing.length)}: ${monthsLabel}.${owed > 0.5 ? ` Do zapłaty: zł${Math.round(owed).toLocaleString()}.` : ""}`,
+      owed: Math.round(owed),
+      paid: Math.round(cov.totalCovered),
+      total: Math.round(cov.totalDue),
       missingMonths: missing,
       isPermanent: true
     };
@@ -3973,8 +4003,10 @@ function buildReportRow(b, loc, periodRange) {
 
   // Permanent payment status badge — quick-glance ✓ / ⚠
   const activeMonthsInPeriod = isPerm ? getPermanentActiveMonths(b, b.from, rFrom, rTo) : [];
-  const paidMonthsList = Array.isArray(b.paidMonths) ? b.paidMonths : [];
-  const paidInPeriod = activeMonthsInPeriod.filter(m => paidMonthsList.includes(m));   // v3.53 — bez auto-pay prepaid
+  // v3.59 — model kumulacyjny: liczymy miesiące POKRYTE (raty/override), nie tylko pełne zaznaczenia.
+  const permCov = isPerm ? getPermanentCoverage(b, (b.priceAtBooking?.basePrice ?? room?.basePrice ?? 0), b.from) : null;
+  const coveredSet = permCov ? new Set(permCov.months.filter(m => m.fullyCovered).map(m => m.ym)) : new Set();
+  const paidInPeriod = activeMonthsInPeriod.filter(m => coveredSet.has(m));
   const fullyPaid = isPerm && activeMonthsInPeriod.length > 0 && paidInPeriod.length === activeMonthsInPeriod.length;
   const permStatusBadge = !isPerm ? "" : (fullyPaid
     ? `<span style="display:inline-flex;align-items:center;gap:3px;background:var(--green);color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:99px;margin-left:6px" title="Wszystkie miesiące w okresie zapłacone">${ICONS.checkCircle(10)} Opłacone</span>`
@@ -6441,8 +6473,44 @@ function buildEditModal() {
                     mm++; if (mm > 12) { mm = 1; yy++; }
                   }
                 }
-                // Zaległość = przeszły miesiąc najmu bez potwierdzonej wpłaty (każdy tryb — v3.51).
-                const overdue = displayMonths.filter(ym => ym < currentYm && !paidMonths.has(ym));
+                // v3.59 — POKRYCIE KUMULACYJNE w pickerze (te same zasady co raporty): pełne
+                // zaznaczenia (paidMonths) są zablokowane, wpłaty częściowe tworzą wspólną pulę
+                // rozdzielaną FIFO (najstarsze najpierw), nadpłata spływa na kolejne miesiące.
+                // Override amountPaid = cała kwota jako jedna pula (zaznaczenia ignorowane).
+                const _ap = parseFloat(em.amountPaid !== undefined ? em.amountPaid : (b.payment?.amountPaid));
+                const hasOverride = !isNaN(_ap) && _ap > 0;
+                const previewDaily = (() => { const cd = parseFloat(em.dailyRate !== undefined ? em.dailyRate : b.dailyRate); return (!isNaN(cd) && cd >= 0) ? cd : (b.priceAtBooking?.basePrice ?? 0); })();
+                const dueOfPv = (ym) => {
+                  if (hasMonthly) return prorataMonthPrice(monthly, ym, previewPStart, previewPEnd);
+                  const [yy, mm] = ym.split('-').map(Number);
+                  const ms = toStr(new Date(yy, mm-1, 1)), me = toStr(new Date(yy, mm, 1));
+                  const ds = ms > previewPStart ? ms : previewPStart, de = me < previewPEnd ? me : previewPEnd;
+                  return ds < de ? previewDaily * diffDays(ds, de) : 0;
+                };
+                // Pula rat oraz suma faktycznie otrzymanych pieniędzy (bez capowania — do podsumowania).
+                let _pool = hasOverride ? _ap : displayMonths.reduce((s, ym) => {
+                  if (paidMonths.has(ym)) return s;
+                  const pa = parseFloat(partialMap[ym]); return s + (pa > 0 ? pa : 0);
+                }, 0);
+                const receivedTotal = hasOverride ? _ap : displayMonths.reduce((s, ym) => {
+                  if (paidMonths.has(ym)) return s + dueOfPv(ym);
+                  const pa = parseFloat(partialMap[ym]); return s + (pa > 0 ? pa : 0);
+                }, 0);
+                // Rozdziel pulę FIFO po miesiącach (chronologicznie).
+                const coverage = {};
+                let coveredSum = 0, dueSum = 0;
+                [...displayMonths].sort().forEach(ym => {
+                  const due = dueOfPv(ym);
+                  dueSum += due;
+                  let covered;
+                  if (!hasOverride && paidMonths.has(ym)) covered = due;
+                  else { const take = Math.min(_pool, due); covered = take; _pool -= take; }
+                  coverage[ym] = { due, covered, fullyCovered: due <= 0.01 ? true : covered >= due - 0.01 };
+                  coveredSum += covered;
+                });
+                const leftover = _pool;   // nadpłata ponad wszystkie wyświetlone miesiące (zaliczka)
+                // Zaległość = przeszły miesiąc niepokryty KUMULACYJNIE (item 4 — nierówne raty pokrywające łącznie należność nie liczą się jako zaległe).
+                const overdue = displayMonths.filter(ym => ym < currentYm && !coverage[ym].fullyCovered);
                 const byYear = {};
                 displayMonths.forEach(ym => {
                   const [y, m] = ym.split("-");
@@ -6454,23 +6522,30 @@ function buildEditModal() {
                     <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:6px">${y}</div>
                     <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:4px">
                       ${months.map(({ ym, m }) => {
-                        const isPaid = paidMonths.has(ym);
-                        const partialAmt = (!isPaid && parseFloat(partialMap[ym]) > 0) ? parseFloat(partialMap[ym]) : 0;
-                        const isPartial = partialAmt > 0;   // v3.55 — trasza: opłacony częściowo
-                        const isOverdue = ym < currentYm && !isPaid;  // częściowy z przeszłości nadal coś winien
+                        const cov = coverage[ym];
+                        const explicitFull = !hasOverride && paidMonths.has(ym);
+                        const isCovered = cov.fullyCovered;              // pełne pokrycie (wprost lub kumulacyjnie z rat)
+                        const isPartialCov = !isCovered && cov.covered > 0.01;
+                        const isOverdue = ym < currentYm && !isCovered;
                         const isFuture = ym > currentYm;
-                        const bg = isPaid ? "var(--green)" : (isPartial ? "var(--orange)" : (isOverdue ? "var(--red)" : (isFuture ? "var(--surface2)" : "var(--surface3)")));
-                        const color = (isPaid || isOverdue || isPartial) ? "#fff" : "var(--text2)";
-                        // Pro-rata szczegóły dla tego miesiąca
+                        const bg = isCovered ? "var(--green)" : (isPartialCov ? "var(--orange)" : (isOverdue ? "var(--red)" : (isFuture ? "var(--surface2)" : "var(--surface3)")));
+                        const color = (isCovered || isOverdue || isPartialCov) ? "#fff" : "var(--text2)";
                         const info = prorataMonthInfo(ym, previewPStart, previewPEnd);
-                        const amt = hasMonthly ? prorataMonthPrice(monthly, ym, previewPStart, previewPEnd) : 0;
-                        const subLabel = isPartial
-                          ? (hasMonthly ? `zł${Math.round(partialAmt)}/${amt}` : `zł${Math.round(partialAmt)}`)
-                          : (!hasMonthly ? "" : (info.isPartial ? `${info.daysUsed}/${info.daysInMonth}d · zł${amt}` : `zł${amt}`));
+                        const subLabel = !hasMonthly
+                          ? (isCovered ? "✓" : (isPartialCov ? `zł${Math.round(cov.covered)}` : ""))
+                          : (isCovered ? `zł${Math.round(cov.due)}`
+                            : (isPartialCov ? `zł${Math.round(cov.covered)}/${Math.round(cov.due)}`
+                              : (info.isPartial ? `${info.daysUsed}/${info.daysInMonth}d · zł${Math.round(cov.due)}` : `zł${Math.round(cov.due)}`)));
+                        const mark = (explicitFull || isCovered) ? ' ✓' : (isPartialCov ? ' ½' : (isOverdue ? ' !' : ''));
+                        const title = explicitFull ? 'Zapłacone (pełna wpłata) — kliknij by cofnąć'
+                          : isCovered ? 'Pokryte z wpłat (kumulacyjnie) — kliknij by oznaczyć pełną wpłatę wprost'
+                          : isPartialCov ? `Częściowo pokryte zł${Math.round(cov.covered)} z zł${Math.round(cov.due)} — kliknij by oznaczyć pełną wpłatę`
+                          : isOverdue ? 'ZALEGŁOŚĆ — brak pokrycia, kliknij gdy opłacone'
+                          : isFuture ? 'Przyszły miesiąc — kliknij by zaznaczyć przedpłatę' : 'Bieżący — kliknij gdy opłacone';
                         return `<button class="paid-month-btn" data-paid-month="${ym}"
                           style="padding:8px 4px;font-size:11px;font-weight:700;border:1px solid var(--border);border-radius:var(--radius);background:${bg};color:${color};cursor:pointer;font-family:inherit;display:flex;flex-direction:column;align-items:center;gap:2px;min-height:48px"
-                          title="${isPaid?'Zapłacone — kliknij by cofnąć':isPartial?`Częściowo zł${Math.round(partialAmt)} — kliknij by oznaczyć pełną wpłatę`:isOverdue?'ZALEGŁOŚĆ — kliknij gdy opłacone':isFuture?'Przyszły miesiąc — kliknij by zaznaczyć przedpłatę':'Bieżący — kliknij gdy opłacone'}${hasMonthly && info.isPartial ? ` · pro-rata ${info.daysUsed}/${info.daysInMonth} dni` : ''}">
-                          <span>${MONTHS[m-1].slice(0,3)}${isPaid?' ✓':isPartial?' ½':isOverdue?' !':''}</span>
+                          title="${title}${hasMonthly && info.isPartial ? ` · pro-rata ${info.daysUsed}/${info.daysInMonth} dni` : ''}">
+                          <span>${MONTHS[m-1].slice(0,3)}${mark}</span>
                           ${subLabel ? `<span style="font-size:9px;font-weight:500;opacity:0.85;font-variant-numeric:tabular-nums">${subLabel}</span>` : ""}
                         </button>`;
                       }).join("")}
@@ -6478,14 +6553,6 @@ function buildEditModal() {
                   </div>
                 `).join("");
 
-                // Suma wpłat — pełne (paidMonths) + częściowe (partialMap, cap do ceny miesiąca).
-                const totalPaidAmt = hasMonthly
-                  ? displayMonths.reduce((s, ym) => {
-                      const price = prorataMonthPrice(monthly, ym, previewPStart, previewPEnd);
-                      if (paidMonths.has(ym)) return s + price;
-                      const pa = parseFloat(partialMap[ym]); return s + (pa > 0 ? Math.min(pa, price) : 0);
-                    }, 0)
-                  : 0;
                 // Lista miesięcy z wpłatą częściową (do edytora poniżej gridu)
                 const partialList = Object.keys(partialMap).filter(ym => parseFloat(partialMap[ym]) > 0 && !paidMonths.has(ym)).sort();
 
@@ -6503,9 +6570,13 @@ function buildEditModal() {
                     <button class="cal-nav-btn" id="paidMonthsNone" style="font-size:11px;padding:5px 12px;color:var(--red);border-color:var(--red)">Wyczyść</button>
                     ${isOpenEnded ? `<button class="cal-nav-btn" id="paidMonthsAddYear" style="font-size:11px;padding:5px 12px;display:inline-flex;align-items:center;gap:5px">${ICONS.plus ? ICONS.plus(11) : "+"} Dodaj rok</button>` : ""}
                   </div>
-                  ${hasMonthly ? `<div style="font-size:11px;color:var(--text2);margin-bottom:4px;font-weight:600">Suma zaznaczonych wpłat: zł${Math.round(totalPaidAmt).toLocaleString()}</div>` : ""}
+                  ${hasMonthly ? `<div style="font-size:11px;color:var(--text2);margin-bottom:6px;font-weight:600;display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+                    <span>Wpłacono łącznie: <strong style="color:var(--green)">zł${Math.round(receivedTotal).toLocaleString()}</strong></span>
+                    <span>Pokrycie należności: <strong>zł${Math.round(coveredSum).toLocaleString()}</strong> z zł${Math.round(dueSum).toLocaleString()}</span>
+                    ${leftover > 0.5 ? `<span style="color:var(--blue);font-weight:700">Nadpłata zł${Math.round(leftover).toLocaleString()} (zaliczka)</span>` : ""}
+                  </div>` : ""}
                   <div style="margin-top:8px;padding:8px 10px;background:var(--orange-light);border:1px solid var(--orange-border);border-radius:6px">
-                    <div style="font-size:11px;font-weight:600;color:var(--orange);margin-bottom:6px">½ Wpłata częściowa (najemca zapłacił MNIEJ niż pełna stawka miesiąca)</div>
+                    <div style="font-size:11px;font-weight:600;color:var(--orange);margin-bottom:6px">½ Wpłata częściowa / rata — dowolna kwota (nadpłata pokrywa kolejne miesiące, FIFO od najstarszego)</div>
                     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
                       <select id="partialMonthSel" style="padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-size:11px;color:var(--text);font-family:inherit;outline:none">
                         ${displayMonths.map(ym => `<option value="${ym}">${MONTHS[parseInt(ym.slice(5,7))-1].slice(0,3)} ${ym.slice(0,4)}</option>`).join("")}
@@ -6519,7 +6590,7 @@ function buildEditModal() {
                         const pa = Math.round(parseFloat(partialMap[ym]));
                         return `<div style="display:flex;align-items:center;gap:8px;font-size:11px">
                           <span style="background:var(--orange);color:#fff;padding:2px 8px;border-radius:99px;font-weight:600;font-variant-numeric:tabular-nums">${MONTHS[parseInt(ym.slice(5,7))-1].slice(0,3)} ${ym.slice(0,4)}: zł${pa}${hasMonthly?` z zł${price}`:""}</span>
-                          ${hasMonthly && price>pa ? `<span style="color:var(--red);font-size:10px">brakuje zł${price-pa}</span>` : ""}
+                          ${hasMonthly && price>pa ? `<span style="color:var(--red);font-size:10px">brakuje zł${price-pa} (lub pokryje inny miesiąc)</span>` : (hasMonthly && pa>price ? `<span style="color:var(--blue);font-size:10px">nadpłata zł${pa-price} → kolejne miesiące</span>` : "")}
                           <button class="partial-remove-btn" data-partial-remove="${ym}" style="font-size:10px;padding:2px 8px;color:var(--red);background:none;border:1px solid var(--red);border-radius:var(--radius);cursor:pointer;margin-left:auto">Usuń</button>
                         </div>`;
                       }).join("")}
@@ -8872,7 +8943,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.58 · ${new Date().getFullYear()}
+          HospesAI · v3.59 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
