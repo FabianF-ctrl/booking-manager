@@ -2142,15 +2142,9 @@ function mediaItemNetto(amount, vat) {
   const v = parseFloat(vat);
   return a / (1 + (isNaN(v) ? 0 : v) / 100);
 }
-function sumMediaObjNetto(m) {
-  if (!m) return 0;
-  let s = mediaItemNetto(m.electricity, m.electricityVat ?? MEDIA_VAT_DEFAULTS.electricity)
-        + mediaItemNetto(m.gas, m.gasVat ?? MEDIA_VAT_DEFAULTS.gas)
-        + mediaItemNetto(m.water, m.waterVat ?? MEDIA_VAT_DEFAULTS.water);
-  if (m.others) m.others.forEach(o => { s += mediaItemNetto(o.amount, o.vat ?? MEDIA_VAT_DEFAULTS.other); });
-  else if (m.repairs) s += mediaItemNetto(m.repairs, MEDIA_VAT_DEFAULTS.other); // legacy
-  return s;
-}
+// v3.58 — media wpisywane WPROST jako NETTO (VAT usunięty; VAT liczony ręcznie poza systemem).
+// Netto == suma kwot (brutto i netto są tym samym, bo nie ma VAT-u).
+function sumMediaObjNetto(m) { return sumMediaObj(m); }
 function sumRoomMediaNetto(roomId, period) {
   return sumMediaObjNetto(getRoomMedia(roomId, period));
 }
@@ -4075,13 +4069,22 @@ function buildMediaSectionForLoc(loc) {
   }
 
   const cp = currentPeriod();
-  // Wszystkie okresy zapisane dla tego obiektu + bieżący (jeśli nie ma)
-  const periods = allPeriods.includes(cp) ? allPeriods : [cp, ...allPeriods];
+  // v3.58 — media/faktury respektują filtr miesiąca/roku z Raportów.
+  // Filtr miesiąca → tylko ten miesiąc; filtr roku → miesiące tego roku; brak → wszystkie + bieżący.
+  let periods;
+  if (state.reportsYear && state.reportsMonth) {
+    periods = [`${state.reportsYear}-${state.reportsMonth}`];
+  } else if (state.reportsYear) {
+    const yp = allPeriods.filter(p => p.slice(0,4) === state.reportsYear);
+    periods = yp.length ? yp : (allPeriods.includes(cp) ? allPeriods : [cp, ...allPeriods]);
+  } else {
+    periods = allPeriods.includes(cp) ? allPeriods : [cp, ...allPeriods];
+  }
 
   // Header pojedynczy summary dla całego obiektu
   html += `
     <div style="padding:10px 14px;background:var(--orange-light);border-bottom:1px dashed var(--orange-border);font-size:11px;color:var(--orange);font-weight:600">
-      ${locMediaTotal > 0 ? `Łącznie media obiektu: <strong>zł${locMediaTotal.toFixed(2)}</strong> brutto · <strong>zł${locMediaTotalNetto.toFixed(2)}</strong> netto` : "Brak wpisów media. Dodaj okres niżej."}
+      ${locMediaTotal > 0 ? `Łącznie media obiektu: <strong>zł${locMediaTotal.toFixed(2)}</strong> netto` : "Brak wpisów media. Dodaj okres niżej."}
     </div>`;
 
   // Editor — jeden per okres (rzędy electricity/gas/water + others)
@@ -4096,7 +4099,7 @@ function buildMediaSectionForLoc(loc) {
       <div style="border:1px solid var(--orange-border);border-radius:var(--radius);padding:10px 12px;margin:8px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
           <span style="font-size:13px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums">${period}</span>
-          <span style="font-size:11px;color:var(--orange);font-variant-numeric:tabular-nums;font-weight:600">${periodSum>0?`Suma: zł${periodSum.toFixed(2)} brutto · zł${periodSumNetto.toFixed(2)} netto`:""}</span>
+          <span style="font-size:11px;color:var(--orange);font-variant-numeric:tabular-nums;font-weight:600">${periodSum>0?`Suma: zł${periodSum.toFixed(2)} netto`:""}</span>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
           ${[{field:"electricity",label:"Prąd",icon:ICONS.zap,val:m.electricity,vatField:"electricityVat",vatVal:m.electricityVat},{field:"gas",label:"Gaz",icon:ICONS.flame,val:m.gas,vatField:"gasVat",vatVal:m.gasVat},{field:"water",label:"Woda",icon:ICONS.droplet,val:m.water,vatField:"waterVat",vatVal:m.waterVat}].map(ft => {
@@ -4104,18 +4107,13 @@ function buildMediaSectionForLoc(loc) {
             const fid = `mi-${ft.field}-${loc.id}-${period}`;
             return `<div class="media-field">
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">
-                <label style="margin:0;display:inline-flex;align-items:center;gap:5px">${ft.icon(13)} ${ft.label} (zł brutto)</label>
+                <label style="margin:0;display:inline-flex;align-items:center;gap:5px">${ft.icon(13)} ${ft.label} (zł netto)</label>
                 <label for="${fid}" style="cursor:pointer;font-size:10px;color:var(--blue);padding:1px 6px;border-radius:4px;background:var(--blue-light);white-space:nowrap;font-weight:600;display:inline-flex;align-items:center;gap:3px">${ICONS.pin(10)}${linked.length > 0 ? linked.length : ''}</label>
               </div>
               <input type="file" id="${fid}" style="display:none" accept=".pdf,.jpg,.jpeg,.png"
                 data-mi-room="${loc.id}" data-mi-loc="${loc.id}" data-mi-period="${period}"
                 data-mi-type="${ft.label}" data-mi-field="${ft.field}" />
               <input type="number" class="media-inp" data-roomid="${loc.id}" data-period="${period}" data-field="${ft.field}" value="${ft.val||""}" placeholder="0.00" min="0" step="0.01" />
-              <div style="display:flex;align-items:center;gap:4px;margin-top:4px" title="Stawka VAT — kwotę wpisujesz brutto, netto liczone automatycznie">
-                <span style="font-size:10px;color:var(--text2);white-space:nowrap">VAT</span>
-                <input type="number" class="media-inp media-vat-inp" data-roomid="${loc.id}" data-period="${period}" data-field="${ft.vatField}" value="${ft.vatVal ?? ""}" placeholder="${MEDIA_VAT_DEFAULTS[ft.field]}" min="0" max="100" step="1" style="width:52px;padding:4px 5px;text-align:center" />
-                <span style="font-size:10px;color:var(--text2)">%</span>
-              </div>
               ${linked.map(inv => `<a href="${inv.url||"#"}" target="_blank" title="${esc(inv.filename)}"
                 style="display:flex;align-items:center;gap:3px;font-size:10px;color:var(--blue);text-decoration:none;margin-top:3px;padding:2px 6px;border-radius:4px;background:var(--blue-light);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
                 📄 ${esc(inv.filename||"Faktura")}</a>`).join("")}
@@ -4127,13 +4125,11 @@ function buildMediaSectionForLoc(loc) {
           const oLinked = invoices.filter(inv => inv.roomId === loc.id && inv.period === period && stripEmoji(inv.note) === stripEmoji(oLabel));
           const ofid = `mi-other-${loc.id}-${period}-${idx}`;
           return `
-          <div style="display:grid;grid-template-columns:1fr 100px 74px auto auto;gap:6px;align-items:flex-end;margin-bottom:6px">
+          <div style="display:grid;grid-template-columns:1fr 120px auto auto;gap:6px;align-items:flex-end;margin-bottom:6px">
             <div class="media-field"><label style="display:inline-flex;align-items:center;gap:5px">${ICONS.pin(12)} Inne — opis</label>
               <input type="text" class="media-inp" data-roomid="${loc.id}" data-period="${period}" data-field="other_label_${idx}" value="${esc(oLabel)}" placeholder="np. Naprawa…" style="font-family:inherit" /></div>
-            <div class="media-field"><label>Kwota (zł brutto)</label>
+            <div class="media-field"><label>Kwota (zł netto)</label>
               <input type="number" class="media-inp" data-roomid="${loc.id}" data-period="${period}" data-field="other_amount_${idx}" value="${o.amount||""}" placeholder="0.00" min="0" step="0.01" /></div>
-            <div class="media-field"><label title="Stawka VAT — kwota brutto, netto liczone automatycznie">VAT %</label>
-              <input type="number" class="media-inp media-vat-inp" data-roomid="${loc.id}" data-period="${period}" data-field="other_vat_${idx}" value="${o.vat ?? ""}" placeholder="${MEDIA_VAT_DEFAULTS.other}" min="0" max="100" step="1" style="text-align:center" /></div>
             <div style="align-self:flex-end;margin-bottom:1px">
               <input type="file" id="${ofid}" style="display:none" accept=".pdf,.jpg,.jpeg,.png"
                 data-mi-room="${loc.id}" data-mi-loc="${loc.id}" data-mi-period="${period}"
@@ -5324,7 +5320,7 @@ function buildHelp() {
 
         <div style="background:var(--surface);padding:10px 12px;border-radius:6px;border-left:3px solid var(--orange);margin-bottom:12px">
           <strong style="color:var(--orange)">MEDIA (prąd / gaz / woda / inne)</strong>
-          <p style="margin:6px 0;font-size:12px">Wpisywane <strong>per obiekt per miesiąc</strong> w sekcji Media w Raportach, jako kwoty <strong>brutto</strong> (z faktury) + stawka <strong>VAT</strong> per pozycja (domyślnie prąd/gaz 23%, woda 8%, inne 23% — do zmiany ręcznie). Netto liczone automatycznie: <code>brutto / (1 + VAT/100)</code> per pozycja.</p>
+          <p style="margin:6px 0;font-size:12px">Wpisywane <strong>per obiekt per miesiąc</strong> w sekcji Media w Raportach, jako kwoty <strong>netto</strong> (VAT liczycie ręcznie poza systemem). Suma media = suma wpisanych kwot.</p>
           <p style="margin:6px 0;font-size:12px;color:var(--red);font-weight:600">⚠ Media NIE obciążają najemcy. To wyłącznie koszt operacyjny obiektu.</p>
           <ul style="margin:6px 0 0;padding-left:20px;font-size:12px">
             <li>Wpływa na: <strong>Zysk netto = Przychód netto − Media netto</strong> (per obiekt) oraz główny hero (netto). Blok per-lokalizacja pokazuje kwoty brutto.</li>
@@ -6166,9 +6162,22 @@ function buildSuccess(loc) {
   if (!last) return "";
   const nights = diffDays(last.from, last.to);
   const room = loc.rooms.find(r=>r.id===last.roomId);
-  const total = calcBookingTotal(last, room, nights);
   const isCompany = last.bookingType==="company";
-  const who = isCompany ? `${last.companyName} (${last.guests.length} os.)` : (last.guests.find(g=>g.name.trim())?.name || "—");
+  // v3.58 — firmowa multi-pokój tworzy N rekordów (po jednym na pokój). Podsumowanie liczymy
+  // ZA CAŁĄ FIRMĘ (suma wszystkich nowych pokoi), a nie tylko za ostatni pokój.
+  const isCompanyMulti = isCompany && state.selectedRooms?.length > 1;
+  const newBookings = isCompanyMulti ? savedBookings.slice(-state.selectedRooms.length) : [last];
+  // v3.58 — wartość per pokój: cena nadpisana (customPrice) jeśli ustawiona, inaczej wyliczona.
+  // customPrice zapisuje się PER POKÓJ (patrz buildConfirm: customPrice × liczba pokoi), więc
+  // suma per-pokój daje poprawne podsumowanie za całą firmę — spójne z ekranem potwierdzenia.
+  const total = newBookings.reduce((s, bk) => {
+    const rm = loc.rooms.find(r => r.id === bk.roomId);
+    const cp = parseFloat(bk.customPrice);
+    return s + ((!isNaN(cp) && cp > 0) ? cp : calcBookingTotal(bk, rm, diffDays(bk.from, bk.to)));
+  }, 0);
+  const who = isCompany
+    ? `${last.companyName} (${last.guests.length} os.${isCompanyMulti ? `, ${newBookings.length} pokoi` : ""})`
+    : (last.guests.find(g=>g.name.trim())?.name || "—");
   const pmLabels = { invoice:"Faktura", cash:"Gotówka", transfer:"Przelew" };
   const timLabels = { prepaid:"Przed pobytem", postpaid:"Po pobycie" };
 
@@ -6207,7 +6216,7 @@ function buildSuccess(loc) {
         <div class="success-row"><span>Typ</span><span style="display:inline-flex;align-items:center;gap:5px">${isPerm?ICONS.house(13):isCompany?ICONS.building(13):ICONS.user(13)} ${isPerm?"Stały najemca":isCompany?"Firmowa":"Indywidualna"}</span></div>
         <div class="success-row"><span>${isCompany?"Firma":"Gość"}</span><span>${esc(who)}</span></div>
         ${last.payment?.method?`<div class="success-row"><span>Płatność</span><span>${pmLabels[last.payment.method]||"—"} · ${timLabels[last.payment.timing]||"—"}</span></div>`:""}
-        <div class="success-row"><span>Wstępna wartość</span><span>${hasCustomPrice ? `zł${customPriceVal.toLocaleString()}` : (hasPermMonthly ? `zł${permMonthly.toLocaleString()}/mies.` : `zł${total.toLocaleString()}`)}</span></div>
+        <div class="success-row"><span>Wstępna wartość</span><span>${isCompanyMulti ? `zł${total.toLocaleString()}` : (hasCustomPrice ? `zł${customPriceVal.toLocaleString()}` : (hasPermMonthly ? `zł${permMonthly.toLocaleString()}/mies.` : `zł${total.toLocaleString()}`))}</span></div>
       </div>
       <button class="done-btn" id="doneBtn">Gotowe</button>
     </div>`;
@@ -8863,7 +8872,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.57 · ${new Date().getFullYear()}
+          HospesAI · v3.58 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
