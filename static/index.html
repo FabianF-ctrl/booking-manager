@@ -2296,7 +2296,11 @@ function getPermanentCoverage(entity, defaultDailyRate, fallbackFrom) {
   const paidSet = hasOverride ? new Set() : new Set(Array.isArray(entity.paidMonths) ? entity.paidMonths : []);
   const partial = (!hasOverride && entity.partialPaid && typeof entity.partialPaid === "object") ? entity.partialPaid : {};
 
-  // Pula rat = override (cała kwota) ALBO suma wpłat częściowych (bez capowania — nadpłata spływa dalej FIFO).
+  // v3.60 — TAG-THEN-SPILL: każda wpłata pokrywa NAJPIERW swój własny miesiąc, dopiero
+  // NADWYŻKA spływa na pozostałe niedopłacone miesiące (FIFO od najstarszego). Dzięki temu
+  // wpłata przypisana do maja faktycznie zalicza maj (zamiast „uciekać" na starsze miesiące),
+  // a jednocześnie nadpłata nadal pokrywa zaległości innych miesięcy (item 4 + 5).
+  // Pula = override (cała kwota, bez tagu miesiąca) ALBO suma NADWYŻEK wpłat częściowych.
   let pool;
   if (hasOverride) {
     pool = explicit;
@@ -2305,28 +2309,33 @@ function getPermanentCoverage(entity, defaultDailyRate, fallbackFrom) {
     for (const ym of Object.keys(partial)) {
       if (paidSet.has(ym)) continue;
       const pa = parseFloat(partial[ym]);
-      if (pa > 0) pool += pa;
+      if (pa > 0) { const d = dueOf(ym); if (pa > d) pool += (pa - d); }   // tylko nadwyżka ponad własny miesiąc
     }
   }
   const poolStart = pool;
 
   const now = new Date();
   const currentYm = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-  const months = [];
-  let totalDue = 0, totalCovered = 0;
-  for (const ym of activeMonths) {            // chronologicznie — FIFO (najstarsze najpierw)
+  // PASS 1 — każdy miesiąc pokrywa SAM SIEBIE: pełne zaznaczenie (paidMonths) albo wpłata częściowa do wys. należności.
+  const months = activeMonths.map(ym => {
     const due = dueOf(ym);
-    totalDue += due;
-    let covered;
-    if (paidSet.has(ym)) {
-      covered = due;                          // pełna wpłata oznaczona wprost (zablokowana na zielono)
-    } else {
-      const take = Math.min(pool, due);       // rata pokrywa do wysokości należności tego miesiąca
-      covered = take; pool -= take;
+    let covered = 0;
+    if (!hasOverride) {
+      if (paidSet.has(ym)) covered = due;
+      else { const pa = parseFloat(partial[ym]); if (pa > 0) covered = Math.min(pa, due); }
     }
-    totalCovered += covered;
-    months.push({ ym, due, covered, fullyCovered: due <= 0.01 ? true : covered >= due - 0.01, isPast: ym < currentYm });
+    return { ym, due, covered, isPast: ym < currentYm };
+  });
+  // PASS 2 — pula nadwyżek (lub override) pokrywa pozostałe niedopłacone miesiące, FIFO od najstarszego.
+  for (const m of months) {
+    if (pool <= 0.0001) break;
+    if (m.covered >= m.due - 0.01) continue;
+    const need = m.due - m.covered;
+    const take = Math.min(pool, need);
+    m.covered += take; pool -= take;
   }
+  let totalDue = 0, totalCovered = 0;
+  months.forEach(m => { m.fullyCovered = m.due <= 0.01 ? true : m.covered >= m.due - 0.01; totalDue += m.due; totalCovered += m.covered; });
   const overdueMonths = months.filter(m => m.isPast && !m.fullyCovered).map(m => m.ym);
   return { months, pool: poolStart, totalDue, totalCovered, overdueMonths, leftover: pool };
 }
@@ -6487,28 +6496,49 @@ function buildEditModal() {
                   const ds = ms > previewPStart ? ms : previewPStart, de = me < previewPEnd ? me : previewPEnd;
                   return ds < de ? previewDaily * diffDays(ds, de) : 0;
                 };
-                // Pula rat oraz suma faktycznie otrzymanych pieniędzy (bez capowania — do podsumowania).
+                // v3.60 — TAG-THEN-SPILL (jak w raportach): każda wpłata pokrywa najpierw SWÓJ miesiąc,
+                // nadwyżka spływa FIFO na pozostałe. Pula = override ALBO suma NADWYŻEK wpłat częściowych.
                 let _pool = hasOverride ? _ap : displayMonths.reduce((s, ym) => {
                   if (paidMonths.has(ym)) return s;
-                  const pa = parseFloat(partialMap[ym]); return s + (pa > 0 ? pa : 0);
+                  const pa = parseFloat(partialMap[ym]); if (pa > 0) { const d = dueOfPv(ym); if (pa > d) return s + (pa - d); }
+                  return s;
                 }, 0);
                 const receivedTotal = hasOverride ? _ap : displayMonths.reduce((s, ym) => {
                   if (paidMonths.has(ym)) return s + dueOfPv(ym);
                   const pa = parseFloat(partialMap[ym]); return s + (pa > 0 ? pa : 0);
                 }, 0);
-                // Rozdziel pulę FIFO po miesiącach (chronologicznie).
+                // PASS 1 — każdy miesiąc pokrywa sam siebie (pełne zaznaczenie albo wpłata częściowa do należności).
+                const _sorted = [...displayMonths].sort();
                 const coverage = {};
                 let coveredSum = 0, dueSum = 0;
-                [...displayMonths].sort().forEach(ym => {
+                _sorted.forEach(ym => {
                   const due = dueOfPv(ym);
                   dueSum += due;
-                  let covered;
-                  if (!hasOverride && paidMonths.has(ym)) covered = due;
-                  else { const take = Math.min(_pool, due); covered = take; _pool -= take; }
-                  coverage[ym] = { due, covered, fullyCovered: due <= 0.01 ? true : covered >= due - 0.01 };
-                  coveredSum += covered;
+                  let covered = 0;
+                  if (!hasOverride) {
+                    if (paidMonths.has(ym)) covered = due;
+                    else { const pa = parseFloat(partialMap[ym]); if (pa > 0) covered = Math.min(pa, due); }
+                  }
+                  coverage[ym] = { due, covered };
+                });
+                // PASS 2 — pula nadwyżek/override pokrywa pozostałe niedopłacone miesiące, FIFO od najstarszego.
+                for (const ym of _sorted) {
+                  if (_pool <= 0.0001) break;
+                  const c = coverage[ym];
+                  if (c.covered >= c.due - 0.01) continue;
+                  const take = Math.min(_pool, c.due - c.covered);
+                  c.covered += take; _pool -= take;
+                }
+                // Rozliczenie "do bież. miesiąca" — żeby otwarty najemca nie pokazywał ogromnej należności z przyszłości.
+                let coveredToDate = 0, dueToDate = 0, pastDue = 0, pastCovered = 0;
+                _sorted.forEach(ym => {
+                  const c = coverage[ym]; c.fullyCovered = c.due <= 0.01 ? true : c.covered >= c.due - 0.01; coveredSum += c.covered;
+                  if (ym <= currentYm) { coveredToDate += c.covered; dueToDate += c.due; }
+                  if (ym < currentYm)  { pastDue += c.due; pastCovered += c.covered; }   // tylko przeszłe = realna zaległość (bieżący jeszcze trwa)
                 });
                 const leftover = _pool;   // nadpłata ponad wszystkie wyświetlone miesiące (zaliczka)
+                const overdueAmt = Math.max(0, Math.round(pastDue) - Math.round(pastCovered));   // zaległość = niedopłata za PRZESZŁE miesiące
+                const advanceAmt = Math.max(0, Math.round(receivedTotal) - Math.round(coveredToDate));  // wpłacone ponad należność do teraz = zaliczka na przyszłość
                 // Zaległość = przeszły miesiąc niepokryty KUMULACYJNIE (item 4 — nierówne raty pokrywające łącznie należność nie liczą się jako zaległe).
                 const overdue = displayMonths.filter(ym => ym < currentYm && !coverage[ym].fullyCovered);
                 const byYear = {};
@@ -6572,8 +6602,9 @@ function buildEditModal() {
                   </div>
                   ${hasMonthly ? `<div style="font-size:11px;color:var(--text2);margin-bottom:6px;font-weight:600;display:flex;gap:12px;flex-wrap:wrap;align-items:center">
                     <span>Wpłacono łącznie: <strong style="color:var(--green)">zł${Math.round(receivedTotal).toLocaleString()}</strong></span>
-                    <span>Pokrycie należności: <strong>zł${Math.round(coveredSum).toLocaleString()}</strong> z zł${Math.round(dueSum).toLocaleString()}</span>
-                    ${leftover > 0.5 ? `<span style="color:var(--blue);font-weight:700">Nadpłata zł${Math.round(leftover).toLocaleString()} (zaliczka)</span>` : ""}
+                    <span>Pokryte do bież. mies.: <strong>zł${Math.round(coveredToDate).toLocaleString()}</strong> z zł${Math.round(dueToDate).toLocaleString()}</span>
+                    ${overdueAmt > 0.5 ? `<span style="color:var(--red);font-weight:700">Zaległość zł${Math.round(overdueAmt).toLocaleString()}</span>` : ""}
+                    ${advanceAmt > 0.5 ? `<span style="color:var(--blue);font-weight:700">Zaliczka zł${advanceAmt.toLocaleString()}</span>` : ""}
                   </div>` : ""}
                   <div style="margin-top:8px;padding:8px 10px;background:var(--orange-light);border:1px solid var(--orange-border);border-radius:6px">
                     <div style="font-size:11px;font-weight:600;color:var(--orange);margin-bottom:6px">½ Wpłata częściowa / rata — dowolna kwota (nadpłata pokrywa kolejne miesiące, FIFO od najstarszego)</div>
@@ -8943,7 +8974,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.59 · ${new Date().getFullYear()}
+          HospesAI · v3.60 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
