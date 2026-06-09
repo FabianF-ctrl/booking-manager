@@ -192,6 +192,7 @@ body {
   animation: backdropFade 0.18s ease-out;
 }
 @keyframes backdropFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes earnspin { to { transform: rotate(360deg); } }  /* v3.69 — spinner ładowania siatki Podglądu */
 
 @media (max-width: 720px) {
   /* Sidebar drawer — height: 100dvh (dynamic viewport height).
@@ -5134,6 +5135,18 @@ function buildPreviewDetail(locId) {
   const loc = DATA.locations.find(l => l.id === locId);
   if (!loc) return `<div class="no-results-box">Obiekt nie znaleziony.</div>`;
 
+  // v3.69 — DWUFAZOWE wejście: najpierw lekki szkielet (natychmiast po kliknięciu kafelka),
+  // a ciężką siatkę (~1000+ komórek dla obiektu 30+ pokoi, ~100ms layout w Firefox) dorysowujemy
+  // w następnej klatce. Bez tego klik „zamarza" zanim siatka się ułoży. Reset flagi → handler kafelka.
+  if (state.previewGridReady === false) {
+    return `
+      <button class="cal-nav-btn" id="previewBackBtn" style="margin-bottom:12px">← Wszystkie obiekty</button>
+      <div style="padding:48px 20px;text-align:center">
+        <div style="font-size:15px;font-weight:700;display:inline-flex;align-items:center;gap:8px;margin-bottom:10px">${locIcon(loc, 16)} ${esc(loc.name)}</div>
+        <div style="font-size:13px;color:var(--text3);display:flex;align-items:center;justify-content:center;gap:8px"><span class="earn-spin" style="width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--blue);border-radius:50%;display:inline-block;animation:earnspin 0.7s linear infinite"></span> Ładowanie siatki rezerwacji…</div>
+      </div>`;
+  }
+
   // Selected months — array (1 or 2), chronologically sorted.
   const today = todayStr();
   const selectedMonths = (state.previewMonths && state.previewMonths.length > 0)
@@ -7952,7 +7965,11 @@ function attachEvents() {
       state.previewLocId = parseInt(btn.dataset.previewLoc);
       state.previewMonths = [];          // reset do bieżącego
       state.previewCompareMode = false;
+      // v3.69 — najpierw szkielet (natychmiast), siatkę dorysuj DOPIERO po namalowaniu szkieletu
+      // (podwójny rAF: 1. klatka maluje szkielet, 2. klatka renderuje ciężką siatkę). Klik nie „zamarza".
+      state.previewGridReady = false;
       render();
+      requestAnimationFrame(() => requestAnimationFrame(() => { state.previewGridReady = true; render(); }));
     });
   });
   document.getElementById("previewBackBtn")?.addEventListener("click", () => {
@@ -9327,7 +9344,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.68 · ${new Date().getFullYear()}
+          HospesAI · v3.69 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
