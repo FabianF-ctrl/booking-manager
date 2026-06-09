@@ -2622,7 +2622,7 @@ function buildAppCore() {
     ${state.modal ? buildModal() : ""}
     ${state.editModal ? buildEditModal() : ""}
     ${state.roomDetailModal ? buildRoomDetailModal() : ""}
-    ${state.dayDetailModal ? buildDayDetailModal() : ""}
+    <div id="dayModalSlot">${state.dayDetailModal ? buildDayDetailModal() : ""}</div>${/* v3.67 — modal dnia w osobnym slocie: otwieramy/zamykamy bez pełnego render() (Podgląd to ~290KB) */ ""}
     ${state.printReport ? buildPrintReportModal() : ""}
     ${state.imageCropModal ? buildImageCropModal() : ""}
     ${state.printReportHtml || ""}
@@ -5161,9 +5161,31 @@ function buildPreviewDetail(locId) {
     }
   });
 
-  // Helper: status komórki (room, day) — deleguje do modułowego getRoomDayStatus,
-  // żeby kafelki kalendarza i modal szczegółów dnia liczyły status tak samo (v3.44).
-  const getCellStatus = (roomId, dayStr) => getRoomDayStatus(roomId, dayStr);
+  // v3.67 PERF — pre-grupowanie rezerwacji per pokój (1 przebieg). Wcześniej getRoomDayStatus per
+  // KOMÓRKA iterował WSZYSTKIE savedBookings → obiekt z setkami rezerwacji × ~1-2 tys. komórek = lag.
+  // Teraz każda komórka sprawdza tylko rezerwacje SWOJEGO pokoju.
+  const _bookingsByRoom = new Map();
+  loc.rooms.forEach(rm => _bookingsByRoom.set(rm.id, []));
+  savedBookings.forEach(b => { const arr = _bookingsByRoom.get(b.roomId); if (arr) arr.push(b); });
+  // Status komórki — ta sama logika co getRoomDayStatus (blok→perm→occupied), ale na pre-filtrze pokoju.
+  const cellStatusFast = (roomBookings, dayStr) => {
+    for (const b of roomBookings) {   // wyłączenia mają priorytet
+      if (b.outOfService && b.from <= dayStr && b.to > dayStr) return { status: "block", booking: b, guestName: OS_REASON_LABELS[b.osReason] || "Wyłączony" };
+    }
+    for (const b of roomBookings) {
+      if (b.outOfService) continue;
+      const isPerm = b.isPermanent && b.bookingType !== "company";
+      const hasPermGuest = (b.guests || []).some(g => g.isPermanent);
+      if (isPerm || hasPermGuest) {
+        const pStart = b.permanentStart || b.from;
+        const pEnd = b.permanentEnd || "9999-12-31";
+        if (pStart <= dayStr && pEnd > dayStr) return { status: "perm", booking: b, guestName: b.bookingType === "company" ? b.companyName : (b.guests?.[0]?.name || "—") };
+      } else if (b.from <= dayStr && b.to > dayStr) {
+        return { status: "occupied", booking: b, guestName: b.bookingType === "company" ? b.companyName : (b.guests || []).map(g => g.name).filter(Boolean).join(", ") };
+      }
+    }
+    return { status: "free" };
+  };
 
   // Revenue/paid agregowany przez wszystkie wybrane miesiące.
   const computeRoomFinances = (room) => {
@@ -5172,7 +5194,7 @@ function buildPreviewDetail(locId) {
       const [y, n] = m.split("-").map(Number);
       const mStart = `${m}-01`;
       const mEndExcl = toStr(new Date(y, n, 1));
-      const roomBookings = savedBookings.filter(b => b.roomId === room.id);
+      const roomBookings = _bookingsByRoom.get(room.id) || [];   // v3.67 — pre-grupowane (bez filtra całej tablicy)
       roomBookings.forEach(b => {
         const isPerm = b.isPermanent && b.bookingType !== "company";
         const bStart = isPerm ? (b.permanentStart || b.from) : b.from;
@@ -5195,9 +5217,10 @@ function buildPreviewDetail(locId) {
   // Build rows
   const filter = state.previewFilter || "all";
   const roomsHtml = loc.rooms.map(room => {
+    const _roomBookings = _bookingsByRoom.get(room.id) || [];
     let occupiedDays = 0, permDays = 0, companyDays = 0, regularDays = 0, blockDays = 0;
     const dayCells = allDays.map(day => {
-      const s = getCellStatus(room.id, day.dateStr);
+      const s = cellStatusFast(_roomBookings, day.dateStr);
       const statusCls = s.status === "block" ? "is-block" : s.status === "perm" ? "is-perm" : s.status === "occupied" ? "is-occupied" : "is-free";
       const boundaryCls = day.isMonthStart ? "is-month-boundary" : "";
       const weekendCls = day.isWeekend ? "is-weekend" : "";   // v3.40 — ciemniejszy odcień statusu
@@ -7304,6 +7327,56 @@ function attachReportsEvents() {
   });
 }
 
+// v3.67 — modal dnia (Podgląd) otwierany/zamykany przez wstrzyknięcie do #dayModalSlot,
+// BEZ pełnego render() (pełny render przebudowuje cały Podgląd ~290KB → ścinanie przy klikaniu dni).
+function openDayModal(roomId, locId, dateStr) {
+  state.dayDetailModal = { roomId, locId, dateStr };
+  const slot = document.getElementById("dayModalSlot");
+  if (slot) { slot.innerHTML = buildDayDetailModal(); attachDayModalHandlers(); }
+  else render();
+}
+function closeDayModal() {
+  state.dayDetailModal = null;
+  const slot = document.getElementById("dayModalSlot");
+  if (slot) slot.innerHTML = "";
+}
+function attachDayModalHandlers() {
+  const slot = document.getElementById("dayModalSlot");
+  if (!slot || !state.dayDetailModal) return;
+  slot.querySelector("#dayDetailClose")?.addEventListener("click", closeDayModal);
+  slot.querySelector("#dayDetailOverlay")?.addEventListener("click", e => { if (e.target === e.currentTarget) closeDayModal(); });
+  slot.querySelectorAll("[data-day-to-room]").forEach(btn => btn.addEventListener("click", e => {
+    e.stopPropagation();
+    const dd = state.dayDetailModal || {};
+    closeDayModal();
+    if (dd.roomId != null) { state.roomDetailModal = { roomId: dd.roomId, locId: dd.locId }; render(); }
+  }));
+  slot.querySelectorAll("[data-edit-from-detail]").forEach(btn => btn.addEventListener("click", e => {
+    e.stopPropagation(); openEditModalForBooking(btn.dataset.editFromDetail);
+  }));
+}
+// Wspólne otwarcie edycji rezerwacji (z modalu pokoju i z modalu dnia).
+function openEditModalForBooking(bookingId) {
+  const b = savedBookings.find(x => x.id === bookingId);
+  if (!b) return;
+  let actualDays = [];
+  if (b.actualDays?.length > 0) { actualDays = [...b.actualDays]; }
+  else if (b.actualFrom && b.actualTo) {
+    let d = parseDate(b.actualFrom); const end = parseDate(b.actualTo);
+    while (d < end) { actualDays.push(toStr(d)); d = addDays(d, 1); }
+  }
+  state.roomDetailModal = null;
+  if (state.dayDetailModal) closeDayModal();
+  state.editModal = {
+    bookingId: b.id, from: b.from, to: b.to, bufferDays: b.bufferDays||0, actualDays,
+    payMethod: b.payment?.method||"", payTiming: b.payment?.timing||"", amountPaid: b.payment?.amountPaid||"",
+    billingMode: b.billingMode || "room", customPrice: b.customPrice != null ? String(b.customPrice) : "",
+    guests: b.guests.map(g=>({...g}))
+  };
+  state.editCalMonth = parseDate(b.from); state.actualCalMonth = parseDate(b.from);
+  render();
+}
+
 // ============================================================
 // EVENTS — refactored to NOT call render() on text input
 // ============================================================
@@ -7981,61 +8054,15 @@ function attachEvents() {
   document.querySelectorAll("[data-pvday]").forEach(cell => {
     cell.addEventListener("click", e => {
       e.stopPropagation();
-      state.dayDetailModal = {
-        roomId: cell.dataset.pvroom,
-        locId: parseInt(cell.dataset.pvloc),
-        dateStr: cell.dataset.pvday
-      };
-      render();
+      // v3.67 — otwórz modal dnia przez wstrzyknięcie do slotu, BEZ pełnego render() (Podgląd = ~290KB → ścinanie).
+      openDayModal(cell.dataset.pvroom, parseInt(cell.dataset.pvloc), cell.dataset.pvday);
     });
   });
-  document.getElementById("dayDetailClose")?.addEventListener("click", () => { state.dayDetailModal = null; render(); });
-  // Klik w tło (poza kartą) zamyka modal dnia — to lekki podgląd, nie formularz.
-  document.getElementById("dayDetailOverlay")?.addEventListener("click", e => {
-    if (e.target === e.currentTarget) { state.dayDetailModal = null; render(); }
-  });
-  // "Wszystkie rezerwacje pokoju" — przeskok z modalu dnia do pełnej historii pokoju.
-  document.querySelectorAll("[data-day-to-room]").forEach(btn => {
-    btn.addEventListener("click", e => {
-      e.stopPropagation();
-      if (!state.dayDetailModal) return;
-      const { roomId, locId } = state.dayDetailModal;
-      state.dayDetailModal = null;
-      state.roomDetailModal = { roomId, locId };
-      render();
-    });
-  });
+  attachDayModalHandlers();   // gdy modal jest już otwarty po pełnym renderze (spójność)
 
-  // "Edytuj" button inside room detail modal
+  // "Edytuj" w modalu szczegółów pokoju (room detail) — renderowany przez pełny render().
   document.querySelectorAll("[data-edit-from-detail]").forEach(btn => {
-    btn.addEventListener("click", e => {
-      e.stopPropagation();
-      const bookingId = btn.dataset.editFromDetail;
-      const b = savedBookings.find(x => x.id === bookingId);
-      if (!b) return;
-      let actualDays = [];
-      if (b.actualDays?.length > 0) { actualDays = [...b.actualDays]; }
-      else if (b.actualFrom && b.actualTo) {
-        let d = parseDate(b.actualFrom);
-        const end = parseDate(b.actualTo);
-        while (d < end) { actualDays.push(toStr(d)); d = addDays(d, 1); }
-      }
-      state.roomDetailModal = null;
-      state.dayDetailModal = null;   // v3.44 — Edytuj może być wywołane też z modalu dnia
-      state.editModal = {
-        bookingId: b.id,
-        from: b.from, to: b.to, bufferDays: b.bufferDays||0,
-        actualDays,
-        payMethod: b.payment?.method||"", payTiming: b.payment?.timing||"",
-        amountPaid: b.payment?.amountPaid||"",
-        billingMode: b.billingMode || "room",
-        customPrice: b.customPrice != null ? String(b.customPrice) : "",
-        guests: b.guests.map(g=>({...g}))
-      };
-      state.editCalMonth = parseDate(b.from);
-      state.actualCalMonth = parseDate(b.from);
-      render();
-    });
+    btn.addEventListener("click", e => { e.stopPropagation(); openEditModalForBooking(btn.dataset.editFromDetail); });
   });
 
   // "Zatrzymaj serię" — deletes future bookings in recurring group (admin only)
@@ -9296,7 +9323,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.66 · ${new Date().getFullYear()}
+          HospesAI · v3.67 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
