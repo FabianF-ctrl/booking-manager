@@ -1028,6 +1028,10 @@ body {
 .preview-row:not(.preview-grid-header) .preview-room-cell { background: var(--surface); }
 .preview-room-sub { font-size: 10px; color: var(--text3); font-weight: 400; font-variant-numeric: tabular-nums; }
 .preview-days-wrap { display: flex; flex: 1; }
+/* v3.68 PERF — pomijaj layout komórek dni w wierszach poza ekranem (obiekt z 30+ pokojami = setki
+   komórek do ułożenia przy wejściu). Dotyczy tylko siatki dni; sticky kolumna pokoju (rodzeństwo) bez zmian.
+   contain-intrinsic-size: zapasowy rozmiar zanim wiersz zostanie wyrenderowany (auto = zapamiętuje faktyczny). */
+.preview-row-clickable .preview-days-wrap { content-visibility: auto; contain-intrinsic-size: auto 1100px auto 41px; }
 /* Day header — 2 wiersze: literka dnia tygodnia + numer dnia */
 .preview-day-header {
   width: 35px; flex-shrink: 0;
@@ -9323,7 +9327,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.67 · ${new Date().getFullYear()}
+          HospesAI · v3.68 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
