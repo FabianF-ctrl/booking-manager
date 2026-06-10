@@ -7471,8 +7471,10 @@ function attachEvents() {
   document.getElementById("printReportGenerateBtn")?.addEventListener("click", () => {
     const fromEl = document.getElementById("printReportFrom");
     const toEl = document.getElementById("printReportTo");
+    const locEl = document.getElementById("printReportLoc");
     const errEl = document.getElementById("printReportError");
     const from = fromEl?.value, to = toEl?.value;
+    const locId = locEl?.value || "all";  // v3.73 — filtr lokalizacji
     if (!from || !to) {
       if (errEl) { errEl.textContent = "Uzupełnij obie daty."; errEl.style.display = "block"; }
       return;
@@ -7483,9 +7485,9 @@ function attachEvents() {
     }
     // Date "to" inclusive od user perspective → exclusive end = to + 1 day
     const toExclusive = new Date(to); toExclusive.setDate(toExclusive.getDate() + 1);
-    const html = generatePrintReport(from, toStr(toExclusive));
+    const html = generatePrintReport(from, toStr(toExclusive), locId);
     if (!html) {
-      if (errEl) { errEl.textContent = "Brak rezerwacji w wybranym zakresie."; errEl.style.display = "block"; }
+      if (errEl) { errEl.textContent = "Brak rezerwacji w wybranym zakresie / lokalizacji."; errEl.style.display = "block"; }
       return;
     }
     state.printReport = null;
@@ -9068,6 +9070,7 @@ function buildPrintReportModal() {
   const today = todayStr();
   const defaultFrom = state.printReport.from || (today.slice(0,8) + "01");
   const defaultTo = state.printReport.to || today;
+  const defLoc = state.printReport.locId || "all";  // v3.73 — filtr lokalizacji
   return `
     <div class="edit-overlay" id="printReportOverlay">
       <div class="edit-modal" style="max-width:480px">
@@ -9076,10 +9079,17 @@ function buildPrintReportModal() {
           <button class="close-btn" id="printReportCloseBtn">${ICONS.x(16)}</button>
         </div>
         <div class="edit-modal-body">
-          <p style="font-size:13px;color:var(--text2);margin-bottom:14px">Wybierz zakres dat. Raport pokaże podsumowanie finansowe + listę rezerwacji per obiekt. Po kliknięciu "Drukuj" otworzy się systemowe okno wydruku (można też zapisać jako PDF).</p>
+          <p style="font-size:13px;color:var(--text2);margin-bottom:14px">Wybierz zakres dat oraz (opcjonalnie) lokalizację. Raport pokaże podsumowanie finansowe + listę rezerwacji per obiekt. Po kliknięciu "Drukuj" otworzy się systemowe okno wydruku (można też zapisać jako PDF).</p>
           <div class="field-row" style="margin-bottom:12px">
             <div class="edit-field"><label>Od</label><input type="date" id="printReportFrom" value="${defaultFrom}" /></div>
             <div class="edit-field"><label>Do</label><input type="date" id="printReportTo" value="${defaultTo}" /></div>
+          </div>
+          <div class="edit-field" style="margin-bottom:12px">
+            <label>Lokalizacja</label>
+            <select id="printReportLoc">
+              <option value="all" ${defLoc==="all"?"selected":""}>Wszystkie lokalizacje</option>
+              ${DATA.locations.map(l => `<option value="${l.id}" ${String(defLoc)===String(l.id)?"selected":""}>${esc(l.name)}${l.city?` — ${esc(l.city)}`:""}</option>`).join("")}
+            </select>
           </div>
           <div id="printReportError" style="display:none;font-size:12px;color:var(--red);padding:8px 10px;background:var(--red-light);border-radius:var(--radius);margin-bottom:10px"></div>
         </div>
@@ -9091,7 +9101,7 @@ function buildPrintReportModal() {
     </div>`;
 }
 
-function generatePrintReport(fromDate, toDate) {
+function generatePrintReport(fromDate, toDate, locId = "all") {
   // Filtruj rezerwacje aktywne w zakresie
   const overlaps = (b) => {
     if (b.isPermanent || b.guests?.some(g => g.isPermanent)) {
@@ -9101,8 +9111,11 @@ function generatePrintReport(fromDate, toDate) {
     }
     return b.from <= toDate && b.to > fromDate;
   };
+  // v3.73 — opcjonalny filtr po lokalizacji ("all" = wszystkie)
+  const locMatch = (b) => (!locId || locId === "all") ? true : String(b.locId) === String(locId);
+  const selLoc = (locId && locId !== "all") ? DATA.locations.find(l => String(l.id) === String(locId)) : null;
   const periodRange = { from: fromDate, to: toDate };
-  const bookings = savedBookings.filter(overlaps);
+  const bookings = savedBookings.filter(b => overlaps(b) && locMatch(b));
   if (bookings.length === 0) return null;
 
   let totRevenue = 0, totPaid = 0, totMedia = 0;
@@ -9126,6 +9139,7 @@ function generatePrintReport(fromDate, toDate) {
   Object.entries(roomMedia).forEach(([key, m]) => {
     const [keyId, period] = key.split("__");
     if (!_validLocsP.has(keyId)) return;
+    if (locId && locId !== "all" && keyId !== String(locId)) return;   // v3.73 — filtr lokalizacji
     if (periodOverlapsRange(period, fromDate, toDate)) totMedia += sumMediaObjNetto(m);   // v3.46 — raport druk/PDF netto
   });
 
@@ -9163,6 +9177,7 @@ function generatePrintReport(fromDate, toDate) {
       <h1>Raport finansowy — HospesAI</h1>
       <div class="pr-hdr-sub">
         Okres: <strong>${fmtDate(fromDate)}</strong> → <strong>${fmtDate(toDate)}</strong> &nbsp;·&nbsp;
+        Lokalizacja: <strong>${selLoc ? esc(selLoc.name) : "Wszystkie"}</strong> &nbsp;·&nbsp;
         Wygenerowano: ${generated} &nbsp;·&nbsp; Użytkownik: ${esc(user)}
       </div>
 
@@ -9365,7 +9380,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.72 · ${new Date().getFullYear()}
+          HospesAI · v3.73 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
