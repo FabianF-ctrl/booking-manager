@@ -7468,11 +7468,12 @@ function attachEvents() {
   // Print report modal handlers
   document.getElementById("printReportCloseBtn")?.addEventListener("click", () => { state.printReport = null; render(); });
   document.getElementById("printReportCancelBtn")?.addEventListener("click", () => { state.printReport = null; render(); });
-  document.getElementById("printReportGenerateBtn")?.addEventListener("click", () => {
+  document.getElementById("printReportGenerateBtn")?.addEventListener("click", async () => {
     const fromEl = document.getElementById("printReportFrom");
     const toEl = document.getElementById("printReportTo");
     const locEl = document.getElementById("printReportLoc");
     const errEl = document.getElementById("printReportError");
+    const genBtn = document.getElementById("printReportGenerateBtn");
     const from = fromEl?.value, to = toEl?.value;
     const locId = locEl?.value || "all";  // v3.73 — filtr lokalizacji
     if (!from || !to) {
@@ -7483,9 +7484,17 @@ function attachEvents() {
       if (errEl) { errEl.textContent = "Data 'Od' musi być wcześniejsza lub równa dacie 'Do'."; errEl.style.display = "block"; }
       return;
     }
+    // v3.75 — dociągnij koszty zakupów z Rozliczeń (server-side proxy /api/costs); raport działa też bez nich
+    let costsData = null;
+    if (API_CREDS) {
+      if (genBtn) { genBtn.disabled = true; genBtn.style.opacity = "0.6"; }
+      try { costsData = await apiGet(`/api/costs?from=${from.slice(0,7)}&to=${to.slice(0,7)}`); }
+      catch (e) { costsData = null; }   // brak configu / upstream down → raport bez sekcji kosztów
+      if (genBtn) { genBtn.disabled = false; genBtn.style.opacity = ""; }
+    }
     // Date "to" inclusive od user perspective → exclusive end = to + 1 day
     const toExclusive = new Date(to); toExclusive.setDate(toExclusive.getDate() + 1);
-    const html = generatePrintReport(from, toStr(toExclusive), locId);
+    const html = generatePrintReport(from, toStr(toExclusive), locId, costsData);
     if (!html) {
       if (errEl) { errEl.textContent = "Brak rezerwacji w wybranym zakresie / lokalizacji."; errEl.style.display = "block"; }
       return;
@@ -9101,7 +9110,7 @@ function buildPrintReportModal() {
     </div>`;
 }
 
-function generatePrintReport(fromDate, toDate, locId = "all") {
+function generatePrintReport(fromDate, toDate, locId = "all", costsData = null) {
   // Filtruj rezerwacje aktywne w zakresie
   const overlaps = (b) => {
     if (b.isPermanent || b.guests?.some(g => g.isPermanent)) {
@@ -9154,7 +9163,21 @@ function generatePrintReport(fromDate, toDate, locId = "all") {
     mediaByLoc[keyId].electricity += e; mediaByLoc[keyId].gas += g; mediaByLoc[keyId].water += w; mediaByLoc[keyId].other += o;
   });
 
-  const totProfit = totRevenue - totMedia;
+  // v3.75 — koszty zakupów (materiały) z modułu Rozliczeń, per lokalizacja (respektuje filtr lokalizacji)
+  const _costItems = (costsData && Array.isArray(costsData.items)) ? costsData.items : [];
+  const _purchScope = _costItems.filter(it => (!locId || locId === "all") ? true : String(it.hospesLocId) === String(locId));
+  const purchByLoc = {};
+  let totPurchasesNetto = 0, totPurchasesBrutto = 0, totPurchasesCount = 0;
+  _purchScope.forEach(it => {
+    const n = parseFloat(it.netto) || 0, b = parseFloat(it.brutto) || 0, c = parseInt(it.count) || 0;
+    totPurchasesNetto += n; totPurchasesBrutto += b; totPurchasesCount += c;   // ze znakiem — zwroty (ujemne) zmniejszają koszt
+    const key = (it.hospesLocId == null) ? "__none__" : String(it.hospesLocId);
+    if (!purchByLoc[key]) purchByLoc[key] = { netto: 0, brutto: 0, count: 0 };
+    purchByLoc[key].netto += n; purchByLoc[key].brutto += b; purchByLoc[key].count += c;
+  });
+  const hasPurchases = _purchScope.length > 0;
+
+  const totProfit = totRevenue - totMedia - totPurchasesNetto;
   const totRemaining = Math.max(0, totRevenue - totPaid);
 
   const byLoc = {};
@@ -9223,6 +9246,41 @@ function generatePrintReport(fromDate, toDate, locId = "all") {
         </tbody>
       </table>`;
 
+  // v3.75 — sekcja kosztów zakupów (materiały) per lokalizacja (z modułu Rozliczeń)
+  const purchKeys = Object.keys(purchByLoc).sort((a, b) => (a === "__none__") - (b === "__none__"));
+  const purchSectionHtml = !hasPurchases ? "" : `
+      <h2>Koszty zakupów (materiały) — per lokalizacja</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Obiekt</th>
+            <th class="num" style="width:92px">Netto</th>
+            <th class="num" style="width:92px">Brutto</th>
+            <th class="num" style="width:64px">Pozycje</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${purchKeys.map(k => {
+            const nm = (k === "__none__") ? "Bez przypisanej lokalizacji" : (DATA.locations.find(l => String(l.id) === k)?.name || ("Obiekt #" + k));
+            const p = purchByLoc[k];
+            return `
+              <tr>
+                <td>${esc(nm)}</td>
+                <td class="num">${fmtZl(p.netto)}</td>
+                <td class="num">${fmtZl(p.brutto)}</td>
+                <td class="num">${p.count}</td>
+              </tr>`;
+          }).join("")}
+          <tr style="font-weight:700;border-top:2px solid #999">
+            <td>Razem</td>
+            <td class="num">${fmtZl(totPurchasesNetto)}</td>
+            <td class="num">${fmtZl(totPurchasesBrutto)}</td>
+            <td class="num">${totPurchasesCount}</td>
+          </tr>
+        </tbody>
+      </table>
+      <div style="font-size:10px;color:#777;margin-top:3px">Dane z modułu Rozliczeń (koszty zakupów netto pomniejszają zysk). „Bez przypisanej lokalizacji" = transakcje bez wskazanego budynku w Rozliczeniach.</div>`;
+
   return `
     <div class="print-report-shell">
     <div class="print-report" id="printReportArea">
@@ -9237,6 +9295,7 @@ function generatePrintReport(fromDate, toDate, locId = "all") {
       <div class="pr-summary">
         <span class="k">Przychód netto</span><span class="v">${fmtZl(totRevenue)}</span>
         <span class="k">Koszty mediów</span><span class="v">${fmtZl(totMedia)}</span>
+        ${hasPurchases ? `<span class="k">Koszty zakupów (materiały)</span><span class="v">${fmtZl(totPurchasesNetto)}</span>` : ""}
         <span class="k">Wpłacono</span><span class="v">${fmtZl(totPaid)}</span>
         <span class="k">Pozostało do zapłaty</span><span class="v">${fmtZl(totRemaining)}</span>
         <span class="k" style="border-top:1px solid #999;padding-top:4px;margin-top:4px;font-weight:700">ZYSK NETTO</span><span class="v" style="border-top:1px solid #999;padding-top:4px;margin-top:4px;font-size:14px">${fmtZl(totProfit)}</span>
@@ -9300,6 +9359,7 @@ function generatePrintReport(fromDate, toDate, locId = "all") {
         </tbody>
       </table>
 ${mediaSectionHtml}
+${purchSectionHtml}
       <div class="pr-footer">
         HospesAI · raport wygenerowany automatycznie · stan na ${generated}
       </div>
@@ -9434,7 +9494,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.74 · ${new Date().getFullYear()}
+          HospesAI · v3.75 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>

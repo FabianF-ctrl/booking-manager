@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,6 +8,7 @@ import os
 import re
 import shutil
 import secrets
+import urllib.request
 import bcrypt
 from datetime import datetime, date
 from typing import Optional
@@ -359,6 +360,43 @@ def save_room_media(room_id: str, period: str, data: dict, user=Depends(get_curr
     media[key] = data
     save_media(media)
     return data
+
+# ============================================================
+# API — INTEGRACJA: KOSZTY ZAKUPÓW Z MODUŁU ROZLICZENIA
+# Token + base_url w data/integrations.json — gitignored, wykluczone z rsync
+# (żyje wyłącznie na serwerze, NIGDY w repo). Brak configu / upstream down →
+# pusto, raport finansowy działa wtedy bez sekcji kosztów.
+# ============================================================
+
+INTEGRATIONS_FILE = DATA_DIR / "integrations.json"
+
+def load_integrations() -> dict:
+    if not INTEGRATIONS_FILE.exists():
+        return {}
+    try:
+        with open(INTEGRATIONS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+@app.get("/api/costs")
+def get_costs(from_: str = Query(..., alias="from"), to: str = Query(...),
+              user=Depends(get_current_user)):
+    """Proxy do API kosztów Rozliczeń. Zwraca
+    {from, to, items:[{projectId, hospesLocId, name, netto, brutto, count}]}."""
+    if not _PERIOD_RE.match(from_ or "") or not _PERIOD_RE.match(to or ""):
+        raise HTTPException(status_code=400, detail="from/to muszą mieć format RRRR-MM")
+    cfg = load_integrations().get("rozliczenia", {})
+    token, base = cfg.get("token"), cfg.get("base_url")
+    if not token or not base:
+        return {"from": from_, "to": to, "items": [], "error": "not_configured"}
+    url = f"{base.rstrip('/')}/api/v1/costs?from={from_}&to={to}"
+    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+    try:
+        with urllib.request.urlopen(req, timeout=6) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        return {"from": from_, "to": to, "items": [], "error": f"upstream:{type(e).__name__}"}
 
 # ============================================================
 # API — ZDJĘCIA OBIEKTÓW
