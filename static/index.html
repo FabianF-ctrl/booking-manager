@@ -9136,11 +9136,22 @@ function generatePrintReport(fromDate, toDate, locId = "all") {
   });
   // Media w okresie (v3.39: filtr na valid loc IDs — pomija legacy room-keyed)
   const _validLocsP = new Set(DATA.locations.map(l => String(l.id)));
+  // v3.74 — rozbicie mediów per typ + per lokalizacja (suma == totMedia == sumMediaObjNetto)
+  const mediaByLoc = {};
+  let mElec = 0, mGas = 0, mWater = 0, mOther = 0;
   Object.entries(roomMedia).forEach(([key, m]) => {
     const [keyId, period] = key.split("__");
     if (!_validLocsP.has(keyId)) return;
     if (locId && locId !== "all" && keyId !== String(locId)) return;   // v3.73 — filtr lokalizacji
-    if (periodOverlapsRange(period, fromDate, toDate)) totMedia += sumMediaObjNetto(m);   // v3.46 — raport druk/PDF netto
+    if (!periodOverlapsRange(period, fromDate, toDate)) return;   // v3.46 — raport druk/PDF netto
+    const e = parseFloat(m.electricity)||0, g = parseFloat(m.gas)||0, w = parseFloat(m.water)||0;
+    let o = 0;
+    if (m.others) m.others.forEach(x => { o += parseFloat(x.amount)||0; });
+    else if (m.repairs) o += parseFloat(m.repairs)||0;   // legacy
+    totMedia += e + g + w + o;   // == sumMediaObjNetto(m)
+    mElec += e; mGas += g; mWater += w; mOther += o;
+    if (!mediaByLoc[keyId]) mediaByLoc[keyId] = { electricity:0, gas:0, water:0, other:0 };
+    mediaByLoc[keyId].electricity += e; mediaByLoc[keyId].gas += g; mediaByLoc[keyId].water += w; mediaByLoc[keyId].other += o;
   });
 
   const totProfit = totRevenue - totMedia;
@@ -9170,6 +9181,47 @@ function generatePrintReport(fromDate, toDate, locId = "all") {
   const user = (typeof API_CREDS === "object" && API_CREDS?.username) ? API_CREDS.username : "—";
   const now = new Date();
   const generated = `${now.toLocaleDateString("pl-PL")} ${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
+
+  // v3.74 — tabelka mediów (prąd/gaz/woda/inne) per lokalizacja; suma kontrolna == Koszty mediów
+  const mediaLocIds = Object.keys(mediaByLoc);
+  const mediaSectionHtml = mediaLocIds.length === 0 ? "" : `
+      <h2>Media — prąd / gaz / woda / inne</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Obiekt</th>
+            <th class="num" style="width:78px">Prąd</th>
+            <th class="num" style="width:78px">Gaz</th>
+            <th class="num" style="width:78px">Woda</th>
+            <th class="num" style="width:78px">Inne</th>
+            <th class="num" style="width:88px">Razem</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${mediaLocIds.map(lid => {
+            const L = DATA.locations.find(l => String(l.id) === String(lid));
+            const mm = mediaByLoc[lid];
+            const sum = mm.electricity + mm.gas + mm.water + mm.other;
+            return `
+              <tr>
+                <td>${esc(L?.name || "—")}</td>
+                <td class="num">${fmtZl(mm.electricity)}</td>
+                <td class="num">${fmtZl(mm.gas)}</td>
+                <td class="num">${fmtZl(mm.water)}</td>
+                <td class="num">${fmtZl(mm.other)}</td>
+                <td class="num">${fmtZl(sum)}</td>
+              </tr>`;
+          }).join("")}
+          <tr style="font-weight:700;border-top:2px solid #999">
+            <td>Razem</td>
+            <td class="num">${fmtZl(mElec)}</td>
+            <td class="num">${fmtZl(mGas)}</td>
+            <td class="num">${fmtZl(mWater)}</td>
+            <td class="num">${fmtZl(mOther)}</td>
+            <td class="num">${fmtZl(totMedia)}</td>
+          </tr>
+        </tbody>
+      </table>`;
 
   return `
     <div class="print-report-shell">
@@ -9209,6 +9261,7 @@ function generatePrintReport(fromDate, toDate, locId = "all") {
             <th style="width:140px">Daty</th>
             <th class="num" style="width:80px">Suma</th>
             <th class="num" style="width:80px">Wpłac.</th>
+            <th style="width:95px">Metoda</th>
           </tr>
         </thead>
         <tbody>
@@ -9241,11 +9294,12 @@ function generatePrintReport(fromDate, toDate, locId = "all") {
                 <td>${dates}</td>
                 <td class="num">${fmtZl(t)}</td>
                 <td class="num">${fmtZl(paid)}</td>
+                <td>${PM_LABELS[b.payment?.method] || "—"}</td>
               </tr>`;
           }).join("")}
         </tbody>
       </table>
-
+${mediaSectionHtml}
       <div class="pr-footer">
         HospesAI · raport wygenerowany automatycznie · stan na ${generated}
       </div>
@@ -9380,7 +9434,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.73 · ${new Date().getFullYear()}
+          HospesAI · v3.74 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
