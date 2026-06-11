@@ -7485,16 +7485,17 @@ function attachEvents() {
       return;
     }
     // v3.75 — dociągnij koszty zakupów z Rozliczeń (server-side proxy /api/costs); raport działa też bez nich
+    const prRef = state.printReport;   // v3.76 — referencja modala (guard na Anuluj w trakcie fetcha)
     let costsData = null;
     if (API_CREDS) {
       if (genBtn) { genBtn.disabled = true; genBtn.style.opacity = "0.6"; }
       try { costsData = await apiGet(`/api/costs?from=${from.slice(0,7)}&to=${to.slice(0,7)}`); }
-      catch (e) { costsData = null; }   // brak configu / upstream down → raport bez sekcji kosztów
+      catch (e) { costsData = { items: [], error: "fetch_failed" }; }   // v3.76 — raport pokaże ostrzeżenie zamiast cicho zawyżać zysk
       if (genBtn) { genBtn.disabled = false; genBtn.style.opacity = ""; }
+      if (state.printReport !== prRef) return;   // v3.76 — user zamknął/przeładował modal w trakcie fetcha
     }
-    // Date "to" inclusive od user perspective → exclusive end = to + 1 day
-    const toExclusive = new Date(to); toExclusive.setDate(toExclusive.getDate() + 1);
-    const html = generatePrintReport(from, toStr(toExclusive), locId, costsData);
+    // Date "to" inclusive od user perspective → exclusive end = to + 1 day (v3.76: parseDate — standard projektu, nie new Date(string))
+    const html = generatePrintReport(from, toStr(addDays(parseDate(to), 1)), locId, costsData);
     if (!html) {
       if (errEl) { errEl.textContent = "Brak rezerwacji w wybranym zakresie / lokalizacji."; errEl.style.display = "block"; }
       return;
@@ -9176,6 +9177,8 @@ function generatePrintReport(fromDate, toDate, locId = "all", costsData = null) 
     purchByLoc[key].netto += n; purchByLoc[key].brutto += b; purchByLoc[key].count += c;
   });
   const hasPurchases = _purchScope.length > 0;
+  // v3.76 — awaria pobierania kosztów ≠ brak integracji: ostrzeż, żeby nie czytać zawyżonego zysku jako prawdy
+  const costsFailed = !!(costsData && costsData.error && costsData.error !== "not_configured");
 
   const totProfit = totRevenue - totMedia - totPurchasesNetto;
   const totRemaining = Math.max(0, totRevenue - totPaid);
@@ -9301,6 +9304,7 @@ function generatePrintReport(fromDate, toDate, locId = "all", costsData = null) 
         <span class="k" style="border-top:1px solid #999;padding-top:4px;margin-top:4px;font-weight:700">ZYSK NETTO</span><span class="v" style="border-top:1px solid #999;padding-top:4px;margin-top:4px;font-size:14px">${fmtZl(totProfit)}</span>
         <span class="k">Liczba rezerwacji</span><span class="v">${bookings.length}</span>
       </div>
+      ${costsFailed ? `<div style="font-size:11px;color:#b00;border:1px solid #b00;border-radius:4px;padding:6px 9px;margin:6px 0 2px">⚠ Nie udało się pobrać kosztów zakupów z modułu Rozliczeń — ZYSK NETTO powyżej NIE uwzględnia materiałów. Spróbuj wygenerować raport ponownie.</div>` : ""}
 
       <h2>Per obiekt</h2>
       ${Object.values(byLoc).map(({ loc, bookings: locBookings, revenue, paid }) => `
@@ -9494,7 +9498,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.75 · ${new Date().getFullYear()}
+          HospesAI · v3.76 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
