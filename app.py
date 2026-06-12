@@ -10,7 +10,7 @@ import shutil
 import secrets
 import urllib.request
 import bcrypt
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from typing import Optional
 from pathlib import Path
 
@@ -112,6 +112,35 @@ def require_admin(user=Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Brak uprawnień — wymagany admin")
     return user
 
+# ── Role (v3.78) ──────────────────────────────────────────────
+# admin        — wszystko (w tym Dziennik)
+# manager      — edytuje wszystko, BEZ dostępu do Dziennika (wiktoria.biuro)
+# viewer       — widzi wszystko (z Dziennikiem), niczego nie zmienia (szef)
+# worker       — noclegi + media/faktury, zmiany max 7 dni wstecz (agata)
+# worker_basic — noclegi bez mediów/faktur (ukryte), zmiany max 7 dni wstecz (ihor)
+
+EDIT_BACKLIMIT_DAYS = 7
+
+def _require_edit(user):
+    """Viewer = konto tylko do odczytu — blokuje każdą mutację."""
+    if user["role"] == "viewer":
+        raise HTTPException(status_code=403, detail="Konto tylko do odczytu — bez możliwości zmian")
+
+def _backdate_limit_iso() -> str:
+    return (date.today() - timedelta(days=EDIT_BACKLIMIT_DAYS)).isoformat()
+
+def require_manager_up(user=Depends(get_current_user)):
+    """Operacje 'twarde' (kasowanie, zdjęcia, backup): admin lub manager."""
+    if user["role"] not in ("admin", "manager"):
+        raise HTTPException(status_code=403, detail="Brak uprawnień — wymagany admin lub menadżer")
+    return user
+
+def require_audit_access(user=Depends(get_current_user)):
+    """Dziennik zdarzeń: admin + viewer (szef). Manager celowo BEZ dostępu."""
+    if user["role"] not in ("admin", "viewer"):
+        raise HTTPException(status_code=403, detail="Brak uprawnień do dziennika zdarzeń")
+    return user
+
 # ============================================================
 # DZIENNIK ZDARZEŃ (AUDIT LOG)
 # Kto się zalogował, kiedy i co zmienił. Append-only JSONL w
@@ -172,7 +201,7 @@ def _booking_label(b: dict) -> str:
     return f"{who} · obiekt {b.get('locId', '?')}, pokój {b.get('roomId', '?')} · {rng}"
 
 @app.get("/api/audit")
-def get_audit(limit: int = 500, user=Depends(require_admin)):
+def get_audit(limit: int = 500, user=Depends(require_audit_access)):
     """Dziennik zdarzeń (tylko admin) — najnowsze wpisy z 3 ostatnich miesięcy."""
     entries = []
     for fp in sorted(AUDIT_DIR.glob("audit-*.jsonl"), reverse=True)[:3]:
@@ -252,6 +281,9 @@ def get_bookings(user=Depends(get_current_user)):
 @app.post("/api/bookings")
 def create_booking(booking: dict, user=Depends(get_current_user)):
     """Dodaje nową rezerwację."""
+    _require_edit(user)
+    if user["role"] in ("worker", "worker_basic") and (booking.get("from") or "") < _backdate_limit_iso():
+        raise HTTPException(status_code=403, detail=f"Pracownik nie może dodawać rezerwacji starszych niż {EDIT_BACKLIMIT_DAYS} dni wstecz")
     bookings = load_bookings()
     if not booking.get("id"):
         booking["id"] = f"sb{int(datetime.now().timestamp()*1000)}"
@@ -273,13 +305,13 @@ def update_booking(booking_id: str, updated: dict, user=Depends(get_current_user
 
     booking = bookings[idx]
 
-    if user["role"] == "worker":
-        booking_month = booking.get("from", "")[:7]
-        current_month = date.today().strftime("%Y-%m")
-        if booking_month < current_month:
+    _require_edit(user)
+    # v3.78 — pracownicy: zmiany max 7 dni wstecz (zastępuje stary limit miesięczny)
+    if user["role"] in ("worker", "worker_basic"):
+        if booking.get("from", "") < _backdate_limit_iso() or (updated.get("from") or "9999") < _backdate_limit_iso():
             raise HTTPException(
                 status_code=403,
-                detail="Brak uprawnień — pracownik nie może edytować rezerwacji z poprzednich miesięcy"
+                detail=f"Pracownik nie może zmieniać rezerwacji starszych niż {EDIT_BACKLIMIT_DAYS} dni wstecz"
             )
 
     updated["id"] = booking_id
@@ -292,8 +324,8 @@ def update_booking(booking_id: str, updated: dict, user=Depends(get_current_user
     return updated
 
 @app.delete("/api/bookings/{booking_id}")
-def delete_booking(booking_id: str, user=Depends(require_admin)):
-    """Kasuje rezerwację — tylko admin."""
+def delete_booking(booking_id: str, user=Depends(require_manager_up)):
+    """Kasuje rezerwację — admin lub menadżer."""
     bookings = load_bookings()
     removed = next((b for b in bookings if b["id"] == booking_id), None)
     new_bookings = [b for b in bookings if b["id"] != booking_id]
@@ -322,6 +354,8 @@ def save_invoices_meta(invoices: list):
 
 @app.get("/api/invoices")
 def get_invoices(user=Depends(get_current_user)):
+    if user["role"] == "worker_basic":
+        return []   # v3.78 — ihor: faktury ukryte
     return load_invoices_meta()
 
 @app.post("/api/invoices")
@@ -335,6 +369,9 @@ async def upload_invoice(
     user=Depends(get_current_user)
 ):
     """Uploaduje fakturę i zapisuje jej metadane."""
+    _require_edit(user)
+    if user["role"] == "worker_basic":
+        raise HTTPException(status_code=403, detail="Brak dostępu do faktur")
     file_url = None
     filename = None
 
@@ -372,8 +409,8 @@ async def upload_invoice(
     return entry
 
 @app.delete("/api/invoices/{invoice_id}")
-def delete_invoice(invoice_id: str, user=Depends(require_admin)):
-    """Kasuje fakturę — tylko admin."""
+def delete_invoice(invoice_id: str, user=Depends(require_manager_up)):
+    """Kasuje fakturę — admin lub menadżer."""
     invoices = load_invoices_meta()
     inv = next((i for i in invoices if i["id"] == invoice_id), None)
     if not inv:
@@ -410,7 +447,8 @@ def get_prices(user=Depends(get_current_user)):
 
 @app.post("/api/prices")
 def update_prices(prices: dict, user=Depends(get_current_user)):
-    """Zapisuje ceny pokoi. Dostępne dla wszystkich zalogowanych."""
+    """Zapisuje ceny pokoi. Dostępne dla zalogowanych (oprócz konta podgląd)."""
+    _require_edit(user)
     save_prices(prices)
     audit_log(user, "prices_update", f"Cennik zapisany ({len(prices)} pokoi)")
     return {"status": "ok", "rooms": len(prices)}
@@ -433,6 +471,8 @@ def save_media(media: dict):
 
 @app.get("/api/media")
 def get_media(user=Depends(get_current_user)):
+    if user["role"] == "worker_basic":
+        return {}   # v3.78 — ihor: media ukryte
     return load_media()
 
 _PERIOD_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")  # RRRR-MM, miesiąc 01–12
@@ -443,6 +483,16 @@ def save_room_media(room_id: str, period: str, data: dict, user=Depends(get_curr
     # Bez tego dowolny string trafiał jako klucz i psuł filtrowanie w raportach.
     if not _PERIOD_RE.match(period or ""):
         raise HTTPException(status_code=400, detail="Okres musi mieć format RRRR-MM (miesiąc 01–12)")
+    _require_edit(user)
+    if user["role"] == "worker_basic":
+        raise HTTPException(status_code=403, detail="Brak dostępu do mediów")
+    if user["role"] == "worker":
+        # v3.78 — zmiany max 7 dni wstecz: okres zamknięty >7 dni temu jest zablokowany
+        y, m = period.split("-")
+        nxt = date(int(y) + (1 if m == "12" else 0), 1 if m == "12" else int(m) + 1, 1)
+        period_end = nxt - timedelta(days=1)
+        if (date.today() - period_end).days > EDIT_BACKLIMIT_DAYS:
+            raise HTTPException(status_code=403, detail=f"Pracownik nie może zmieniać mediów okresów zamkniętych ponad {EDIT_BACKLIMIT_DAYS} dni temu")
     media = load_media()
     key = f"{room_id}__{period}"
     media[key] = data
@@ -508,9 +558,9 @@ def list_location_images(user=Depends(get_current_user)):
 async def upload_location_image(
     loc_id: int,
     file: UploadFile = File(...),
-    user=Depends(require_admin)
+    user=Depends(require_manager_up)
 ):
-    """Uploaduje zdjęcie obiektu — tylko admin.
+    """Uploaduje zdjęcie obiektu — admin lub menadżer.
     Plik zapisywany jako data/loc_images/{loc_id}.{ext}.
     Stare zdjęcie tego obiektu jest nadpisywane (usuwane przed zapisem)."""
     if not file.filename:
@@ -529,8 +579,8 @@ async def upload_location_image(
     return {"locId": loc_id, "filename": dest.name, "url": f"/loc_images/{dest.name}"}
 
 @app.delete("/api/locations/{loc_id}/image")
-def delete_location_image(loc_id: int, user=Depends(require_admin)):
-    """Kasuje zdjęcie obiektu — tylko admin."""
+def delete_location_image(loc_id: int, user=Depends(require_manager_up)):
+    """Kasuje zdjęcie obiektu — admin lub menadżer."""
     deleted = False
     for f in LOC_IMAGES_DIR.glob(f"{loc_id}.*"):
         f.unlink()
@@ -575,6 +625,7 @@ def create_note(note: dict, user=Depends(get_current_user)):
     Tworzy notatkę. Struktura:
       { type: "booking"|"general", bookingId?, roomId?, locId?, text }
     """
+    _require_edit(user)
     notes = load_notes()
     note["id"] = f"nt{int(datetime.now().timestamp()*1000)}"
     note["createdBy"] = user["username"]
@@ -591,6 +642,7 @@ def create_note(note: dict, user=Depends(get_current_user)):
 
 @app.put("/api/notes/{note_id}")
 def update_note(note_id: str, updated: dict, user=Depends(get_current_user)):
+    _require_edit(user)
     notes = load_notes()
     idx = next((i for i, n in enumerate(notes) if n["id"] == note_id), None)
     if idx is None:
@@ -604,8 +656,8 @@ def update_note(note_id: str, updated: dict, user=Depends(get_current_user)):
     return notes[idx]
 
 @app.delete("/api/notes/{note_id}")
-def delete_note(note_id: str, user=Depends(require_admin)):
-    """Kasuje notatkę — tylko admin. Backup robi się przed kasowaniem."""
+def delete_note(note_id: str, user=Depends(require_manager_up)):
+    """Kasuje notatkę — admin lub menadżer. Backup robi się przed kasowaniem."""
     notes = load_notes()
     removed_note = next((n for n in notes if n["id"] == note_id), None)
     if not removed_note:
@@ -629,7 +681,7 @@ def get_me(user=Depends(get_current_user)):
 # ============================================================
 
 @app.post("/api/backup")
-def manual_backup(user=Depends(require_admin)):
+def manual_backup(user=Depends(require_manager_up)):
     make_backup()
     audit_log(user, "backup_manual", "Backup ręczny rezerwacji")
     return {"status": "backup created", "time": datetime.now().isoformat()}

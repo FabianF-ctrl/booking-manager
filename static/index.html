@@ -2653,16 +2653,30 @@ function buildSidebar() {
     { id:"sms",       icon: ICONS.messageSquare(), lbl:"SMS / powiadomienia" },
     { id:"ai",        icon: ICONS.bot(),      lbl:"Agent SI" },
     { id:"help",      icon: ICONS.helpCircle(), lbl:"Instrukcja / Pomoc" },
-    ...(API_CREDS?.role === "admin" ? [{ id:"audit", icon: ICONS.clock(), lbl:"Dziennik" }] : []),   // v3.77 — dziennik zdarzeń (tylko admin)
+    { id:"audit",     icon: ICONS.clock(),    lbl:"Dziennik" },
     { id:"settings",  icon: ICONS.settings(), lbl:"Ustawienia" },
-  ];
+  ].filter(t => {
+    const role = API_CREDS?.role;
+    if (t.id === "audit") return role === "admin" || role === "viewer";   // v3.78 — dziennik: admin + szef (manager celowo nie)
+    if (t.id === "invoices" && role === "worker_basic") return false;     // v3.78 — ihor: faktury ukryte
+    return true;
+  });
   // User block (jeśli zalogowany przez API)
   const user = (typeof API_CREDS === "object" && API_CREDS?.username) ? API_CREDS : null;
   const userBlock = user ? `
     <div class="sidebar-footer">
       <div class="sidebar-user">
         <span class="sidebar-user-name">${esc(user.username)}</span>
-        <span class="sidebar-user-role" style="background:${user.role==="admin"?"var(--blue-light)":"var(--green-light)"};color:${user.role==="admin"?"var(--blue)":"var(--green)"}">${user.role==="admin"?"Admin":"Pracownik"}</span>
+        ${(() => {   // v3.78 — etykiety i kolory per rola
+          const R = {
+            admin:        { lbl:"Admin",     bg:"var(--blue-light)",   col:"var(--blue)" },
+            manager:      { lbl:"Menadżer",  bg:"var(--blue-light)",   col:"var(--blue)" },
+            viewer:       { lbl:"Podgląd",   bg:"var(--orange-light)", col:"var(--orange)" },
+            worker:       { lbl:"Pracownik", bg:"var(--green-light)",  col:"var(--green)" },
+            worker_basic: { lbl:"Pracownik", bg:"var(--green-light)",  col:"var(--green)" },
+          }[user.role] || { lbl:"Pracownik", bg:"var(--green-light)", col:"var(--green)" };
+          return `<span class="sidebar-user-role" style="background:${R.bg};color:${R.col}">${R.lbl}</span>`;
+        })()}
       </div>
       <button class="nav-btn" id="logoutBtn">${ICONS.logout()} Wyloguj</button>
     </div>` : "";
@@ -4146,6 +4160,7 @@ function buildReportRow(b, loc, periodRange) {
 
 // ─── MEDIA SECTION per location (embedded in reports) ────────
 function buildMediaSectionForLoc(loc) {
+  if (API_CREDS?.role === "worker_basic") return "";   // v3.78 — ihor: media ukryte (backend i tak zwraca pusto/403)
   // v3.39: Media PER OBIEKT (nie per pokój). Klucz w storage to loc.id.
   // Pokazuje wszystkie okresy zapisane dla tego obiektu + jeden form do dodania
   // wpisu za wybrany YYYY-MM. Aplikuje się do całego budynku jako koszt operacyjny.
@@ -4307,7 +4322,7 @@ function loadAudit() {
     .catch(e => { state.auditEntries = { error: String(e) }; if (state.activeTab === "audit") render(); });
 }
 function buildAudit() {
-  if (API_CREDS?.role !== "admin") return `<div style="padding:40px;text-align:center;color:var(--text2)">Brak uprawnień — dziennik widzi tylko administrator.</div>`;
+  if (API_CREDS?.role !== "admin" && API_CREDS?.role !== "viewer") return `<div style="padding:40px;text-align:center;color:var(--text2)">Brak uprawnień do dziennika zdarzeń.</div>`;
   const head = `
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap">
       <div>
@@ -9543,27 +9558,35 @@ function apiHeaders() {
   return { "Authorization": "Basic " + encoded, "Content-Type": "application/json" };
 }
 
+// v3.78 — dokleja `detail` z odpowiedzi FastAPI (np. "Konto tylko do odczytu"),
+// żeby toasty mówiły CO jest nie tak, nie tylko "403 Forbidden".
+async function apiErrMsg(r) {
+  let msg = r.status + ' ' + r.statusText;
+  try { const j = await r.json(); if (j?.detail) msg += ' — ' + j.detail; } catch (e) {}
+  return msg;
+}
+
 async function apiGet(path) {
   const r = await fetch(path, { headers: apiHeaders() });
-  if (!r.ok) throw new Error(r.status + ' ' + r.statusText);
+  if (!r.ok) throw new Error(await apiErrMsg(r));
   return r.json();
 }
 
 async function apiPost(path, body) {
   const r = await fetch(path, { method:"POST", headers: apiHeaders(), body: JSON.stringify(body) });
-  if (!r.ok) throw new Error(r.status + ' ' + r.statusText);
+  if (!r.ok) throw new Error(await apiErrMsg(r));
   return r.json();
 }
 
 async function apiPut(path, body) {
   const r = await fetch(path, { method:"PUT", headers: apiHeaders(), body: JSON.stringify(body) });
-  if (!r.ok) throw new Error(r.status + ' ' + r.statusText);
+  if (!r.ok) throw new Error(await apiErrMsg(r));
   return r.json();
 }
 
 async function apiDelete(path) {
   const r = await fetch(path, { method:"DELETE", headers: apiHeaders() });
-  if (!r.ok) throw new Error(r.status + ' ' + r.statusText);
+  if (!r.ok) throw new Error(await apiErrMsg(r));
   return r.json();
 }
 
@@ -9608,7 +9631,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.77 · ${new Date().getFullYear()}
+          HospesAI · v3.78 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
