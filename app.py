@@ -674,7 +674,11 @@ def delete_note(note_id: str, user=Depends(require_manager_up)):
 @app.get("/api/me")
 def get_me(user=Depends(get_current_user)):
     audit_log(user, "login", "Zalogowano")
-    return {"username": user["username"], "role": user["role"]}
+    # v3.79 — feature-flagi per instancja: integracja Rozliczeń istnieje tylko tam,
+    # gdzie data/integrations.json ją konfiguruje (= nasza instancja ABI Noclegi).
+    # Instancje innych firm nie mają configa → zakładka znika, /api/costs i tak puste.
+    features = {"rozliczenia": bool(load_integrations().get("rozliczenia", {}).get("token"))}
+    return {"username": user["username"], "role": user["role"], "features": features}
 
 # ============================================================
 # API — RĘCZNY BACKUP

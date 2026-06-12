@@ -2659,6 +2659,7 @@ function buildSidebar() {
     const role = API_CREDS?.role;
     if (t.id === "audit") return role === "admin" || role === "viewer";   // v3.78 — dziennik: admin + szef (manager celowo nie)
     if (t.id === "invoices" && role === "worker_basic") return false;     // v3.78 — ihor: faktury ukryte
+    if (t.id === "rozliczenia") return !!API_CREDS?.features?.rozliczenia; // v3.79 — integracja tylko na instancji ABI (feature-flag z /api/me)
     return true;
   });
   // User block (jeśli zalogowany przez API)
@@ -9631,7 +9632,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.78 · ${new Date().getFullYear()}
+          HospesAI · v3.79 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
@@ -10243,7 +10244,7 @@ async function doLogin() {
     const r = await fetch("/api/me", { headers: { "Authorization": "Basic " + encoded } });
     if (!r.ok) throw new Error("401");
     const me = await r.json();
-    API_CREDS = { username, password, role: me.role };
+    API_CREDS = { username, password, role: me.role, features: me.features || {} };
     state.loginLoading = false;
     state.loginUsername = username;
     await loadAllData();
