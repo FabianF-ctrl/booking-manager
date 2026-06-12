@@ -1,0 +1,12 @@
+// portal/orgs.local.js — REAL organization list for the portal.
+// Copy this file to orgs.local.js and fill in real names + instance URLs.
+// orgs.local.js is gitignored (like static/locations.local.js) — real
+// domains/org names never land in the public repo.
+//
+// Kolejność = kolejność na liście. Portal zapamiętuje ostatni wybór
+// użytkownika w localStorage.
+
+var PORTAL_ORGS = [
+  { name: "Przykładowa Firma 1", url: "https://firma1.example.com" },
+  { name: "Przykładowa Firma 2", url: "https://firma2.example.com" },
+];

@@ -63,3 +63,6 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+
+# Portal organizacji — prawdziwe nazwy firm i domeny instancji (jak locations.local.js)
+portal/orgs.local.js
