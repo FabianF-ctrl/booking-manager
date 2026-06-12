@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form, Query
+from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form, Query, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -89,7 +89,7 @@ def save_users(users: dict):
 # Wczytaj userów raz przy starcie (cache w pamięci, reload przy zmianach przez manage_users.py)
 _USERS_CACHE = load_users()
 
-def get_current_user(credentials: HTTPBasicCredentials = Depends(security)):
+def get_current_user(request: Request, credentials: HTTPBasicCredentials = Depends(security)):
     # Reload z pliku jeśli mtime się zmienił (żeby manage_users.py zadziałał bez restartu)
     global _USERS_CACHE
     try:
@@ -97,16 +97,96 @@ def get_current_user(credentials: HTTPBasicCredentials = Depends(security)):
     except Exception:
         pass  # zostaw stary cache
     user = _USERS_CACHE.get(credentials.username)
-    if not user:
-        raise HTTPException(status_code=401, detail="Nieprawidłowy użytkownik")
-    if not _verify_password(credentials.password, user["hash"]):
-        raise HTTPException(status_code=401, detail="Nieprawidłowe hasło")
-    return {"username": credentials.username, "role": user["role"]}
+    ok = bool(user) and _verify_password(credentials.password, user["hash"])
+    if not ok:
+        # Nieudane próby logujemy tylko dla /api/me (ekran logowania) — bez spamu
+        # z każdego requestu, gdy komuś wygasły zapisane dane. Hasła NIE logujemy.
+        if request.url.path == "/api/me":
+            audit_log({"username": credentials.username, "ip": _client_ip(request)},
+                      "login_failed", "Nieudana próba logowania")
+        raise HTTPException(status_code=401, detail="Nieprawidłowy użytkownik lub hasło")
+    return {"username": credentials.username, "role": user["role"], "ip": _client_ip(request)}
 
 def require_admin(user=Depends(get_current_user)):
     if user["role"] != "admin":
         raise HTTPException(status_code=403, detail="Brak uprawnień — wymagany admin")
     return user
+
+# ============================================================
+# DZIENNIK ZDARZEŃ (AUDIT LOG)
+# Kto się zalogował, kiedy i co zmienił. Append-only JSONL w
+# data/audit/audit-RRRR-MM.jsonl (rotacja miesięczna, poza repo).
+# Zapis nigdy nie blokuje właściwej operacji.
+# ============================================================
+
+AUDIT_DIR = DATA_DIR / "audit"
+AUDIT_DIR.mkdir(parents=True, exist_ok=True)
+
+# Czas polski niezależnie od strefy serwera (Hetzner chodzi na UTC — bez tego
+# dziennik pokazywałby godziny przesunięte o 1-2h względem zegara użytkowników).
+try:
+    from zoneinfo import ZoneInfo
+    _AUDIT_TZ = ZoneInfo("Europe/Warsaw")
+except Exception:
+    _AUDIT_TZ = None
+
+def _audit_now():
+    return datetime.now(_AUDIT_TZ) if _AUDIT_TZ else datetime.now()
+
+def _client_ip(request: Request) -> str:
+    fwd = request.headers.get("x-forwarded-for", "")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.client.host if request.client else ""
+
+def audit_log(user, event: str, label: str):
+    """user = dict z get_current_user (username + ip) albo string username."""
+    try:
+        now = _audit_now()
+        entry = {
+            "ts": now.isoformat(timespec="seconds"),
+            "user": user.get("username") if isinstance(user, dict) else str(user),
+            "event": event,   # login | login_failed | booking_* | invoice_* | media_update | ...
+            "label": label,
+        }
+        if isinstance(user, dict) and user.get("ip"):
+            entry["ip"] = user["ip"]
+        fp = AUDIT_DIR / f"audit-{now.strftime('%Y-%m')}.jsonl"
+        with open(fp, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+def _booking_label(b: dict) -> str:
+    if b.get("outOfService"):
+        who = f"wyłączenie pokoju ({b.get('osReason', 'inne')})"
+    elif b.get("bookingType") == "company" and b.get("companyName"):
+        who = b["companyName"]
+    else:
+        names = [g.get("name", "") for g in (b.get("guests") or []) if g.get("name")]
+        who = ", ".join(names) or "—"
+    if b.get("isPermanent"):
+        rng = f"od {b.get('permanentStart') or b.get('from', '?')} (stały najemca)"
+    else:
+        rng = f"{b.get('from', '?')} → {b.get('to', '?')}"
+    return f"{who} · obiekt {b.get('locId', '?')}, pokój {b.get('roomId', '?')} · {rng}"
+
+@app.get("/api/audit")
+def get_audit(limit: int = 500, user=Depends(require_admin)):
+    """Dziennik zdarzeń (tylko admin) — najnowsze wpisy z 3 ostatnich miesięcy."""
+    entries = []
+    for fp in sorted(AUDIT_DIR.glob("audit-*.jsonl"), reverse=True)[:3]:
+        try:
+            with open(fp, "r", encoding="utf-8") as f:
+                for line in f:
+                    try:
+                        entries.append(json.loads(line))
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+    entries.sort(key=lambda e: e.get("ts", ""), reverse=True)
+    return entries[:max(1, min(int(limit), 2000))]
 
 # ============================================================
 # HELPERS — zapis / odczyt bookings.json
@@ -180,6 +260,7 @@ def create_booking(booking: dict, user=Depends(get_current_user)):
     bookings.append(booking)
     make_backup()
     save_bookings(bookings)
+    audit_log(user, "booking_create", f"Nowa rezerwacja: {_booking_label(booking)}")
     return booking
 
 @app.put("/api/bookings/{booking_id}")
@@ -207,17 +288,20 @@ def update_booking(booking_id: str, updated: dict, user=Depends(get_current_user
     bookings[idx] = updated
     make_backup()
     save_bookings(bookings)
+    audit_log(user, "booking_update", f"Edycja rezerwacji: {_booking_label(updated)}")
     return updated
 
 @app.delete("/api/bookings/{booking_id}")
 def delete_booking(booking_id: str, user=Depends(require_admin)):
     """Kasuje rezerwację — tylko admin."""
     bookings = load_bookings()
+    removed = next((b for b in bookings if b["id"] == booking_id), None)
     new_bookings = [b for b in bookings if b["id"] != booking_id]
     if len(new_bookings) == len(bookings):
         raise HTTPException(status_code=404, detail="Rezerwacja nie znaleziona")
     make_backup()
     save_bookings(new_bookings)
+    audit_log(user, "booking_delete", f"Usunięta rezerwacja: {_booking_label(removed or {})}")
     return {"deleted": booking_id}
 
 # ============================================================
@@ -283,6 +367,8 @@ async def upload_invoice(
     }
     invoices.append(entry)
     save_invoices_meta(invoices)
+    audit_log(user, "invoice_add",
+              f"Faktura dodana: {entry['filename']} · obiekt {loc_id or '—'} · okres {period or '—'}" + (f" · {amount} zł" if amount else ""))
     return entry
 
 @app.delete("/api/invoices/{invoice_id}")
@@ -298,6 +384,7 @@ def delete_invoice(invoice_id: str, user=Depends(require_admin)):
             file_path.unlink()
     new_invoices = [i for i in invoices if i["id"] != invoice_id]
     save_invoices_meta(new_invoices)
+    audit_log(user, "invoice_delete", f"Faktura usunięta: {inv.get('filename', invoice_id)} · okres {inv.get('period') or '—'}")
     return {"deleted": invoice_id}
 
 # ============================================================
@@ -325,6 +412,7 @@ def get_prices(user=Depends(get_current_user)):
 def update_prices(prices: dict, user=Depends(get_current_user)):
     """Zapisuje ceny pokoi. Dostępne dla wszystkich zalogowanych."""
     save_prices(prices)
+    audit_log(user, "prices_update", f"Cennik zapisany ({len(prices)} pokoi)")
     return {"status": "ok", "rooms": len(prices)}
 
 # ============================================================
@@ -359,6 +447,7 @@ def save_room_media(room_id: str, period: str, data: dict, user=Depends(get_curr
     key = f"{room_id}__{period}"
     media[key] = data
     save_media(media)
+    audit_log(user, "media_update", f"Media zapisane: obiekt/pokój {room_id} · okres {period}")
     return data
 
 # ============================================================
@@ -436,6 +525,7 @@ async def upload_location_image(
     with open(dest, "wb") as out:
         content = await file.read()
         out.write(content)
+    audit_log(user, "image_upload", f"Zdjęcie obiektu {loc_id} wgrane ({dest.name})")
     return {"locId": loc_id, "filename": dest.name, "url": f"/loc_images/{dest.name}"}
 
 @app.delete("/api/locations/{loc_id}/image")
@@ -445,6 +535,8 @@ def delete_location_image(loc_id: int, user=Depends(require_admin)):
     for f in LOC_IMAGES_DIR.glob(f"{loc_id}.*"):
         f.unlink()
         deleted = True
+    if deleted:
+        audit_log(user, "image_delete", f"Zdjęcie obiektu {loc_id} usunięte")
     return {"deleted": deleted, "locId": loc_id}
 
 # ============================================================
@@ -494,6 +586,7 @@ def create_note(note: dict, user=Depends(get_current_user)):
     notes.append(note)
     backup_notes()
     save_notes(notes)
+    audit_log(user, "note_add", f"Notatka dodana: „{(note.get('text') or '')[:60]}{'…' if len(note.get('text') or '') > 60 else ''}”")
     return note
 
 @app.put("/api/notes/{note_id}")
@@ -507,16 +600,19 @@ def update_note(note_id: str, updated: dict, user=Depends(get_current_user)):
     notes[idx]["updatedAt"] = datetime.now().isoformat()
     backup_notes()
     save_notes(notes)
+    audit_log(user, "note_update", f"Notatka edytowana: „{(notes[idx].get('text') or '')[:60]}{'…' if len(notes[idx].get('text') or '') > 60 else ''}”")
     return notes[idx]
 
 @app.delete("/api/notes/{note_id}")
 def delete_note(note_id: str, user=Depends(require_admin)):
     """Kasuje notatkę — tylko admin. Backup robi się przed kasowaniem."""
     notes = load_notes()
-    if not any(n["id"] == note_id for n in notes):
+    removed_note = next((n for n in notes if n["id"] == note_id), None)
+    if not removed_note:
         raise HTTPException(status_code=404, detail="Notatka nie znaleziona")
     backup_notes()
     save_notes([n for n in notes if n["id"] != note_id])
+    audit_log(user, "note_delete", f"Notatka usunięta: „{(removed_note.get('text') or '')[:60]}{'…' if len(removed_note.get('text') or '') > 60 else ''}”")
     return {"deleted": note_id}
 
 # ============================================================
@@ -525,6 +621,7 @@ def delete_note(note_id: str, user=Depends(require_admin)):
 
 @app.get("/api/me")
 def get_me(user=Depends(get_current_user)):
+    audit_log(user, "login", "Zalogowano")
     return {"username": user["username"], "role": user["role"]}
 
 # ============================================================
@@ -534,6 +631,7 @@ def get_me(user=Depends(get_current_user)):
 @app.post("/api/backup")
 def manual_backup(user=Depends(require_admin)):
     make_backup()
+    audit_log(user, "backup_manual", "Backup ręczny rezerwacji")
     return {"status": "backup created", "time": datetime.now().isoformat()}
 
 # ============================================================

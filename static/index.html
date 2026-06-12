@@ -1620,6 +1620,7 @@ const ICONS = (() => {
     landmark: (s=14) => wrap(s, '<path d="M10 18v-7"/><path d="M11.12 2.198a2 2 0 0 1 1.76.006l7.866 3.847c.476.233.31.949-.22.949H3.474c-.53 0-.695-.716-.22-.949z"/><path d="M14 18v-7"/><path d="M18 18v-7"/><path d="M3 22h18"/><path d="M6 18v-7"/>'),
     banknote: (s=14) => wrap(s, '<rect width="20" height="12" x="2" y="6" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/>'),
     rotateCw: (s=14) => wrap(s, '<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>'),
+    clock: (s=14) => wrap(s, '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>'),
     stopCircle:(s=14) => wrap(s, '<circle cx="12" cy="12" r="10"/><rect width="6" height="6" x="9" y="9"/>'),
     calendar: (s=14) => wrap(s, '<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>'),
     bed:      (s=14) => wrap(s, '<path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><path d="M6 8v9"/>'),
@@ -2621,6 +2622,7 @@ function buildAppCore() {
           <div class="tab-pane ${state.activeTab==="sms"?"active":""}" id="pane-sms">${state.activeTab==="sms"?buildSms():""}</div>
           <div class="tab-pane ${state.activeTab==="ai"?"active":""}" id="pane-ai">${state.activeTab==="ai"?buildAiAgent():""}</div>
           <div class="tab-pane ${state.activeTab==="help"?"active":""}" id="pane-help">${state.activeTab==="help"?buildHelp():""}</div>
+          <div class="tab-pane ${state.activeTab==="audit"?"active":""}" id="pane-audit">${state.activeTab==="audit"?buildAudit():""}</div>
           <div class="tab-pane ${state.activeTab==="settings"?"active":""}" id="pane-settings">${state.activeTab==="settings"?buildSettings():""}</div>
         </div>
       </div>
@@ -2651,6 +2653,7 @@ function buildSidebar() {
     { id:"sms",       icon: ICONS.messageSquare(), lbl:"SMS / powiadomienia" },
     { id:"ai",        icon: ICONS.bot(),      lbl:"Agent SI" },
     { id:"help",      icon: ICONS.helpCircle(), lbl:"Instrukcja / Pomoc" },
+    ...(API_CREDS?.role === "admin" ? [{ id:"audit", icon: ICONS.clock(), lbl:"Dziennik" }] : []),   // v3.77 — dziennik zdarzeń (tylko admin)
     { id:"settings",  icon: ICONS.settings(), lbl:"Ustawienia" },
   ];
   // User block (jeśli zalogowany przez API)
@@ -4281,6 +4284,107 @@ function buildMediaSection() { return ""; }
 // Osadzona apka „Rozliczenia materiałów" (osobna usługa Next.js na :8002), serwowana SAME-ORIGIN
 // przez nginx pod /rozliczenia/ (iframe). Renderuje się po dodaniu basePath='/rozliczenia' po stronie
 // tamtej apki. Logowanie własne wewnątrz ramki (same-origin → ciasteczko sesji działa bez kombinacji).
+// ─── DZIENNIK ZDARZEŃ (v3.77, tylko admin) ─────────────────────
+const AUDIT_EVENT_LABELS = {
+  login: "Logowanie", login_failed: "Nieudane logowanie",
+  booking_create: "Nowa rezerwacja", booking_update: "Edycja rezerwacji", booking_delete: "Usunięcie rezerwacji",
+  invoice_add: "Faktura dodana", invoice_delete: "Faktura usunięta",
+  prices_update: "Cennik", media_update: "Media",
+  note_add: "Notatka dodana", note_update: "Notatka edytowana", note_delete: "Notatka usunięta",
+  image_upload: "Zdjęcie wgrane", image_delete: "Zdjęcie usunięte", backup_manual: "Backup ręczny",
+};
+function auditPrettyLabel(label) {
+  // serwer zna tylko ID obiektu — UI podmienia na nazwę
+  return esc(label || "").replace(/obiekt (\d+)/g, (m, id) => {
+    const L = DATA.locations.find(l => String(l.id) === id);
+    return L ? `obiekt „${esc(L.name)}”` : m;
+  });
+}
+function loadAudit() {
+  state.auditEntries = null;
+  apiGet("/api/audit?limit=500")
+    .then(d => { state.auditEntries = d; if (state.activeTab === "audit") render(); })
+    .catch(e => { state.auditEntries = { error: String(e) }; if (state.activeTab === "audit") render(); });
+}
+function buildAudit() {
+  if (API_CREDS?.role !== "admin") return `<div style="padding:40px;text-align:center;color:var(--text2)">Brak uprawnień — dziennik widzi tylko administrator.</div>`;
+  const head = `
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <div>
+        <h2 style="font-size:17px;font-weight:700;display:flex;align-items:center;gap:8px;margin:0">${ICONS.clock(20)} Dziennik zdarzeń</h2>
+        <p style="font-size:12px;color:var(--text2);margin:4px 0 0;max-width:640px">Kto się logował i co zmieniał (ostatnie 3 miesiące, max 500 wpisów). Pełna historia w plikach <code>data/audit/</code> na serwerze.</p>
+      </div>
+      <button class="cal-nav-btn" id="auditRefreshBtn" style="display:inline-flex;align-items:center;gap:6px;flex-shrink:0">${ICONS.rotateCw(13)} Odśwież</button>
+    </div>`;
+  const e = state.auditEntries;
+  if (e === null || e === undefined) return `${head}<div style="padding:30px;text-align:center;color:var(--text2)">Ładowanie dziennika…</div>`;
+  if (e.error) return `${head}<div style="padding:14px;font-size:13px;color:var(--red);background:var(--red-light);border-radius:var(--radius)">Nie udało się pobrać dziennika: ${esc(e.error)}</div>`;
+  const fUser = state.auditFilterUser || "all";
+  const fType = state.auditFilterType || "all";
+  const users = [...new Set(e.map(x => x.user).filter(Boolean))].sort();
+  const matches = (x) => {
+    if (fUser !== "all" && x.user !== fUser) return false;
+    if (fType === "logins" && x.event !== "login" && x.event !== "login_failed") return false;
+    if (fType === "changes" && (x.event === "login" || x.event === "login_failed")) return false;
+    return true;
+  };
+  const shown = e.filter(matches);
+  const _sel = `padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-size:13px;color:var(--text);font-family:inherit;outline:none`;
+  const fmtTs = (ts) => {
+    if (!ts) return "—";
+    const [d, t] = ts.split("T");
+    if (!d || !t) return ts;
+    const [y, m, dd] = d.split("-");
+    return `${dd}.${m}.${y} ${t.slice(0,5)}`;
+  };
+  const evBadge = (ev) => {
+    const lbl = AUDIT_EVENT_LABELS[ev] || ev;
+    let bg = "var(--surface2)", col = "var(--text2)";
+    if (ev === "login") { bg = "var(--green-light)"; col = "var(--green)"; }
+    else if (ev === "login_failed") { bg = "var(--red-light)"; col = "var(--red)"; }
+    else if (ev && ev.endsWith("_delete")) { bg = "var(--orange-light)"; col = "var(--orange)"; }
+    else if (ev) { bg = "var(--blue-light)"; col = "var(--blue)"; }
+    return `<span style="font-size:11px;font-weight:600;background:${bg};color:${col};padding:2px 8px;border-radius:99px;white-space:nowrap">${esc(lbl)}</span>`;
+  };
+  return `${head}
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
+      <select id="auditFilterUser" style="${_sel}">
+        <option value="all" ${fUser==="all"?"selected":""}>Wszyscy użytkownicy</option>
+        ${users.map(u => `<option value="${esc(u)}" ${fUser===u?"selected":""}>${esc(u)}</option>`).join("")}
+      </select>
+      <select id="auditFilterType" style="${_sel}">
+        <option value="all" ${fType==="all"?"selected":""}>Wszystkie zdarzenia</option>
+        <option value="logins" ${fType==="logins"?"selected":""}>Tylko logowania</option>
+        <option value="changes" ${fType==="changes"?"selected":""}>Tylko zmiany danych</option>
+      </select>
+      <span style="font-size:12px;color:var(--text2)">${shown.length} ${shown.length===1?"wpis":(shown.length%10>=2&&shown.length%10<=4&&(shown.length%100<10||shown.length%100>=20)?"wpisy":"wpisów")}</span>
+    </div>
+    ${shown.length === 0 ? `<div style="padding:30px;text-align:center;color:var(--text2)">Brak zdarzeń dla wybranych filtrów.</div>` : `
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:12.5px;font-variant-numeric:tabular-nums">
+        <thead>
+          <tr style="text-align:left;color:var(--text2);font-size:11px;text-transform:uppercase;letter-spacing:0.4px">
+            <th style="padding:7px 10px;border-bottom:1px solid var(--border);white-space:nowrap">Czas</th>
+            <th style="padding:7px 10px;border-bottom:1px solid var(--border)">Użytkownik</th>
+            <th style="padding:7px 10px;border-bottom:1px solid var(--border)">Zdarzenie</th>
+            <th style="padding:7px 10px;border-bottom:1px solid var(--border)">Szczegóły</th>
+            <th style="padding:7px 10px;border-bottom:1px solid var(--border);white-space:nowrap">IP</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${shown.map(x => `
+            <tr style="${x.event==="login_failed" ? "background:var(--red-light)" : ""}">
+              <td style="padding:6px 10px;border-bottom:1px solid var(--border);white-space:nowrap;color:var(--text2)">${esc(fmtTs(x.ts))}</td>
+              <td style="padding:6px 10px;border-bottom:1px solid var(--border);font-weight:600">${esc(x.user || "—")}</td>
+              <td style="padding:6px 10px;border-bottom:1px solid var(--border)">${evBadge(x.event)}</td>
+              <td style="padding:6px 10px;border-bottom:1px solid var(--border)">${x.event==="login"||x.event==="login_failed" ? "" : auditPrettyLabel(x.label)}</td>
+              <td style="padding:6px 10px;border-bottom:1px solid var(--border);color:var(--text2);font-size:11.5px">${esc(x.ip || "—")}</td>
+            </tr>`).join("")}
+        </tbody>
+      </table>
+    </div>`}`;
+}
+
 function buildRozliczenia() {
   return `
     <div style="display:flex;flex-direction:column;height:calc(100vh - 94px);min-height:520px">
@@ -7438,11 +7542,17 @@ function attachEvents() {
       if (btn.dataset.tab) {
         state.activeTab = btn.dataset.tab;
         state.statusDetailLocId = null;
+        if (btn.dataset.tab === "audit") loadAudit();   // v3.77 — świeży dziennik przy każdym wejściu
       }
       state.mobileNavOpen = false;  // zamknij drawer przy zmianie zakładki
       render();
     });
   });
+
+  // Dziennik zdarzeń (v3.77)
+  document.getElementById("auditRefreshBtn")?.addEventListener("click", () => { loadAudit(); render(); });
+  document.getElementById("auditFilterUser")?.addEventListener("change", e => { state.auditFilterUser = e.target.value; render(); });
+  document.getElementById("auditFilterType")?.addEventListener("change", e => { state.auditFilterType = e.target.value; render(); });
 
   // Header search — live filter WITHOUT full re-render (patch only loc-grid)
   const si = document.getElementById("searchInput");
@@ -9498,7 +9608,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.76 · ${new Date().getFullYear()}
+          HospesAI · v3.77 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
