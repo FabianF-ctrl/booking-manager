@@ -101,7 +101,7 @@ HTTP=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PORT}/")
 ME=$(curl -s -u "${ADMIN_USER}:${ADMIN_PASS}" "http://127.0.0.1:${PORT}/api/me")
 echo "   / → HTTP ${HTTP} (oczek. 200)"
 echo "   /api/me → ${ME}"
-echo "$ME" | grep -q '"rozliczenia": false' && echo "   ✅ integracja Rozliczeń WYŁĄCZONA (jak ma być)" \
+echo "$ME" | grep -qE '"rozliczenia": ?false' && echo "   ✅ integracja Rozliczeń WYŁĄCZONA (jak ma być)" \
   || echo "   ⚠️ SPRAWDŹ flagę rozliczenia w /api/me!"
 
 # Podpowiedź nginx na później (gdy będzie domena + DNS)
