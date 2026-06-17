@@ -66,8 +66,8 @@ def cmd_add(args):
     if args.username in users:
         print(f"❌ User '{args.username}' już istnieje. Użyj 'passwd' lub 'delete' najpierw.")
         sys.exit(1)
-    if args.role not in ("admin", "manager", "viewer", "worker", "worker_basic"):
-        print(f"❌ Rola: admin | manager | viewer | worker | worker_basic (podałeś: {args.role})")
+    if args.role not in ("admin", "manager", "viewer", "worker", "worker_senior", "worker_basic"):
+        print(f"❌ Rola: admin | manager | viewer | worker | worker_senior | worker_basic (podałeś: {args.role})")
         sys.exit(1)
     users[args.username] = {"hash": hash_password(args.password), "role": args.role}
     save(users)
@@ -87,8 +87,8 @@ def cmd_role(args):
     if args.username not in users:
         print(f"❌ User '{args.username}' nie istnieje.")
         sys.exit(1)
-    if args.role not in ("admin", "manager", "viewer", "worker", "worker_basic"):
-        print(f"❌ Rola: admin | manager | viewer | worker | worker_basic")
+    if args.role not in ("admin", "manager", "viewer", "worker", "worker_senior", "worker_basic"):
+        print(f"❌ Rola: admin | manager | viewer | worker | worker_senior | worker_basic")
         sys.exit(1)
     users[args.username]["role"] = args.role
     save(users)
@@ -115,7 +115,7 @@ def main():
     p_add = sub.add_parser("add", help="Dodaj nowego usera")
     p_add.add_argument("username")
     p_add.add_argument("password")
-    p_add.add_argument("--role", default="worker", choices=["admin", "manager", "viewer", "worker", "worker_basic"])
+    p_add.add_argument("--role", default="worker", choices=["admin", "manager", "viewer", "worker", "worker_senior", "worker_basic"])
     p_add.set_defaults(func=cmd_add)
 
     p_pw = sub.add_parser("passwd", help="Zmień hasło istniejącego usera")
@@ -125,7 +125,7 @@ def main():
 
     p_role = sub.add_parser("role", help="Zmień rolę usera")
     p_role.add_argument("username")
-    p_role.add_argument("role", choices=["admin", "manager", "viewer", "worker", "worker_basic"])
+    p_role.add_argument("role", choices=["admin", "manager", "viewer", "worker", "worker_senior", "worker_basic"])
     p_role.set_defaults(func=cmd_role)
 
     p_del = sub.add_parser("delete", help="Usuń usera")

@@ -112,12 +112,13 @@ def require_admin(user=Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Brak uprawnień — wymagany admin")
     return user
 
-# ── Role (v3.78) ──────────────────────────────────────────────
-# admin        — wszystko (w tym Dziennik)
-# manager      — edytuje wszystko, BEZ dostępu do Dziennika (wiktoria.biuro)
-# viewer       — widzi wszystko (z Dziennikiem), niczego nie zmienia (szef)
-# worker       — noclegi + media/faktury, zmiany max 7 dni wstecz (agata)
-# worker_basic — noclegi bez mediów/faktur (ukryte), zmiany max 7 dni wstecz (ihor)
+# ── Role ──────────────────────────────────────────────
+# admin         — wszystko (w tym Dziennik)
+# manager       — edytuje i kasuje wszystko + Dziennik (wiktoria.biuro; Dziennik od v3.80)
+# viewer        — widzi wszystko (z Dziennikiem), niczego nie zmienia (szef)
+# worker        — noclegi + media/faktury, zmiany max 7 dni wstecz (agata)
+# worker_senior — jak worker, ale BEZ limitu 7 dni (dowolna data wstecz) (julia; v3.82)
+# worker_basic  — noclegi bez mediów/faktur (ukryte), zmiany max 7 dni wstecz (ihor)
 
 EDIT_BACKLIMIT_DAYS = 7
 
