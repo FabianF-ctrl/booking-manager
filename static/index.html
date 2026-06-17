@@ -1535,8 +1535,9 @@ let state = {
   invoiceDateTo: "",
   showAddInvoice: false,
   reportsSearch: "",
-  reportsYear: "",
-  reportsMonth: "",
+  reportsFrom: "",           // v3.81 — zakres miesięcy "RRRR-MM" (od); puste = wszystkie
+  reportsTo: "",             // v3.81 — zakres miesięcy "RRRR-MM" (do)
+  reportsExpanded: {},       // v3.81 — które obiekty rozwinięte (default: wszystkie zwinięte)
   reportsSort: "date_desc",  // v3.20 — sort bookings within groups
 
   // v3.21 — Preview tab (Podgląd)
@@ -3558,6 +3559,40 @@ function buildStatusDetail(locId, from, to) {
 }
 
 // ─── REPORTS TAB ─────────────────────────────────────────────
+// v3.81 — raporty: filtr ZAKRESEM miesięcy (od–do). Puste pola = wszystkie okresy.
+function reportsRangeMonths() {
+  let a = state.reportsFrom || "", b = state.reportsTo || "";
+  if (!a && !b) return null;
+  if (!a) a = b; if (!b) b = a;        // tylko jedno pole → pojedynczy miesiąc
+  if (a > b) { const t = a; a = b; b = t; }   // odwrócony zakres → zamień
+  return { fromM: a, toM: b };
+}
+function reportsPeriodRange() {
+  const r = reportsRangeMonths();
+  if (!r) return null;
+  const [fy, fm] = r.fromM.split("-").map(Number);
+  const [ty, tm] = r.toM.split("-").map(Number);
+  // from = 1. dzień fromM (inclusive); to = 1. dzień miesiąca PO toM (exclusive)
+  return { from: toStr(new Date(fy, fm - 1, 1)), to: toStr(new Date(ty, tm, 1)) };
+}
+function reportsPeriodsList() {
+  const r = reportsRangeMonths();
+  if (!r) return null;
+  const out = [];
+  let [y, m] = r.fromM.split("-").map(Number);
+  const [ty, tm] = r.toM.split("-").map(Number);
+  let guard = 0;
+  while ((y < ty || (y === ty && m <= tm)) && guard++ < 240) {
+    out.push(`${y}-${String(m).padStart(2, "0")}`);
+    if (++m > 12) { m = 1; y++; }
+  }
+  return out;
+}
+function reportsMonthLabel(ym) {
+  const [y, m] = ym.split("-");
+  return `${MONTHS[parseInt(m) - 1]} ${y}`;
+}
+
 function buildReports() {
   // Collect available years from bookings
   const allYears = [...new Set(savedBookings.map(b => b.from?.slice(0,4)).filter(Boolean))].sort().reverse();
@@ -3565,18 +3600,12 @@ function buildReports() {
   const filterBar = `
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:12px 16px;margin-bottom:14px;display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
       <div class="ctrl-group">
-        <label>Rok</label>
-        <select id="reportsYear" style="padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-size:13px;color:var(--text);font-family:inherit;outline:none">
-          <option value="">Wszystkie lata</option>
-          ${allYears.map(y=>`<option value="${y}" ${state.reportsYear===y?"selected":""}>${y}</option>`).join("")}
-        </select>
+        <label>Od miesiąca</label>
+        <input type="month" id="reportsFrom" value="${state.reportsFrom||""}" style="padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-size:13px;color:var(--text);font-family:inherit;outline:none" />
       </div>
       <div class="ctrl-group">
-        <label>Miesiąc</label>
-        <select id="reportsMonth" style="padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-size:13px;color:var(--text);font-family:inherit;outline:none" ${!state.reportsYear?"disabled":""}>
-          <option value="">Wszystkie miesiące</option>
-          ${MONTHS.map((n,i)=>`<option value="${String(i+1).padStart(2,'0')}" ${state.reportsMonth===String(i+1).padStart(2,'0')?"selected":""}>${n}</option>`).join("")}
-        </select>
+        <label>Do miesiąca</label>
+        <input type="month" id="reportsTo" value="${state.reportsTo||""}" min="${state.reportsFrom||""}" style="padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-size:13px;color:var(--text);font-family:inherit;outline:none" />
       </div>
       <div class="search-wrap" style="max-width:240px;flex:1">
         <span class="search-icon">${ICONS.search(13)}</span>
@@ -3593,7 +3622,8 @@ function buildReports() {
           <option value="name_asc"       ${state.reportsSort==="name_asc"?"selected":""}>Klient A→Z</option>
         </select>
       </div>
-      ${(state.reportsYear||state.reportsMonth) ? `<button class="ctrl-search-btn" id="reportsClearFilter" style="background:var(--surface2);color:var(--text2);border:1px solid var(--border)">✕ Wyczyść filtr</button>` : ""}
+      ${(state.reportsFrom||state.reportsTo) ? `<button class="ctrl-search-btn" id="reportsClearFilter" style="background:var(--surface2);color:var(--text2);border:1px solid var(--border)">✕ Wyczyść filtr</button>` : ""}
+      <button class="ctrl-search-btn" id="reportsToggleAll" style="background:var(--surface2);color:var(--text2);border:1px solid var(--border)">${Object.values(state.reportsExpanded).some(Boolean) ? "▲ Zwiń wszystkie" : "▼ Rozwiń wszystkie"}</button>
     </div>`;
 
   // Deduplicate savedBookings by ID (guard against any double-push edge cases)
@@ -3603,22 +3633,9 @@ function buildReports() {
     seenIds.add(b.id); return true;
   });
 
-  // Apply year/month filter
-  const fy = state.reportsYear;
-  const fm = state.reportsMonth;
-
-  // Wyliczenie zakresu okresu raportu (jeśli filtry aktywne)
-  // periodRange.from inclusive, periodRange.to exclusive — w formacie YYYY-MM-DD
-  let periodRange = null;
-  if (fy) {
-    const yr = parseInt(fy);
-    if (fm) {
-      const mn = parseInt(fm) - 1; // JS months 0-based
-      periodRange = { from: toStr(new Date(yr, mn, 1)), to: toStr(new Date(yr, mn + 1, 1)) };
-    } else {
-      periodRange = { from: toStr(new Date(yr, 0, 1)), to: toStr(new Date(yr + 1, 0, 1)) };
-    }
-  }
+  // v3.81 — filtr ZAKRESEM miesięcy (od–do). periodRange.from inclusive, .to exclusive (YYYY-MM-DD)
+  const _rr = reportsRangeMonths();
+  const periodRange = reportsPeriodRange();
 
   // Sprawdza czy rezerwacja jest aktywna w okresie raportu (overlap test dla wszystkich).
   // Rezerwacja zachodzi z okresem jeśli ich zakresy się przecinają — bez względu na typ.
@@ -3658,12 +3675,12 @@ function buildReports() {
 
   const filteredByPeriod = uniqueBookings.filter(bookingMatchesPeriod);
 
-  const periodLabel = fy ? (fm ? `${MONTHS[parseInt(fm)-1]} ${fy}` : `rok ${fy}`) : "wszystkie okresy";
+  const periodLabel = !_rr ? "wszystkie okresy" : (_rr.fromM === _rr.toM ? reportsMonthLabel(_rr.fromM) : `${reportsMonthLabel(_rr.fromM)} – ${reportsMonthLabel(_rr.toM)}`);
 
   if (filteredByPeriod.length===0) return `
     <div class="reports-toolbar"><div class="reports-title" style="display:flex;align-items:center;gap:8px">${ICONS.fileText(22)} Raporty i finanse</div></div>
     ${filterBar}
-    <div class="no-results-box">Brak rezerwacji${fy||fm?` dla okresu: ${periodLabel}`:""}.<br><small>${savedBookings.length===0?"Dodaj pierwszą rezerwację, aby zobaczyć raport.":"Zmień filtr okresu."}</small></div>`;
+    <div class="no-results-box">Brak rezerwacji${_rr?` dla okresu: ${periodLabel}`:""}.<br><small>${savedBookings.length===0?"Dodaj pierwszą rezerwację, aby zobaczyć raport.":"Zmień filtr okresu."}</small></div>`;
 
   // Global totals (for filtered set). v3.54 — Przychód=BRUTTO, Obrót=NETTO, Zysk=Obrót−media(netto).
   let totRevenueBrutto=0, totRevenue=0, totPaid=0, totPaidBrutto=0, totMedia=0;
@@ -3772,6 +3789,9 @@ function buildReports() {
     byCity[loc.city].push({ loc, bookings: locBookings });
   });
 
+  // v3.81 — lista pokazanych obiektów (dla przycisku „Rozwiń/Zwiń wszystkie")
+  state.reportsShownLocs = Object.values(byCity).flat().map(e => String(e.loc.id));
+
   Object.entries(byCity).forEach(([city, locEntries]) => {
     html += `<div class="city-group-hdr">${ICONS.mapPin(11)} ${esc(city)}</div>`;
 
@@ -3800,11 +3820,31 @@ function buildReports() {
       const locRemainingB = Math.max(0, locRevenueB - locPaidB);  // Do pobrania (brutto)
       const _zl = n => `zł${Math.round(n).toLocaleString()}`;
 
+      // v3.81 — domyślnie ZWINIĘTE; klik nagłówka rozwija/zwija (jak w Statusie)
+      const repExpanded = !!state.reportsExpanded[loc.id];
+      if (!repExpanded) {
+        html += `
+          <div class="loc-finance-block rep-collapsed" data-rep-loc-toggle="${loc.id}" style="cursor:pointer">
+            <div class="loc-finance-hdr" style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+              <div>
+                <div class="loc-finance-title">▶ ${locIcon(loc, 16)} ${esc(loc.name)}</div>
+                <div class="loc-finance-sub">${bookings.length} ${nrez(bookings.length)} · kliknij, aby rozwinąć</div>
+              </div>
+              <div style="display:flex;gap:16px;text-align:right;font-variant-numeric:tabular-nums;flex-wrap:wrap">
+                <div><div style="font-size:9px;color:var(--text2);text-transform:uppercase;letter-spacing:.4px">Zysk</div><div style="font-weight:800;font-size:14px;color:${locZysk<0?'var(--red)':'var(--green)'}">${_zl(locZysk)}</div></div>
+                <div><div style="font-size:9px;color:var(--text2);text-transform:uppercase;letter-spacing:.4px">Przychód</div><div style="font-weight:700;font-size:13px;color:var(--blue)">${_zl(locRevenueB)}</div></div>
+                <div><div style="font-size:9px;color:var(--text2);text-transform:uppercase;letter-spacing:.4px">Do pobrania</div><div style="font-weight:700;font-size:13px;color:${locRemainingB>0?'var(--orange)':'var(--green)'}">${_zl(locRemainingB)}</div></div>
+              </div>
+            </div>
+          </div>`;
+        return;
+      }
+
       html += `
         <div class="loc-finance-block">
-          <div class="loc-finance-hdr">
+          <div class="loc-finance-hdr" data-rep-loc-toggle="${loc.id}" style="cursor:pointer">
             <div>
-              <div class="loc-finance-title">${locIcon(loc, 16)} ${esc(loc.name)}</div>
+              <div class="loc-finance-title">▼ ${locIcon(loc, 16)} ${esc(loc.name)}</div>
               <div class="loc-finance-sub">${bookings.length} ${nrez(bookings.length)}</div>
             </div>
           </div>
@@ -4194,11 +4234,9 @@ function buildMediaSectionForLoc(loc) {
   // v3.58 — media/faktury respektują filtr miesiąca/roku z Raportów.
   // Filtr miesiąca → tylko ten miesiąc; filtr roku → miesiące tego roku; brak → wszystkie + bieżący.
   let periods;
-  if (state.reportsYear && state.reportsMonth) {
-    periods = [`${state.reportsYear}-${state.reportsMonth}`];
-  } else if (state.reportsYear) {
-    const yp = allPeriods.filter(p => p.slice(0,4) === state.reportsYear);
-    periods = yp.length ? yp : (allPeriods.includes(cp) ? allPeriods : [cp, ...allPeriods]);
+  const _repPeriods = reportsPeriodsList();   // v3.81 — miesiące w zakresie filtra Raportów (lub null)
+  if (_repPeriods) {
+    periods = _repPeriods;
   } else {
     periods = allPeriods.includes(cp) ? allPeriods : [cp, ...allPeriods];
   }
@@ -8099,16 +8137,27 @@ function attachEvents() {
     const pane = document.getElementById("pane-reports");
     if (pane) { pane.innerHTML = buildReports(); attachReportsEvents(); }
   });
-  document.getElementById("reportsYear")?.addEventListener("change", e => {
-    state.reportsYear = e.target.value;
-    if (!state.reportsYear) state.reportsMonth = "";
-    render();
+  document.getElementById("reportsFrom")?.addEventListener("change", e => {
+    state.reportsFrom = e.target.value; render();
   });
-  document.getElementById("reportsMonth")?.addEventListener("change", e => {
-    state.reportsMonth = e.target.value; render();
+  document.getElementById("reportsTo")?.addEventListener("change", e => {
+    state.reportsTo = e.target.value; render();
   });
   document.getElementById("reportsClearFilter")?.addEventListener("click", () => {
-    state.reportsYear = ""; state.reportsMonth = ""; render();
+    state.reportsFrom = ""; state.reportsTo = ""; render();
+  });
+  // v3.81 — zwijanie obiektów w raportach (default: zwinięte)
+  document.querySelectorAll("[data-rep-loc-toggle]").forEach(el => {
+    el.addEventListener("click", () => {
+      const id = el.dataset.repLocToggle;
+      state.reportsExpanded[id] = !state.reportsExpanded[id];
+      render();
+    });
+  });
+  document.getElementById("reportsToggleAll")?.addEventListener("click", () => {
+    if (Object.values(state.reportsExpanded).some(Boolean)) state.reportsExpanded = {};
+    else (state.reportsShownLocs || []).forEach(id => { state.reportsExpanded[id] = true; });
+    render();
   });
   document.getElementById("reportsSort")?.addEventListener("change", e => {
     state.reportsSort = e.target.value; render();
@@ -9632,7 +9681,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.80 · ${new Date().getFullYear()}
+          HospesAI · v3.81 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
