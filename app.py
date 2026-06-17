@@ -136,8 +136,8 @@ def require_manager_up(user=Depends(get_current_user)):
     return user
 
 def require_audit_access(user=Depends(get_current_user)):
-    """Dziennik zdarzeń: admin + viewer (szef). Manager celowo BEZ dostępu."""
-    if user["role"] not in ("admin", "viewer"):
+    """Dziennik zdarzeń: admin + manager (wiktoria.biuro, od 17.06) + viewer (szef). Tylko worker/worker_basic bez."""
+    if user["role"] not in ("admin", "manager", "viewer"):
         raise HTTPException(status_code=403, detail="Brak uprawnień do dziennika zdarzeń")
     return user
 

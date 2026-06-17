@@ -2657,7 +2657,7 @@ function buildSidebar() {
     { id:"settings",  icon: ICONS.settings(), lbl:"Ustawienia" },
   ].filter(t => {
     const role = API_CREDS?.role;
-    if (t.id === "audit") return role === "admin" || role === "viewer";   // v3.78 — dziennik: admin + szef (manager celowo nie)
+    if (t.id === "audit") return role === "admin" || role === "manager" || role === "viewer";   // v3.78 — dziennik: admin + manager (od v3.80) + szef
     if (t.id === "invoices" && role === "worker_basic") return false;     // v3.78 — ihor: faktury ukryte
     if (t.id === "rozliczenia") return !!API_CREDS?.features?.rozliczenia; // v3.79 — integracja tylko na instancji ABI (feature-flag z /api/me)
     return true;
@@ -4323,7 +4323,7 @@ function loadAudit() {
     .catch(e => { state.auditEntries = { error: String(e) }; if (state.activeTab === "audit") render(); });
 }
 function buildAudit() {
-  if (API_CREDS?.role !== "admin" && API_CREDS?.role !== "viewer") return `<div style="padding:40px;text-align:center;color:var(--text2)">Brak uprawnień do dziennika zdarzeń.</div>`;
+  if (!["admin","manager","viewer"].includes(API_CREDS?.role)) return `<div style="padding:40px;text-align:center;color:var(--text2)">Brak uprawnień do dziennika zdarzeń.</div>`;
   const head = `
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap">
       <div>
@@ -6474,7 +6474,7 @@ function buildBookingForm(loc) {
           </label>
           <label class="checkbox-row" style="margin:0;cursor:pointer">
             <input type="checkbox" id="vat23" ${vRate==="23"?"checked":""} data-vat="23" />
-            <strong>23% VAT</strong> (najem długoterminowy / inne usługi)
+            <strong>23% VAT</strong> (Wynajem powierzchni)
           </label>
         </div>
         ${total > 0 ? `<div style="font-size:12px;color:var(--text2);font-variant-numeric:tabular-nums;padding-top:6px;border-top:1px dashed var(--blue-mid)">
@@ -9632,7 +9632,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.79 · ${new Date().getFullYear()}
+          HospesAI · v3.80 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>

@@ -44,8 +44,13 @@ def extract_real_names():
     pairs = re.findall(r'name:\s*"([^"]+)",\s*city:\s*"([^"]+)"', text)
     names = set()
     for name, city in pairs:
-        names.add(name)
-        names.add(city)
+        # Próg >=4 znaki: pomija placeholdery/słowa generyczne (np. 3-literowe), które
+        # łapałyby masę false-positives (krótkie słowo trafia w kod) a nic nie ujawniają.
+        # Spójne z progiem w tools/check_leak.py.
+        if len(name) >= 4:
+            names.add(name)
+        if len(city) >= 4:
+            names.add(city)
     return names
 
 
