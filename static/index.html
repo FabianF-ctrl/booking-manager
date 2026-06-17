@@ -4184,8 +4184,11 @@ function buildReportRow(b, loc, periodRange) {
           <div class="report-sub">${timLabels[b.payment?.timing]||"—"}</div>
         </div>
         <div>
-          <div class="report-amount">zł${total.toLocaleString()}</div>
+          <div class="report-amount" title="Przychód brutto (czynsz za okres) — NIE maleje po wpłacie">zł${total.toLocaleString()}</div>
           <div style="font-size:10px;color:var(--text2);font-variant-numeric:tabular-nums;margin-top:1px" title="Kwota netto (Przychód brutto ÷ VAT)">netto zł${Math.round(total * bookingNettoFactor(b)).toLocaleString()}</div>
+          ${total > 0.5 ? (remaining > 0.5
+            ? `<div style="font-size:11px;font-weight:700;color:var(--orange);font-variant-numeric:tabular-nums;margin-top:3px" title="Należność po uwzględnieniu wpłat. Maleje po odhaczeniu/wpłaceniu miesiąca.">Do pobrania: zł${Math.round(remaining).toLocaleString()}</div>`
+            : `<div style="font-size:11px;font-weight:700;color:var(--green);font-variant-numeric:tabular-nums;margin-top:3px">Opłacone w całości</div>`) : ""}
           <div class="action-row" style="margin-top:4px">
             <button class="act-btn" data-edit="${b.id}">Edytuj</button>
           </div>
@@ -9688,7 +9691,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.83 · ${new Date().getFullYear()}
+          HospesAI · v3.84 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
