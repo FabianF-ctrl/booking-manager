@@ -283,7 +283,8 @@ def get_bookings(user=Depends(get_current_user)):
 def create_booking(booking: dict, user=Depends(get_current_user)):
     """Dodaje nową rezerwację."""
     _require_edit(user)
-    if user["role"] in ("worker", "worker_basic") and (booking.get("from") or "") < _backdate_limit_iso():
+    # v3.89 — stały najemca jest wyjęty spod limitu 7 dni (legalne wsteczne ustalenie daty "od kiedy" mieszka).
+    if user["role"] in ("worker", "worker_basic") and not booking.get("isPermanent") and (booking.get("from") or "") < _backdate_limit_iso():
         raise HTTPException(status_code=403, detail=f"Pracownik nie może dodawać rezerwacji starszych niż {EDIT_BACKLIMIT_DAYS} dni wstecz")
     bookings = load_bookings()
     if not booking.get("id"):
@@ -308,7 +309,9 @@ def update_booking(booking_id: str, updated: dict, user=Depends(get_current_user
 
     _require_edit(user)
     # v3.78 — pracownicy: zmiany max 7 dni wstecz (zastępuje stary limit miesięczny)
-    if user["role"] in ("worker", "worker_basic"):
+    # v3.89 — stały najemca wyjęty spod limitu 7 dni (wsteczne ustalenie/edycja daty "od kiedy").
+    is_permanent_booking = bool(booking.get("isPermanent")) or bool(updated.get("isPermanent"))
+    if user["role"] in ("worker", "worker_basic") and not is_permanent_booking:
         if booking.get("from", "") < _backdate_limit_iso() or (updated.get("from") or "9999") < _backdate_limit_iso():
             raise HTTPException(
                 status_code=403,

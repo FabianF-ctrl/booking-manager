@@ -1553,7 +1553,8 @@ let state = {
   vatRate: "8",           // v3.37: stawka VAT — "8" (krótkoterm) lub "23" (długoterm)
   isPermanent: false,     // stały najemca (rezerwacja indywidualna open-ended)
   permanentMonthlyRate: "", // stawka miesięczna stałego najemcy (pusty = liczyć za dobę z cennika)
-  wholeRoom: false,       // v3.86 — 1 najemca bierze cały pokój (blokuje wszystkie łóżka)
+  wholeRoom: false,       // v3.86 — (legacy) flaga "cały pokój"; nowy model używa bedsTaken
+  bedsTaken: null,        // v3.89 — które łóżka bierze najemca (tablica indeksów 1..N); null = auto = liczba gości
   printReport: null,      // { from, to } — gdy ustawione, render pokazuje modal wyboru zakresu
   printReportHtml: null,  // gdy ustawione, render pokazuje gotowy raport do druku (window.print())
   imageCropModal: null,   // { locId, dataUrl, file } — preview zdjęcia przed uploadem (admin only)
@@ -4128,6 +4129,12 @@ function buildReportRow(b, loc, periodRange) {
     : b.guests.map(g=>g.name).filter(Boolean).join(", ");
   // "Pokój X" prefiks gdy nazwa jest czystą liczbą; inaczej zostaw oryginalną nazwę
   const roomLabel = room ? (/^\d+$/.test(room.name||"") ? `Pokój ${room.name}` : room.name) : "—";
+  // v3.89 — które łóżka zajmuje ten najemca (gdy jawnie wybrane lub >1 łóżko / cały pokój)
+  const _bedsArr = (Array.isArray(b.bedsTaken) && b.bedsTaken.length > 0) ? b.bedsTaken : null;
+  const _bedCount = bedsUsedByBooking(b);
+  const bedInfo = (b.bookingType !== "company" && (_bedsArr || b.wholeRoom || _bedCount > 1))
+    ? ` · ${_bedsArr ? `łóżka ${_bedsArr.join(", ")}` : (b.wholeRoom ? `cały pokój (${_bedCount} ${nl(_bedCount)})` : `${_bedCount} ${nl(_bedCount)}`)}`
+    : "";
 
   // Permanent tenant rate info — pokazujemy w sub-tekście pod datami
   const permMonthlyBooking = b.isPermanent ? parseFloat(b.permanentMonthlyRate) : NaN;
@@ -4173,7 +4180,7 @@ function buildReportRow(b, loc, periodRange) {
     <div>
       <div class="report-row">
         <div>
-          <div style="font-size:11px;font-weight:700;color:var(--orange);letter-spacing:0.3px;margin-bottom:2px">${esc(roomLabel)}</div>
+          <div style="font-size:11px;font-weight:700;color:var(--orange);letter-spacing:0.3px;margin-bottom:2px">${esc(roomLabel)}<span style="font-weight:500;color:var(--text3)">${bedInfo}</span></div>
           <div class="report-guest">${esc(who||"—")}${isExtended?'<span class="ext-badge">Przedłużony</span>':''}${permStatusBadge}${postpaidBadge}</div>
         </div>
         <div>
@@ -6352,14 +6359,18 @@ function buildBookingForm(loc) {
       <div class="buffer-hint" id="bufferHint">Pokój zablokowany przez dodatkowe ${state.bufferDays||0} dni po wyjeździe.</div>
     </div>
 
-    ${!isCompany && room ? `
-    <div style="margin-bottom:14px;padding:10px 12px;background:${state.wholeRoom?"var(--blue-light)":"var(--surface2)"};border:1px solid ${state.wholeRoom?"var(--blue-mid)":"var(--border)"};border-radius:var(--radius)">
-      <label class="checkbox-row" style="margin:0;cursor:pointer">
-        <input type="checkbox" id="wholeRoomInput" ${state.wholeRoom?"checked":""} />
-        <span style="display:inline-flex;align-items:center;gap:5px;vertical-align:-2px">${ICONS.bed(14)}</span> Wynajem całego pokoju — 1 najemca bierze wszystkie łóżka (${room.capacity} ${nl(room.capacity)})
-      </label>
-      ${state.wholeRoom ? `<div style="font-size:10px;color:var(--blue);font-style:italic;margin-top:6px">Pokój zablokowany w całości (wszystkie ${room.capacity} łóżka zajęte), nawet przy mniejszej liczbie gości. Cena = bazowa za pokój (lub „cena finalna" niżej). Nie trzeba dodawać gości na każde łóżko.</div>` : ""}
-    </div>` : ""}
+    ${!isCompany && room ? (() => {
+      const _cap = Math.max(1, room.capacity || 1);
+      const _gc = Math.max(1, state.guests.filter(g => (g.name||"").trim()).length || 1);
+      const _sel = (Array.isArray(state.bedsTaken) && state.bedsTaken.length > 0) ? state.bedsTaken : Array.from({length: Math.min(_cap, _gc)}, (_,i)=>i+1);
+      return `
+    <div style="margin-bottom:14px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius)">
+      <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:6px">${ICONS.bed(14)} Które łóżka bierze ten najemca <span style="font-weight:400;color:var(--text3);font-size:11px">(${_sel.length}/${_cap} ${nl(_cap)})</span></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        ${Array.from({length:_cap}, (_,i)=>i+1).map(n => `<button type="button" class="bed-tile-btn" data-bed-tile="${n}" style="padding:8px 12px;border:1px solid ${_sel.includes(n)?"var(--blue)":"var(--border)"};border-radius:var(--radius);background:${_sel.includes(n)?"var(--blue)":"var(--surface)"};color:${_sel.includes(n)?"#fff":"var(--text2)"};cursor:pointer;font-family:inherit;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:4px">${ICONS.bed(12)} ${n}</button>`).join("")}
+      </div>
+      <div style="font-size:10px;color:var(--text3);margin-top:6px">Domyślnie = liczba gości. Odhacz więcej, jeśli 1 najemca bierze kilka łóżek (jeden czynsz). Wszystkie odhaczone = cały pokój.</div>
+    </div>`; })() : ""}
 
     ${!isCompany ? `
     <div style="margin-bottom:14px;padding:10px 12px;background:${state.isPermanent?"var(--green-light)":"var(--surface2)"};border:1px solid ${state.isPermanent?"var(--green-mid)":"var(--border)"};border-radius:var(--radius)">
@@ -6952,7 +6963,7 @@ function buildEditModal() {
                 const now = new Date();
                 const currentYm = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
                 // Pro-rata context — używamy edytowanych dat (em.permanentEnd etc.)
-                const previewPStart = b.permanentStart || em.from || b.from;
+                const previewPStart = (em.permanentStart !== undefined ? em.permanentStart : b.permanentStart) || em.from || b.from;
                 const previewPEndRaw = (em.permanentEnd !== undefined ? em.permanentEnd : b.permanentEnd);
                 const isOpenEnded = !previewPEndRaw;  // najemca "do odwołania"
                 // v3.51 — miesiące do POKAZANIA w gridzie: od startu najmu do horyzontu.
@@ -7093,6 +7104,11 @@ function buildEditModal() {
                 return `
                 <div class="divider"></div>
                 <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;display:flex;align-items:center;gap:6px">${ICONS.house(13)} Wpłaty miesięczne (stały najemca)</div>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius)">
+                  <label style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap">Stały najemca od:</label>
+                  <input type="date" id="editPermStart" value="${esc((previewPStart||'').slice(0,10))}" style="padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:12px;color:var(--text);font-variant-numeric:tabular-nums;outline:none" />
+                  <span style="font-size:10px;color:var(--text3)">Możesz cofnąć wstecz (np. najemca od lutego) — miesiące poniżej i raport finansowy zaktualizują się same.</span>
+                </div>
                 <div style="padding:10px 12px;background:var(--green-light);border:1px solid var(--green-mid);border-radius:var(--radius);color:var(--text);font-size:12px;margin-bottom:10px;display:flex;gap:8px;align-items:flex-start">
                   <span style="flex-shrink:0;color:var(--green);margin-top:1px">${ICONS.house(13)}</span>
                   <div>Stała stawka: <strong>${rateDesc}</strong>${overdue.length>0?` · <span style="color:var(--red);font-weight:700">${overdue.length} zaległych miesięcy</span>`:""} · <span style="color:var(--text3)">odhacz miesiąc gdy najemca zapłaci (też z góry, na przyszłość)</span></div>
@@ -7377,15 +7393,19 @@ function buildEditModal() {
           })()}
 
           ${b.bookingType !== "company" ? (() => {
-            const wr = em.wholeRoom ?? b.wholeRoom;
-            const cap = getRoomCapacity(b.roomId);
+            const cap = Math.max(1, getRoomCapacity(b.roomId) || 1);
+            // efektywna selekcja łóżek: em.bedsTaken → b.bedsTaken → (legacy wholeRoom = wszystkie) → b.bedsUsed/goście
+            const sel = Array.isArray(em.bedsTaken) ? em.bedsTaken
+              : (Array.isArray(b.bedsTaken) ? b.bedsTaken
+                : ((em.wholeRoom ?? b.wholeRoom) ? Array.from({length:cap}, (_,i)=>i+1)
+                  : Array.from({length: Math.max(1, Math.min(cap, b.bedsUsed || (b.guests||[]).length || 1))}, (_,i)=>i+1)));
             return `
-          <div class="edit-field" style="padding:10px 12px;background:${wr?"var(--blue-light)":"var(--surface2)"};border:1px solid ${wr?"var(--blue-mid)":"var(--border)"};border-radius:var(--radius)">
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;font-size:13px;font-weight:500;letter-spacing:normal;color:var(--text)">
-              <input type="checkbox" id="editWholeRoom" ${wr?"checked":""} style="width:auto;flex-shrink:0;margin:0;accent-color:var(--blue)" />
-              <span style="display:inline-flex;align-items:center;gap:5px">${ICONS.bed(14)} Wynajem całego pokoju (wszystkie ${cap} ${nl(cap)})</span>
-            </label>
-            ${wr ? `<div style="font-size:10px;color:var(--blue);font-style:italic;margin-top:6px">Pokój zablokowany w całości — wszystkie ${cap} łóżka zajęte, niezależnie od liczby gości.</div>` : ""}
+          <div class="edit-field" style="padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius)">
+            <label style="text-transform:none;font-size:12px;font-weight:600;letter-spacing:normal;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px">${ICONS.bed(14)} Które łóżka bierze <span style="font-weight:400;color:var(--text3)">(${sel.length}/${cap} ${nl(cap)})</span></label>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              ${Array.from({length:cap}, (_,i)=>i+1).map(n => `<button type="button" class="edit-bed-tile" data-edit-bed="${n}" style="padding:7px 11px;border:1px solid ${sel.includes(n)?"var(--blue)":"var(--border)"};border-radius:var(--radius);background:${sel.includes(n)?"var(--blue)":"var(--surface)"};color:${sel.includes(n)?"#fff":"var(--text2)"};cursor:pointer;font-family:inherit;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:4px">${ICONS.bed(12)} ${n}</button>`).join("")}
+            </div>
+            <div style="font-size:10px;color:var(--text3);margin-top:6px">Odhacz łóżka zajmowane przez tego najemcę (1 najemca może brać kilka — jeden czynsz). Wszystkie = cały pokój.</div>
           </div>`;
           })() : ""}
 
@@ -8652,8 +8672,24 @@ function attachEvents() {
       state.permanentMonthlyRate = e.target.value;
     });
     document.getElementById("permanentMonthlyRateInput")?.addEventListener("change", () => render());
-    document.getElementById("wholeRoomInput")?.addEventListener("change", e => {   // v3.86 — cały pokój
-      state.wholeRoom = e.target.checked; render();
+    document.querySelectorAll(".bed-tile-btn[data-bed-tile]").forEach(btn => {   // v3.89 — które łóżka
+      btn.addEventListener("click", () => {
+        const n = parseInt(btn.dataset.bedTile);
+        const _room = (DATA.locations.find(l => l.id === state.modal)?.rooms || []).find(r => r.id === state.selectedRoom);
+        const cap = Math.max(1, (_room?.capacity) || 1);
+        const gc = Math.max(1, state.guests.filter(g => (g.name||"").trim()).length || 1);
+        let sel = (Array.isArray(state.bedsTaken) && state.bedsTaken.length > 0) ? [...state.bedsTaken] : Array.from({length: Math.min(cap, gc)}, (_,i)=>i+1);
+        if (sel.includes(n)) sel = sel.filter(x => x !== n);
+        else {
+          const free = getFreeBeds(state.selectedRoom, state.calStart, state.calEnd);
+          if (sel.length >= free) { showToast(`Tylko ${free} wolnych ${nl(free)} w tym terminie`); return; }
+          sel.push(n);
+        }
+        sel = [...new Set(sel)].filter(x => x >= 1 && x <= cap).sort((a,b) => a - b);
+        if (sel.length === 0) sel = [n];
+        state.bedsTaken = sel;
+        render();
+      });
     });
 
     // Per-pracownik tryb rozliczenia
@@ -8828,11 +8864,39 @@ function attachEditEvents() {
     }
     render();
   });
-  document.getElementById("editWholeRoom")?.addEventListener("change", e => {   // v3.86 — cały pokój
-    state.editModal.wholeRoom = e.target.checked; render();
+  document.querySelectorAll(".edit-bed-tile[data-edit-bed]").forEach(btn => {   // v3.89 — które łóżka
+    btn.addEventListener("click", () => {
+      const n = parseInt(btn.dataset.editBed);
+      const em = state.editModal;
+      const b = savedBookings.find(x => x.id === em.bookingId);
+      if (!b) return;
+      const cap = Math.max(1, getRoomCapacity(b.roomId) || 1);
+      let sel = Array.isArray(em.bedsTaken) ? [...em.bedsTaken]
+        : (Array.isArray(b.bedsTaken) ? [...b.bedsTaken]
+          : ((em.wholeRoom ?? b.wholeRoom) ? Array.from({length:cap}, (_,i)=>i+1)
+            : Array.from({length: Math.max(1, Math.min(cap, b.bedsUsed || (b.guests||[]).length || 1))}, (_,i)=>i+1)));
+      if (sel.includes(n)) sel = sel.filter(x => x !== n);
+      else {
+        const free = getFreeBeds(b.roomId, em.from || b.from, em.to || b.to, em.bookingId);
+        if (sel.length >= free) { showToast(`Tylko ${free} wolnych ${nl(free)} w tym terminie`); return; }
+        sel.push(n);
+      }
+      sel = [...new Set(sel)].filter(x => x >= 1 && x <= cap).sort((a,b) => a - b);
+      if (sel.length === 0) sel = [n];
+      em.bedsTaken = sel;
+      delete em.wholeRoom;   // bedsTaken zastępuje legacy wholeRoom
+      render();
+    });
   });
   document.getElementById("editPermanentEnd")?.addEventListener("change", e => {
     state.editModal.permanentEnd = e.target.value || null;
+  });
+  document.getElementById("editPermStart")?.addEventListener("change", e => {   // v3.89 — edytowalna data startu stałego najemcy (cofanie wstecz)
+    const v = e.target.value;
+    if (!v) return;
+    state.editModal.permanentStart = v;
+    state.editModal.from = v;   // sync — permanent liczy się od startu; dostępność/walidacja spójna
+    render();
   });
   document.getElementById("editPermanentMonthlyRate")?.addEventListener("input", e => {
     state.editModal.permanentMonthlyRate = e.target.value;
@@ -9122,7 +9186,7 @@ function openModal(locId) {
   state.vatRate = "8";
   state.isPermanent = false;
   state.permanentMonthlyRate = "";
-  state.wholeRoom = false;
+  state.wholeRoom = false; state.bedsTaken = null;
   state.calEndWasPlaceholder = false;
   render();
 }
@@ -9142,7 +9206,7 @@ function closeModal() {
   state.availResult = null;
   state.isPermanent = false;
   state.permanentMonthlyRate = "";
-  state.wholeRoom = false;
+  state.wholeRoom = false; state.bedsTaken = null;
   state.calEndWasPlaceholder = false;
   state.bookingType = null;
   state.companyName = "";
@@ -9233,7 +9297,7 @@ function confirmBooking() {
         ? assigned
         : Math.max(1, Math.ceil(guestsCopy.length / Math.max(1, selectedRooms.length)));
     } else {
-      bedsUsed = state.wholeRoom ? Math.max(1, getRoomCapacity(roomId)) : Math.max(1, guestsCopy.length);   // v3.86 — cały pokój
+      bedsUsed = (Array.isArray(state.bedsTaken) && state.bedsTaken.length > 0) ? state.bedsTaken.length : Math.max(1, guestsCopy.length);   // v3.89 — które łóżka
     }
     const inRoomGuests = isCompany ? guestsCopy.filter(g => g.assignedRoom === roomId) : guestsCopy;
     const billingMode = (isCompany && inRoomGuests.length > 0 && inRoomGuests.every(g => g.billingMode === "employee"))
@@ -9254,7 +9318,7 @@ function confirmBooking() {
       bedsUsed,
       billingMode,
       ...(isPerm ? { isPermanent: true, permanentStart: state.calStart, permanentEnd: null } : {}),
-      ...(state.wholeRoom && !isCompany ? { wholeRoom: true } : {}),
+      ...(!isCompany && Array.isArray(state.bedsTaken) && state.bedsTaken.length > 0 ? { bedsTaken: [...state.bedsTaken] } : {}),   // v3.89 — które łóżka
       ...(hasPermMonthly ? { permanentMonthlyRate: permanentMonthly } : {}),
       ...(hasCustom ? { customPrice: customPriceForRoom(roomId) } : {}),
       vatRate: state.vatRate || "8",   // v3.37 — stawka VAT (8/23%)
@@ -9757,7 +9821,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.88 · ${new Date().getFullYear()}
+          HospesAI · v3.89 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
@@ -9854,7 +9918,7 @@ async function confirmBookingAPI() {
         ? assigned
         : Math.max(1, Math.ceil(guestsCopy.length / Math.max(1, selectedRooms.length)));
     } else {
-      bedsUsed = state.wholeRoom ? Math.max(1, getRoomCapacity(roomId)) : Math.max(1, guestsCopy.length);   // v3.86 — cały pokój
+      bedsUsed = (Array.isArray(state.bedsTaken) && state.bedsTaken.length > 0) ? state.bedsTaken.length : Math.max(1, guestsCopy.length);   // v3.89 — które łóżka
     }
     const inRoomGuests = isCompany ? guestsCopy.filter(g => g.assignedRoom === roomId) : guestsCopy;
     const billingMode = (isCompany && inRoomGuests.length > 0 && inRoomGuests.every(g => g.billingMode === "employee"))
@@ -9872,7 +9936,7 @@ async function confirmBookingAPI() {
       bedsUsed,
       billingMode,
       ...(isPerm ? { isPermanent: true, permanentStart: state.calStart, permanentEnd: null } : {}),
-      ...(state.wholeRoom && !isCompany ? { wholeRoom: true } : {}),
+      ...(!isCompany && Array.isArray(state.bedsTaken) && state.bedsTaken.length > 0 ? { bedsTaken: [...state.bedsTaken] } : {}),   // v3.89 — które łóżka
       ...(hasPermMonthly ? { permanentMonthlyRate: permanentMonthly } : {}),
       ...(hasCustom ? { customPrice: customPriceForRoom(roomId) } : {}),
       vatRate: state.vatRate || "8",   // v3.37 — stawka VAT
@@ -9978,10 +10042,16 @@ async function saveEditAPI() {
     if (!isNaN(n) && n >= 0) updated.customPrice = n;
     else delete updated.customPrice;
   }
-  if (em.wholeRoom !== undefined) {   // v3.86 — cały pokój
+  if (em.bedsTaken !== undefined && Array.isArray(em.bedsTaken) && em.bedsTaken.length > 0) {   // v3.89 — które łóżka
+    updated.bedsTaken = [...em.bedsTaken];
+    updated.bedsUsed = em.bedsTaken.length;
+    delete updated.wholeRoom;   // bedsTaken zastępuje legacy "cały pokój"
+  } else if (em.wholeRoom !== undefined) {   // v3.86 — legacy backward compat
     if (em.wholeRoom) { updated.wholeRoom = true; updated.bedsUsed = Math.max(1, getRoomCapacity(updated.roomId)); }
     else { delete updated.wholeRoom; updated.bedsUsed = Math.max(1, (updated.guests||[]).length); }
   }
+  // v3.89 — edytowalna data startu stałego najemcy (cofanie wstecz). updated.from już = em.from (zsynchronizowane w handlerze).
+  if (em.permanentStart !== undefined && updated.isPermanent) updated.permanentStart = em.permanentStart;
   if (em.vatRate !== undefined) updated.vatRate = em.vatRate;  // v3.37 VAT
   // PaidMonths dla stałego najemcy indywidualnego
   if (em.paidMonths !== undefined) {
