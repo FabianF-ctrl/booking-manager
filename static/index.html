@@ -1997,7 +1997,14 @@ function calcBookingTotal(b, room, nights, periodRange) {
   // v3.56 — okresy rozliczeniowe zastępują liczenie z nocy/dat (gdy zdefiniowane). Zwraca BRUTTO.
   if (bookingHasBillingPeriods(b)) return bookingBillingRevenueBrutto(b, rFrom, rTo);
 
-  if (typeof b?.customPrice === "number" && b.customPrice >= 0) {
+  // v3.85 — stały najemca: STAWKA MIESIĘCZNA ma pierwszeństwo przed "ceną finalną"
+  // (customPrice). Wcześniej customPrice nadpisywał stawkę miesięczną (np. zostawiony
+  // 0 → najemca za 0 zł, albo wpisanie kwoty w złe pole). customPrice nadal działa
+  // dla stałych najemców BEZ stawki miesięcznej (stare bloki remont/budowa = 0 zł).
+  const _indivPerm = b?.isPermanent && b?.bookingType !== "company";
+  const _permMonthly = _indivPerm ? parseFloat(b.permanentMonthlyRate) : NaN;
+  const _skipCustomForPerm = !isNaN(_permMonthly) && _permMonthly > 0;
+  if (!_skipCustomForPerm && typeof b?.customPrice === "number" && b.customPrice >= 0) {
     // Pro-rate customPrice do okresu (jeśli podany) dla rezerwacji nie-stałych
     if (rFrom && rTo && !b.isPermanent && b.from && b.to) {
       const totalN = diffDays(b.from, b.to);
@@ -6303,7 +6310,7 @@ function buildBookingForm(loc) {
       <div class="price-val">zł${total.toLocaleString()}</div>
     </div>
 
-    <div class="buffer-field">
+    <div class="buffer-field" style="${state.isPermanent ? 'display:none' : ''}">
       <label>Nadpisz cenę finalną (opcjonalne)</label>
       ${isMultiCompany ? `
         <div style="display:flex;gap:6px;margin-bottom:8px">
@@ -6334,7 +6341,7 @@ function buildBookingForm(loc) {
         <div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--green-mid);display:flex;flex-direction:column;gap:6px">
           <label style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.3px">Tryb rozliczenia stałego najemcy</label>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-            <label style="font-size:12px;color:var(--text);white-space:nowrap">Cena miesięczna (zł):</label>
+            <label style="font-size:12px;color:var(--text);white-space:nowrap">Stawka miesięczna najemcy (zł):</label>
             <input type="number" id="permanentMonthlyRateInput" min="0" step="0.01"
               value="${esc(state.permanentMonthlyRate)}"
               placeholder="np. 2500"
@@ -7313,7 +7320,7 @@ function buildEditModal() {
           </div>`;
           })() : ""}
 
-          <div class="edit-field">
+          <div class="edit-field" style="${(em.isPermanent ?? b.isPermanent) ? 'display:none' : ''}">
             <label>Cena finalna (zł) — nadpisanie, pusty = z cennika</label>
             <input type="number" id="editCustomPrice" min="0" step="0.01"
               value="${em.customPrice !== undefined ? esc(em.customPrice) : (b.customPrice != null ? b.customPrice : "")}"
@@ -7360,7 +7367,7 @@ function buildEditModal() {
                 ${(em.permanentEnd ?? b.permanentEnd) ? `Naliczamy do ${fmtDate(em.permanentEnd ?? b.permanentEnd)}.` : "Aktywny — dolicza do końca bieżącego miesiąca. Wpisz datę żeby zakończyć."}
               </div>
               <div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--green-mid)">
-                <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:4px">Cena miesięczna (zł) — opcjonalne</label>
+                <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:4px">Stawka miesięczna najemcy (zł)</label>
                 <input type="number" id="editPermanentMonthlyRate" min="0" step="0.01"
                   value="${esc(currentMonthly)}"
                   placeholder="np. 2500 — pusto: liczyć za dobę z cennika"
@@ -8595,6 +8602,7 @@ function attachEvents() {
       }
       state.isPermanent = e.target.checked;
       if (!e.target.checked) state.permanentMonthlyRate = "";
+      else state.customPrice = "";   // v3.85 — stały najemca nie używa "ceny finalnej" (myliło się ze stawką mies.)
       render();
     });
     document.getElementById("permanentMonthlyRateInput")?.addEventListener("input", e => {
@@ -8769,6 +8777,8 @@ function attachEditEvents() {
     if (!e.target.checked) {
       state.editModal.permanentEnd = null;
       state.editModal.permanentMonthlyRate = "";
+    } else {
+      state.editModal.customPrice = "";   // v3.85 — stały najemca nie używa "ceny finalnej"
     }
     render();
   });
@@ -9691,7 +9701,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.84 · ${new Date().getFullYear()}
+          HospesAI · v3.85 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
