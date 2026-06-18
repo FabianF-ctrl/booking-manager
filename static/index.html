@@ -5700,6 +5700,7 @@ function buildHelp() {
           <li>Przy nowej rezerwacji widzisz liczbę wolnych łóżek (<em>X / Y wolnych</em>) i lista zajmujących</li>
           <li>System nie pozwoli zarezerwować więcej łóżek niż jest wolnych w danym terminie</li>
           <li>W formularzu multi-room firmowym dropdown pokoju pokazuje obłożenie i wyłącza pełne pokoje</li>
+          <li><strong>Wynajem całego pokoju</strong> — gdy 1 najemca bierze cały pokój, zaznacz checkbox <strong>"Wynajem całego pokoju"</strong> w formularzu. System zablokuje wszystkie łóżka na ten pobyt — nie trzeba dodawać fikcyjnych gości "na zapas".</li>
         </ul>
       `)}
       ${section(ICONS.user(16), "Rozliczenia firmowe \"za osobę\"", `
@@ -5720,6 +5721,7 @@ function buildHelp() {
       `)}
       ${section(ICONS.fileText(16), "Czytanie raportów", `
         <ul style="margin:0;padding-left:20px">
+          <li><strong>Zakres miesięcy (od–do)</strong> — u góry wybierasz okres: pojedynczy miesiąc albo przedział kilku miesięcy. Obiekty na liście są zwijane (klik w nagłówek obiektu).</li>
           <li><strong>Zysk netto</strong> (hero KPI) — przychód minus koszty (media + sprzątanie)</li>
           <li><strong>Δ MoM</strong> — zmiana miesiąc-do-miesiąca w procentach</li>
           <li><strong>Obłożenie</strong> — średni procent zajętych łóżkonocy w okresie</li>
@@ -5737,7 +5739,7 @@ function buildHelp() {
             <li><strong>Indywidualna per-gość</strong> (gdy choć jeden gość ma <em>Cena/osoba/doba</em> wypełnione w karcie gościa): każdy gość liczony osobno = <code>Σ (rate_gościa × nocy)</code>. <strong>Brak fallbacku</strong> — goście z pustą stawką liczą się jako <code>0 zł</code>. Wymusza explicit wpisanie wszystkich stawek (no hidden math). UI zaznacza puste pola na czerwono gdy tryb per-gość aktywny.</li>
             <li><strong>Firmowa (per pracownik)</strong>: <code>pricePerEmployee × liczba_pracowników_w_pokoju × nocy</code> (z możliwością nadpisania per osoba)</li>
             <li><strong>Stały najemca (monthly rate)</strong>: <code>monthlyRate × miesiące_aktywności</code>. Pełny miesiąc = pełna stawka. Niepełny (start lub koniec w środku) = <code>monthlyRate × dni_w_tym_miesiącu / dni_w_miesiącu</code>, <strong>zaokrąglone do groszy</strong>. Bieżący miesiąc aktywnego najemcy = zawsze pełny (rent płaci się za cały miesiąc).</li>
-            <li><strong>Custom price (nadpisana cena)</strong>: stała kwota, ignoruje powyższe formuły. Dla nie-stałych pro-rata do okresu filtru (cena × clipped_nights / total_nights).</li>
+            <li><strong>Custom price (nadpisana cena)</strong>: stała kwota, ignoruje powyższe formuły. Dla nie-stałych pro-rata do okresu filtru (cena × clipped_nights / total_nights). <strong>Uwaga:</strong> u stałego najemcy <strong>stawka miesięczna ma pierwszeństwo</strong> — gdy jest ustawiona, pole "cena finalna" jest ukryte i nie wpływa na rozliczenie.</li>
           </ul>
         </div>
 
@@ -5793,12 +5795,27 @@ function buildHelp() {
       `)}
       ${section(ICONS.settings(16), "Hasła i użytkownicy", `
         <p>Zarządzanie z linii komend (na serwerze lub lokalnie):</p>
-        <pre style="background:var(--surface);padding:8px 10px;border-radius:6px;font-variant-numeric:tabular-nums;font-size:11px;margin:8px 0;overflow-x:auto"><code>./users list                                  # lista
-./users add nowy "haslo" --role worker        # dodaj
-./users passwd admin "nowe-haslo"             # zmiana hasła
-./users role nowy admin                        # promocja
-./users delete user2                           # usuń</code></pre>
-        <p>Role: <strong>admin</strong> (pełny dostęp) lub <strong>worker</strong> (rezerwacje + edycja, bez kasowania).</p>
+        <pre style="background:var(--surface);padding:8px 10px;border-radius:6px;font-variant-numeric:tabular-nums;font-size:11px;margin:8px 0;overflow-x:auto"><code>./users list                                    # lista
+./users add nowy "haslo" --role worker          # dodaj (rola: admin|manager|viewer|worker|worker_senior|worker_basic)
+./users passwd admin "nowe-haslo"               # zmiana hasła
+./users role nowy manager                        # zmiana roli
+./users delete user2                             # usuń</code></pre>
+        <p style="margin-bottom:8px"><strong>6 ról</strong> — od pełnego dostępu po konto tylko do odczytu:</p>
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <tr style="border-bottom:1px solid var(--border)"><td style="padding:6px 8px;font-weight:700;color:var(--text);white-space:nowrap;vertical-align:top">admin</td><td style="padding:6px 8px;color:var(--text2)">Najwyższy poziom — pełny dostęp do wszystkiego, w tym Dziennik i zarządzanie kontami</td></tr>
+          <tr style="border-bottom:1px solid var(--border)"><td style="padding:6px 8px;font-weight:700;color:var(--text);white-space:nowrap;vertical-align:top">manager</td><td style="padding:6px 8px;color:var(--text2)">Operacyjnie jak admin — edytuje i kasuje wszystko + widzi Dziennik</td></tr>
+          <tr style="border-bottom:1px solid var(--border)"><td style="padding:6px 8px;font-weight:700;color:var(--text);white-space:nowrap;vertical-align:top">viewer</td><td style="padding:6px 8px;color:var(--text2)">Tylko do odczytu — widzi wszystko (z Dziennikiem), niczego nie zmienia</td></tr>
+          <tr style="border-bottom:1px solid var(--border)"><td style="padding:6px 8px;font-weight:700;color:var(--text);white-space:nowrap;vertical-align:top">worker</td><td style="padding:6px 8px;color:var(--text2)">Noclegi + media/faktury. Zmiany max <strong>7 dni wstecz</strong>, bez kasowania.</td></tr>
+          <tr style="border-bottom:1px solid var(--border)"><td style="padding:6px 8px;font-weight:700;color:var(--text);white-space:nowrap;vertical-align:top">worker_senior</td><td style="padding:6px 8px;color:var(--text2)">Jak worker, ale <strong>bez limitu 7 dni</strong> — dowolna data wstecz</td></tr>
+          <tr><td style="padding:6px 8px;font-weight:700;color:var(--text);white-space:nowrap;vertical-align:top">worker_basic</td><td style="padding:6px 8px;color:var(--text2)">Noclegi <strong>bez mediów i faktur</strong> (ukryte). Zmiany max 7 dni wstecz.</td></tr>
+        </table>
+      `)}
+      ${section(ICONS.clock(16), "Dziennik zdarzeń (audit log)", `
+        <p>Zakładka <strong>Dziennik</strong> rejestruje aktywność: kto się zalogował, kiedy i co zmienił (utworzenie / edycja / kasowanie rezerwacji, media, konta).</p>
+        <ul style="margin:8px 0 0;padding-left:20px">
+          <li>Zapis <strong>append-only</strong> — wpisów nie da się edytować ani skasować z poziomu aplikacji (czas w strefie Europe/Warsaw)</li>
+          <li>Dostęp: <strong>admin</strong>, <strong>manager</strong>, <strong>viewer</strong>. Konta worker / worker_basic Dziennika nie widzą.</li>
+        </ul>
       `)}
       ${section(ICONS.rotateCw(16), "Backupy", `
         <p>Trzy poziomy backupów:</p>
@@ -9740,7 +9757,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.86 · ${new Date().getFullYear()}
+          HospesAI · v3.87 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
