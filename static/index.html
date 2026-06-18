@@ -1553,6 +1553,7 @@ let state = {
   vatRate: "8",           // v3.37: stawka VAT — "8" (krótkoterm) lub "23" (długoterm)
   isPermanent: false,     // stały najemca (rezerwacja indywidualna open-ended)
   permanentMonthlyRate: "", // stawka miesięczna stałego najemcy (pusty = liczyć za dobę z cennika)
+  wholeRoom: false,       // v3.86 — 1 najemca bierze cały pokój (blokuje wszystkie łóżka)
   printReport: null,      // { from, to } — gdy ustawione, render pokazuje modal wyboru zakresu
   printReportHtml: null,  // gdy ustawione, render pokazuje gotowy raport do druku (window.print())
   imageCropModal: null,   // { locId, dataUrl, file } — preview zdjęcia przed uploadem (admin only)
@@ -1770,6 +1771,9 @@ function getEffectiveTo(b) {
 //   a jeśli przypisań brak — 1 łóżko (taki był domyślny scenariusz wcześniej).
 //   Dla indywidualnej — liczba gości.
 function bedsUsedByBooking(b) {
+  // v3.86 — "cały pokój": 1 najemca bierze wszystkie łóżka → blokuje pełną pojemność
+  // (niezależnie od liczby gości). Dynamicznie z capacity, więc odporne na zmianę pokoju.
+  if (b.wholeRoom && b.bookingType !== "company") return Math.max(1, getRoomCapacity(b.roomId));
   if (typeof b.bedsUsed === "number" && b.bedsUsed > 0) return b.bedsUsed;
   if (b.bookingType === "company") {
     const assigned = (b.guests || []).filter(g => g.assignedRoom === b.roomId).length;
@@ -6331,6 +6335,15 @@ function buildBookingForm(loc) {
       <div class="buffer-hint" id="bufferHint">Pokój zablokowany przez dodatkowe ${state.bufferDays||0} dni po wyjeździe.</div>
     </div>
 
+    ${!isCompany && room ? `
+    <div style="margin-bottom:14px;padding:10px 12px;background:${state.wholeRoom?"var(--blue-light)":"var(--surface2)"};border:1px solid ${state.wholeRoom?"var(--blue-mid)":"var(--border)"};border-radius:var(--radius)">
+      <label class="checkbox-row" style="margin:0;cursor:pointer">
+        <input type="checkbox" id="wholeRoomInput" ${state.wholeRoom?"checked":""} />
+        <span style="display:inline-flex;align-items:center;gap:5px;vertical-align:-2px">${ICONS.bed(14)}</span> Wynajem całego pokoju — 1 najemca bierze wszystkie łóżka (${room.capacity} ${nl(room.capacity)})
+      </label>
+      ${state.wholeRoom ? `<div style="font-size:10px;color:var(--blue);font-style:italic;margin-top:6px">Pokój zablokowany w całości (wszystkie ${room.capacity} łóżka zajęte), nawet przy mniejszej liczbie gości. Cena = bazowa za pokój (lub „cena finalna" niżej). Nie trzeba dodawać gości na każde łóżko.</div>` : ""}
+    </div>` : ""}
+
     ${!isCompany ? `
     <div style="margin-bottom:14px;padding:10px 12px;background:${state.isPermanent?"var(--green-light)":"var(--surface2)"};border:1px solid ${state.isPermanent?"var(--green-mid)":"var(--border)"};border-radius:var(--radius)">
       <label class="checkbox-row" style="margin:0;cursor:pointer">
@@ -7345,6 +7358,19 @@ function buildEditModal() {
               </div>
             </div>`;
           })()}
+
+          ${b.bookingType !== "company" ? (() => {
+            const wr = em.wholeRoom ?? b.wholeRoom;
+            const cap = getRoomCapacity(b.roomId);
+            return `
+          <div class="edit-field" style="padding:10px 12px;background:${wr?"var(--blue-light)":"var(--surface2)"};border:1px solid ${wr?"var(--blue-mid)":"var(--border)"};border-radius:var(--radius)">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;font-size:13px;font-weight:500;letter-spacing:normal;color:var(--text)">
+              <input type="checkbox" id="editWholeRoom" ${wr?"checked":""} style="width:auto;flex-shrink:0;margin:0;accent-color:var(--blue)" />
+              <span style="display:inline-flex;align-items:center;gap:5px">${ICONS.bed(14)} Wynajem całego pokoju (wszystkie ${cap} ${nl(cap)})</span>
+            </label>
+            ${wr ? `<div style="font-size:10px;color:var(--blue);font-style:italic;margin-top:6px">Pokój zablokowany w całości — wszystkie ${cap} łóżka zajęte, niezależnie od liczby gości.</div>` : ""}
+          </div>`;
+          })() : ""}
 
           ${b.bookingType !== "company" ? `
           <div class="edit-field" style="padding:10px 12px;background:${(em.isPermanent ?? b.isPermanent)?"var(--green-light)":"var(--surface2)"};border:1px solid ${(em.isPermanent ?? b.isPermanent)?"var(--green-mid)":"var(--border)"};border-radius:var(--radius)">
@@ -8609,6 +8635,9 @@ function attachEvents() {
       state.permanentMonthlyRate = e.target.value;
     });
     document.getElementById("permanentMonthlyRateInput")?.addEventListener("change", () => render());
+    document.getElementById("wholeRoomInput")?.addEventListener("change", e => {   // v3.86 — cały pokój
+      state.wholeRoom = e.target.checked; render();
+    });
 
     // Per-pracownik tryb rozliczenia
     document.querySelectorAll("[data-guest-mode]").forEach(r => {
@@ -8781,6 +8810,9 @@ function attachEditEvents() {
       state.editModal.customPrice = "";   // v3.85 — stały najemca nie używa "ceny finalnej"
     }
     render();
+  });
+  document.getElementById("editWholeRoom")?.addEventListener("change", e => {   // v3.86 — cały pokój
+    state.editModal.wholeRoom = e.target.checked; render();
   });
   document.getElementById("editPermanentEnd")?.addEventListener("change", e => {
     state.editModal.permanentEnd = e.target.value || null;
@@ -8989,6 +9021,10 @@ function attachEditEvents() {
       if (!isNaN(n) && n >= 0) b.customPrice = n;
       else delete b.customPrice;
     }
+    if (em.wholeRoom !== undefined) {   // v3.86 — cały pokój
+      if (em.wholeRoom) { b.wholeRoom = true; b.bedsUsed = Math.max(1, getRoomCapacity(b.roomId)); }
+      else { delete b.wholeRoom; b.bedsUsed = Math.max(1, (b.guests||[]).length); }
+    }
     if (em.vatRate !== undefined) b.vatRate = em.vatRate;  // v3.37 VAT save
     state.editModal = null; state.actualCalMonth = null;
     showToast("✅ Rezerwacja zaktualizowana");
@@ -9069,6 +9105,7 @@ function openModal(locId) {
   state.vatRate = "8";
   state.isPermanent = false;
   state.permanentMonthlyRate = "";
+  state.wholeRoom = false;
   state.calEndWasPlaceholder = false;
   render();
 }
@@ -9088,6 +9125,7 @@ function closeModal() {
   state.availResult = null;
   state.isPermanent = false;
   state.permanentMonthlyRate = "";
+  state.wholeRoom = false;
   state.calEndWasPlaceholder = false;
   state.bookingType = null;
   state.companyName = "";
@@ -9178,7 +9216,7 @@ function confirmBooking() {
         ? assigned
         : Math.max(1, Math.ceil(guestsCopy.length / Math.max(1, selectedRooms.length)));
     } else {
-      bedsUsed = Math.max(1, guestsCopy.length);
+      bedsUsed = state.wholeRoom ? Math.max(1, getRoomCapacity(roomId)) : Math.max(1, guestsCopy.length);   // v3.86 — cały pokój
     }
     const inRoomGuests = isCompany ? guestsCopy.filter(g => g.assignedRoom === roomId) : guestsCopy;
     const billingMode = (isCompany && inRoomGuests.length > 0 && inRoomGuests.every(g => g.billingMode === "employee"))
@@ -9199,6 +9237,7 @@ function confirmBooking() {
       bedsUsed,
       billingMode,
       ...(isPerm ? { isPermanent: true, permanentStart: state.calStart, permanentEnd: null } : {}),
+      ...(state.wholeRoom && !isCompany ? { wholeRoom: true } : {}),
       ...(hasPermMonthly ? { permanentMonthlyRate: permanentMonthly } : {}),
       ...(hasCustom ? { customPrice: customPriceForRoom(roomId) } : {}),
       vatRate: state.vatRate || "8",   // v3.37 — stawka VAT (8/23%)
@@ -9701,7 +9740,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.85 · ${new Date().getFullYear()}
+          HospesAI · v3.86 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
@@ -9798,7 +9837,7 @@ async function confirmBookingAPI() {
         ? assigned
         : Math.max(1, Math.ceil(guestsCopy.length / Math.max(1, selectedRooms.length)));
     } else {
-      bedsUsed = Math.max(1, guestsCopy.length);
+      bedsUsed = state.wholeRoom ? Math.max(1, getRoomCapacity(roomId)) : Math.max(1, guestsCopy.length);   // v3.86 — cały pokój
     }
     const inRoomGuests = isCompany ? guestsCopy.filter(g => g.assignedRoom === roomId) : guestsCopy;
     const billingMode = (isCompany && inRoomGuests.length > 0 && inRoomGuests.every(g => g.billingMode === "employee"))
@@ -9816,6 +9855,7 @@ async function confirmBookingAPI() {
       bedsUsed,
       billingMode,
       ...(isPerm ? { isPermanent: true, permanentStart: state.calStart, permanentEnd: null } : {}),
+      ...(state.wholeRoom && !isCompany ? { wholeRoom: true } : {}),
       ...(hasPermMonthly ? { permanentMonthlyRate: permanentMonthly } : {}),
       ...(hasCustom ? { customPrice: customPriceForRoom(roomId) } : {}),
       vatRate: state.vatRate || "8",   // v3.37 — stawka VAT
@@ -9920,6 +9960,10 @@ async function saveEditAPI() {
     const n = em.customPrice === "" ? NaN : parseFloat(em.customPrice);
     if (!isNaN(n) && n >= 0) updated.customPrice = n;
     else delete updated.customPrice;
+  }
+  if (em.wholeRoom !== undefined) {   // v3.86 — cały pokój
+    if (em.wholeRoom) { updated.wholeRoom = true; updated.bedsUsed = Math.max(1, getRoomCapacity(updated.roomId)); }
+    else { delete updated.wholeRoom; updated.bedsUsed = Math.max(1, (updated.guests||[]).length); }
   }
   if (em.vatRate !== undefined) updated.vatRate = em.vatRate;  // v3.37 VAT
   // PaidMonths dla stałego najemcy indywidualnego
