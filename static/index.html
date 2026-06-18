@@ -7066,7 +7066,7 @@ function buildEditModal() {
                         const info = prorataMonthInfo(ym, previewPStart, previewPEnd);
                         const subLabel = !hasMonthly
                           ? (ownFull ? "✓" : (collected > 0.01 ? `zł${Math.round(collected)}` : (isCovered ? "✓" : "")))
-                          : (ownFull ? `zł${Math.round(cov.due)}`
+                          : (ownFull ? (collected > cov.due + 0.01 ? `zł${Math.round(collected)} ↑` : `zł${Math.round(cov.due)}`)
                             : (collected > 0.01 ? `zł${Math.round(collected)}/${Math.round(cov.due)}`
                               : (overflowCovered ? `0/${Math.round(cov.due)}`
                                 : (info.isPartial ? `${info.daysUsed}/${info.daysInMonth}d · zł${Math.round(cov.due)}` : `zł${Math.round(cov.due)}`))));
@@ -7112,7 +7112,7 @@ function buildEditModal() {
                   </div>
                   <div style="font-size:10px;color:var(--text3);margin-bottom:6px">Etykieta na kafelku = ile wpłynęło ZA dany miesiąc (np. <strong>1000/1500</strong>). <strong>↩</strong> = miesiąc zielony, bo pokryty z nadpłaty innego miesiąca (suma się zgadza, ale za ten miesiąc wpłynęło mniej).</div>` : ""}
                   <div style="margin-top:8px;padding:8px 10px;background:var(--orange-light);border:1px solid var(--orange-border);border-radius:6px">
-                    <div style="font-size:11px;font-weight:600;color:var(--orange);margin-bottom:6px">½ Wpłata częściowa / rata — dowolna kwota (nadpłata pokrywa kolejne miesiące, FIFO od najstarszego)</div>
+                    <div style="font-size:11px;font-weight:600;color:var(--orange);margin-bottom:6px">Wpłata za miesiąc — dowolna kwota: mniej niż stawka = rata, więcej = nadpłata spływa na kolejne niedopłacone miesiące</div>
                     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
                       <select id="partialMonthSel" style="padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);font-size:11px;color:var(--text);font-family:inherit;outline:none">
                         ${displayMonths.map(ym => `<option value="${ym}">${MONTHS[parseInt(ym.slice(5,7))-1].slice(0,3)} ${ym.slice(0,4)}</option>`).join("")}
@@ -9757,7 +9757,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.87 · ${new Date().getFullYear()}
+          HospesAI · v3.88 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
