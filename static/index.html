@@ -1232,6 +1232,14 @@ body {
 .print-report th { background: #f0f0f0; font-weight: 700; }
 .print-report td.num { text-align: right; }
 .print-report .pr-footer { margin-top: 18px; padding-top: 8px; border-top: 1px solid #999; font-size: 10px; color: #666; text-align: center; }
+/* v3.94 — wykresy w druku: dopasowanie + wymuszenie czytelnych kolorów na białym tle (niezależnie od motywu) */
+.print-report .pr-charts { margin-top: 18px; }
+.print-report .pr-chart-block { page-break-inside: avoid; margin: 12px 0 20px; }
+.print-report .pr-chart-block h3 { font-size: 13px; font-weight: 700; margin: 10px 0 4px; color: #222; }
+.print-report .pr-charts svg { max-width: 100%; height: auto; }
+.print-report .pr-charts svg text { fill: #333; }
+.print-report .pr-charts svg line { stroke: #ccc; }
+.print-report .pr-charts table { color: #222; }
 .print-actions { position: fixed; top: 12px; right: 12px; display: flex; gap: 8px; z-index: 1001; }
 /* Kolory hardkodowane (niezależne od dark/light mode) bo print-report jest zawsze
    białą stroną. Wcześniej button "Zamknij" miał var(--surface) bg = czarny w dark
@@ -7769,7 +7777,12 @@ function attachEvents() {
       if (state.printReport !== prRef) return;   // v3.76 — user zamknął/przeładował modal w trakcie fetcha
     }
     // Date "to" inclusive od user perspective → exclusive end = to + 1 day (v3.76: parseDate — standard projektu, nie new Date(string))
-    const html = generatePrintReport(from, toStr(addDays(parseDate(to), 1)), locId, costsData);
+    // v3.94 — config wykresów z modala (checkboxy + zakres)
+    const _chartTypes = Array.from(document.querySelectorAll(".pr-chart-cb:checked")).map(c => c.value);
+    const _chartScope = document.querySelector('input[name="prChartScope"]:checked')?.value || "all";
+    const _chartScopeLoc = document.getElementById("prChartScopeLoc")?.value || "all";
+    const chartCfg = _chartTypes.length ? { types: _chartTypes, scope: _chartScope, scopeLoc: _chartScopeLoc } : null;
+    const html = generatePrintReport(from, toStr(addDays(parseDate(to), 1)), locId, costsData, chartCfg);
     if (!html) {
       if (errEl) { errEl.textContent = "Brak rezerwacji w wybranym zakresie / lokalizacji."; errEl.style.display = "block"; }
       return;
@@ -9484,6 +9497,26 @@ function buildPrintReportModal() {
               ${DATA.locations.map(l => `<option value="${l.id}" ${String(defLoc)===String(l.id)?"selected":""}>${esc(l.name)}${l.city?` — ${esc(l.city)}`:""}</option>`).join("")}
             </select>
           </div>
+          <div class="edit-field" style="margin-bottom:12px">
+            <label>Wykresy do raportu <span style="font-weight:400;color:var(--text3);text-transform:none">(opcjonalnie — domyślnie bez wykresów)</span></label>
+            <div style="display:flex;flex-direction:column;gap:5px;margin-top:4px">
+              <label class="checkbox-row" style="font-size:13px;margin:0;cursor:pointer"><input type="checkbox" class="pr-chart-cb" value="perbuilding" /> Przychód per budynek (słupki)</label>
+              <label class="checkbox-row" style="font-size:13px;margin:0;cursor:pointer"><input type="checkbox" class="pr-chart-cb" value="trend" /> Trend przychodu (miesięczny)</label>
+              <label class="checkbox-row" style="font-size:13px;margin:0;cursor:pointer"><input type="checkbox" class="pr-chart-cb" value="occupancy" /> Obłożenie</label>
+              <label class="checkbox-row" style="font-size:13px;margin:0;cursor:pointer"><input type="checkbox" class="pr-chart-cb" value="pie" /> Podział przychodu (kołowy)</label>
+              <label class="checkbox-row" style="font-size:13px;margin:0;cursor:pointer"><input type="checkbox" class="pr-chart-cb" value="earnings" /> Rentowność łóżek (tabela)</label>
+            </div>
+            <div style="font-size:11px;color:var(--text2);margin:10px 0 4px">Zakres (dla trendu/obłożenia/podziału/rentowności):</div>
+            <div style="display:flex;flex-direction:column;gap:4px">
+              <label class="checkbox-row" style="font-size:13px;margin:0;cursor:pointer"><input type="radio" name="prChartScope" value="all" checked /> Zbiorczo — wszystkie budynki razem</label>
+              <label class="checkbox-row" style="font-size:13px;margin:0;cursor:pointer"><input type="radio" name="prChartScope" value="each" /> Per budynek — osobno dla każdego</label>
+              <label class="checkbox-row" style="font-size:13px;margin:0;cursor:pointer"><input type="radio" name="prChartScope" value="single" /> Jedna lokalizacja:
+                <select id="prChartScopeLoc" style="margin-left:6px;padding:2px 6px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:12px;color:var(--text);font-family:inherit">
+                  ${DATA.locations.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join("")}
+                </select>
+              </label>
+            </div>
+          </div>
           <div id="printReportError" style="display:none;font-size:12px;color:var(--red);padding:8px 10px;background:var(--red-light);border-radius:var(--radius);margin-bottom:10px"></div>
         </div>
         <div class="edit-footer">
@@ -9494,7 +9527,89 @@ function buildPrintReportModal() {
     </div>`;
 }
 
-function generatePrintReport(fromDate, toDate, locId = "all", costsData = null) {
+// v3.94 — wykresy w raporcie drukowanym. Słupki: przychód brutto per budynek w okresie.
+function revenuePerBuildingChart(from, toExcl) {
+  const pr = { from, to: toExcl };
+  const data = DATA.locations.map(loc => {
+    let rev = 0;
+    savedBookings.forEach(b => {
+      if (b.locId !== loc.id || b.outOfService) return;
+      const room = loc.rooms.find(r => r.id === b.roomId);
+      rev += calcBookingTotal(b, room, getActualNights(b), pr);
+    });
+    return { name: loc.name, rev: Math.round(rev) };
+  }).filter(d => d.rev > 0).sort((a, b) => b.rev - a.rev);
+  if (!data.length) return `<div style="font-size:12px;color:var(--text3)">Brak przychodu w okresie.</div>`;
+  const maxV = Math.max(...data.map(d => d.rev), 1);
+  const chartH = 220;
+  const barW = Math.min(80, Math.max(30, Math.floor(560 / data.length) - 12));
+  const totalW = data.length * (barW + 16) + 50;
+  const bars = data.map((d, i) => {
+    const barH = Math.max(2, Math.round((d.rev / maxV) * chartH));
+    const x = 40 + i * (barW + 16), y = chartH - barH + 20;
+    return `<rect x="${x}" y="${y}" width="${barW}" height="${barH}" fill="var(--blue)" rx="3"/>
+      <text x="${x + barW/2}" y="${y - 4}" text-anchor="middle" font-size="10" fill="var(--text)">zł${d.rev.toLocaleString()}</text>
+      <text x="${x + barW/2}" y="${chartH + 36}" text-anchor="middle" font-size="9" fill="var(--text2)" transform="rotate(-20,${x + barW/2},${chartH + 36})">${esc(d.name.slice(0, 18))}</text>`;
+  }).join("");
+  return `<svg width="${Math.max(totalW, 280)}" height="${chartH + 58}" style="display:block;max-width:100%;height:auto">
+    ${bars}<line x1="40" y1="${chartH + 20}" x2="${Math.max(totalW, 280)}" y2="${chartH + 20}" stroke="var(--border2)"/></svg>`;
+}
+
+// v3.94 — kompaktowa tabela rentowności łóżek do druku (per pokój, w okresie). locId="all" lub id.
+function printEarningsTable(from, toExcl, locId) {
+  const locs = DATA.locations.filter(l => locId === "all" || String(l.id) === String(locId));
+  const pr = { from, to: toExcl };
+  return locs.map(loc => {
+    const rows = loc.rooms.map(room => {
+      let rev = 0;
+      savedBookings.forEach(b => { if (b.roomId === room.id && !b.outOfService) rev += calcBookingTotal(b, room, getActualNights(b), pr); });
+      const beds = room.capacity || 1;
+      const name = /^\d+$/.test(room.name || "") ? `Pokój ${room.name}` : room.name;
+      return { name, beds, rev: Math.round(rev), perBed: Math.round(rev / beds) };
+    }).filter(r => r.rev > 0).sort((a, b) => b.perBed - a.perBed);
+    if (!rows.length) return "";
+    const tot = rows.reduce((s, r) => s + r.rev, 0);
+    return `<div style="margin-bottom:10px">
+      <div style="font-weight:700;font-size:13px;margin-bottom:4px">${esc(loc.name)} — przychód zł${tot.toLocaleString()}</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="border-bottom:1px solid var(--border2);text-align:left"><th style="padding:3px 4px">Pokój</th><th style="padding:3px 4px;text-align:center">Łóżek</th><th style="padding:3px 4px;text-align:right">Przychód</th><th style="padding:3px 4px;text-align:right">Na łóżko</th></tr></thead>
+        <tbody>${rows.map(r => `<tr style="border-bottom:1px solid var(--border)"><td style="padding:3px 4px">${esc(r.name)}</td><td style="padding:3px 4px;text-align:center">${r.beds}</td><td style="padding:3px 4px;text-align:right">zł${r.rev.toLocaleString()}</td><td style="padding:3px 4px;text-align:right;font-weight:700">zł${r.perBed.toLocaleString()}</td></tr>`).join("")}</tbody>
+      </table></div>`;
+  }).join("");
+}
+
+// v3.94 — orkiestrator wykresów do druku. cfg={types:[],scope:"all"|"each"|"single",scopeLoc}. toIncl=ostatni dzień (inclusive).
+function printReportCharts(cfg, from, toIncl) {
+  if (!cfg || !Array.isArray(cfg.types) || !cfg.types.length) return "";
+  const toExcl = toStr(addDays(parseDate(toIncl), 1));
+  const TL = { perbuilding:"Przychód per budynek", trend:"Trend przychodu", occupancy:"Obłożenie", pie:"Podział przychodu", earnings:"Rentowność łóżek" };
+  let html = `<div class="pr-charts"><h2>Wykresy</h2>`;
+  if (cfg.types.includes("perbuilding")) {
+    html += `<div class="pr-chart-block"><h3>${TL.perbuilding}</h3>${revenuePerBuildingChart(from, toExcl)}</div>`;
+  }
+  const scoped = cfg.types.filter(t => ["trend","occupancy","pie","earnings"].includes(t));
+  if (scoped.length) {
+    let targets;
+    if (cfg.scope === "single" && cfg.scopeLoc && cfg.scopeLoc !== "all") {
+      const l = DATA.locations.find(x => String(x.id) === String(cfg.scopeLoc));
+      targets = l ? [{ id: String(l.id), name: l.name }] : [];
+    } else if (cfg.scope === "each") {
+      targets = DATA.locations.map(l => ({ id: String(l.id), name: l.name }));
+    } else {
+      targets = [{ id: "all", name: "Wszystkie budynki" }];
+    }
+    targets.forEach(t => {
+      scoped.forEach(type => {
+        html += `<div class="pr-chart-block"><h3>${esc(t.name)} — ${TL[type]}</h3>`;
+        html += (type === "earnings") ? printEarningsTable(from, toExcl, t.id) : buildChartCanvas(t.id, type === "trend" ? "line" : type, from, toIncl);
+        html += `</div>`;
+      });
+    });
+  }
+  return html + `</div>`;
+}
+
+function generatePrintReport(fromDate, toDate, locId = "all", costsData = null, chartCfg = null) {
   // Filtruj rezerwacje aktywne w zakresie
   const overlaps = (b) => {
     if (b.isPermanent || b.guests?.some(g => g.isPermanent)) {
@@ -9747,6 +9862,7 @@ function generatePrintReport(fromDate, toDate, locId = "all", costsData = null) 
       </table>
 ${mediaSectionHtml}
 ${purchSectionHtml}
+${chartCfg ? printReportCharts(chartCfg, fromDate, toStr(addDays(parseDate(toDate), -1))) : ""}
       <div class="pr-footer">
         HospesAI · raport wygenerowany automatycznie · stan na ${generated}
       </div>
@@ -9889,7 +10005,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.93 · ${new Date().getFullYear()}
+          HospesAI · v3.94 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
