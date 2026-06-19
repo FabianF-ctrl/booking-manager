@@ -577,6 +577,8 @@ body {
 .pm-cash { background: var(--green-light); color: var(--green); }
 .pm-transfer { background: var(--orange-light); color: var(--orange); }
 .pm-pending { background: var(--surface3); color: var(--text2); }
+.pm-blik { background: var(--violet-light); color: var(--violet); }
+.pm-mixed { background: var(--surface3); color: var(--text); font-weight: 700; }
 
 .pay-strip { padding: 8px 16px; background: var(--surface2); font-size: 12px; display: flex; gap: 20px; flex-wrap: wrap; border-top: 1px solid var(--border); }
 .pay-strip-item { display: flex; flex-direction: column; gap: 1px; }
@@ -2140,9 +2142,9 @@ const MEDIA_VAT_DEFAULTS = { electricity: 23, gas: 23, water: 8, other: 23 };
 
 // v3.62 — formy płatności (centralnie, żeby etykiety/ikony/klasy były spójne wszędzie).
 // invoice_transfer / invoice_cash = faktura opłacona przelewem / gotówką (dodane na życzenie).
-const PM_LABELS = { invoice:"Faktura", cash:"Gotówka", transfer:"Przelew", invoice_transfer:"Faktura przelew", invoice_cash:"Faktura gotówka" };
-const PM_CLS = { invoice:"pm-invoice", cash:"pm-cash", transfer:"pm-transfer", invoice_transfer:"pm-invoice", invoice_cash:"pm-invoice" };
-function pmIconMap(sz) { return { invoice:ICONS.receipt(sz), cash:ICONS.banknote(sz), transfer:ICONS.landmark(sz), invoice_transfer:ICONS.receipt(sz), invoice_cash:ICONS.receipt(sz) }; }
+const PM_LABELS = { invoice:"Faktura", cash:"Gotówka", transfer:"Przelew", blik:"BLIK", invoice_transfer:"Faktura przelew", invoice_cash:"Faktura gotówka", mixed:"Mieszana" };
+const PM_CLS = { invoice:"pm-invoice", cash:"pm-cash", transfer:"pm-transfer", blik:"pm-blik", invoice_transfer:"pm-invoice", invoice_cash:"pm-invoice", mixed:"pm-mixed" };
+function pmIconMap(sz) { return { invoice:ICONS.receipt(sz), cash:ICONS.banknote(sz), transfer:ICONS.landmark(sz), blik:ICONS.banknote(sz), invoice_transfer:ICONS.receipt(sz), invoice_cash:ICONS.receipt(sz), mixed:ICONS.banknote(sz) }; }
 
 // v3.65 — pokój wyłączony z użytku (remont/budowa). Przechowywany jak booking z outOfService:true,
 // ale 0 przychodu, osobny kolor, blokuje pokój, nie liczy się w statystykach rezerwacji.
@@ -4199,7 +4201,7 @@ function buildReportRow(b, loc, periodRange) {
         </div>
         <div>
           <span class="pm-badge ${pmCls[b.payment?.method]||"pm-pending"}">${pmLabels[b.payment?.method]||"—"}</span>
-          <div class="report-sub">${timLabels[b.payment?.timing]||"—"}</div>
+          <div class="report-sub">${timLabels[b.payment?.timing]||"—"}${(b.payment?.method==="mixed" && Array.isArray(b.payment?.splits) && b.payment.splits.length) ? ` · ${b.payment.splits.map(s=>`${Math.round(s.amount)} ${pmLabels[s.method]||s.method}`).join(" + ")}` : ""}</div>
         </div>
         <div>
           <div class="report-amount" title="Przychód brutto (czynsz za okres) — NIE maleje po wpłacie">zł${total.toLocaleString()}</div>
@@ -6405,6 +6407,8 @@ function buildBookingForm(loc) {
         <button class="pm-btn ${p.method==="transfer"?"sel":""}" data-method="transfer"><span class="pmi">${ICONS.landmark(14)}</span>Przelew</button>
         <button class="pm-btn ${p.method==="invoice_transfer"?"sel":""}" data-method="invoice_transfer"><span class="pmi">${ICONS.receipt(14)}</span>Faktura przelew</button>
         <button class="pm-btn ${p.method==="invoice_cash"?"sel":""}" data-method="invoice_cash"><span class="pmi">${ICONS.receipt(14)}</span>Faktura gotówka</button>
+        <button class="pm-btn ${p.method==="blik"?"sel":""}" data-method="blik"><span class="pmi">${ICONS.banknote(14)}</span>BLIK</button>
+        <button class="pm-btn ${p.method==="mixed"?"sel":""}" data-method="mixed"><span class="pmi">${ICONS.banknote(14)}</span>Mieszana</button>
       </div>
       ${p.method ? `
         <div style="font-size:10px;color:var(--text2);margin-bottom:6px;">Termin płatności</div>
@@ -7486,7 +7490,7 @@ function buildEditModal() {
             <label>Metoda płatności</label>
             <select id="editPayMethod">
               <option value="">— wybierz —</option>
-              ${["invoice","cash","transfer","invoice_transfer","invoice_cash"].map(mv => `<option value="${mv}" ${(em.payMethod||b.payment?.method)===mv?"selected":""}>${PM_LABELS[mv]}</option>`).join("")}
+              ${["invoice","cash","transfer","blik","invoice_transfer","invoice_cash","mixed"].map(mv => `<option value="${mv}" ${(em.payMethod||b.payment?.method)===mv?"selected":""}>${PM_LABELS[mv]}</option>`).join("")}
             </select>
           </div>
           <div class="edit-field">
@@ -7497,10 +7501,40 @@ function buildEditModal() {
               <option value="postpaid" ${(em.payTiming||b.payment?.timing)==="postpaid"?"selected":""}>Po pobycie</option>
             </select>
           </div>
+          ${(() => {
+            const _method = em.payMethod !== undefined ? em.payMethod : b.payment?.method;
+            if (_method !== "mixed") {
+              return `
           <div class="edit-field">
             <label>Kwota wpłacona (zł)</label>
             <input type="number" id="editAmountPaid" min="0" value="${em.amountPaid!==undefined?em.amountPaid:(b.payment?.amountPaid||"")}" placeholder="0" />
-          </div>
+          </div>`;
+            }
+            // v3.91 — płatność mieszana: rozbicie kwoty na metody. Suma = kwota wpłacona.
+            const splits = Array.isArray(em.paymentSplits) ? em.paymentSplits
+              : ((Array.isArray(b.payment?.splits) && b.payment.splits.length) ? b.payment.splits.map(s => ({...s}))
+                : [{ method: "blik", amount: "" }, { method: "cash", amount: "" }]);
+            const sum = splits.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+            const _opts = ["blik","cash","transfer","invoice","invoice_transfer","invoice_cash"];
+            return `
+          <div class="edit-field">
+            <label>Płatność mieszana — rozbicie kwoty</label>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              ${splits.map((r, i) => `
+                <div style="display:flex;gap:6px;align-items:center">
+                  <select class="split-method" data-split-i="${i}" style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:12px;color:var(--text);font-family:inherit;outline:none">
+                    ${_opts.map(mv => `<option value="${mv}" ${r.method===mv?"selected":""}>${PM_LABELS[mv]}</option>`).join("")}
+                  </select>
+                  <input type="number" class="split-amount" data-split-i="${i}" min="0" step="0.01" value="${esc(String(r.amount ?? ""))}" placeholder="kwota" style="width:100px;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:12px;color:var(--text);font-variant-numeric:tabular-nums;outline:none" />
+                  ${splits.length > 1 ? `<button type="button" class="split-remove" data-split-i="${i}" title="Usuń" style="padding:5px 9px;border:1px solid var(--red);background:none;color:var(--red);border-radius:var(--radius);cursor:pointer;font-size:11px;line-height:1">✕</button>` : `<span style="display:inline-block;width:29px"></span>`}
+                </div>`).join("")}
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;flex-wrap:wrap;gap:6px">
+              <button type="button" id="splitAddBtn" class="cal-nav-btn" style="font-size:11px;padding:5px 10px">+ dodaj metodę</button>
+              <span style="font-size:12px;color:var(--text2)">Wpłacono łącznie: <strong style="color:var(--green);font-variant-numeric:tabular-nums">zł${sum.toLocaleString()}</strong></span>
+            </div>
+          </div>`;
+          })()}
 
           <div class="divider"></div>
           <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;display:flex;align-items:center;gap:6px">${ICONS.stickyNote(13)} Notatki rezerwacji</div>
@@ -8795,7 +8829,39 @@ function attachEditEvents() {
   });
 
   // Select fields — no re-render needed
-  document.getElementById("editPayMethod")?.addEventListener("change", e => { state.editModal.payMethod=e.target.value; render(); });
+  document.getElementById("editPayMethod")?.addEventListener("change", e => {
+    const em = state.editModal;
+    em.payMethod = e.target.value;
+    if (e.target.value === "mixed" && em.paymentSplits === undefined) {   // v3.91 — init rozbicia
+      const b = savedBookings.find(x => x.id === em.bookingId);
+      em.paymentSplits = (Array.isArray(b?.payment?.splits) && b.payment.splits.length)
+        ? b.payment.splits.map(s => ({...s}))
+        : [{ method: "blik", amount: "" }, { method: "cash", amount: "" }];
+    }
+    render();
+  });
+  // v3.91 — płatność mieszana: edytor rozbicia (źródło prawdy = em.paymentSplits)
+  const _ensureSplits = () => {
+    const em = state.editModal;
+    if (em.paymentSplits === undefined) {
+      const b = savedBookings.find(x => x.id === em.bookingId);
+      em.paymentSplits = (Array.isArray(b?.payment?.splits) && b.payment.splits.length)
+        ? b.payment.splits.map(s => ({...s}))
+        : [{ method: "blik", amount: "" }, { method: "cash", amount: "" }];
+    }
+    return em.paymentSplits;
+  };
+  document.querySelectorAll(".split-method[data-split-i]").forEach(sel => {
+    sel.addEventListener("change", () => { const sp = _ensureSplits(); const i = +sel.dataset.splitI; if (sp[i]) sp[i].method = sel.value; });
+  });
+  document.querySelectorAll(".split-amount[data-split-i]").forEach(inp => {
+    inp.addEventListener("input", () => { const sp = _ensureSplits(); const i = +inp.dataset.splitI; if (sp[i]) sp[i].amount = inp.value; });
+    inp.addEventListener("blur", () => render());
+  });
+  document.querySelectorAll(".split-remove[data-split-i]").forEach(btn => {
+    btn.addEventListener("click", () => { const sp = _ensureSplits(); sp.splice(+btn.dataset.splitI, 1); render(); });
+  });
+  document.getElementById("splitAddBtn")?.addEventListener("click", () => { const sp = _ensureSplits(); sp.push({ method: "transfer", amount: "" }); render(); });
   document.getElementById("editPayTiming")?.addEventListener("change", e => { state.editModal.payTiming=e.target.value; render(); });
 
   // Amount paid — input updates state, blur re-renders (żeby pokazać/ukryć warning bez "skakania" focusa)
@@ -9821,7 +9887,7 @@ function buildLoginScreen() {
           ${state.loginLoading ? `<span class="login-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:loginspin 0.6s linear infinite"></span> Logowanie…` : 'Zaloguj się'}
         </button>
         <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums">
-          HospesAI · v3.90 · ${new Date().getFullYear()}
+          HospesAI · v3.92 · ${new Date().getFullYear()}
         </div>
       </div>
     </div>
@@ -9952,7 +10018,11 @@ async function confirmBookingAPI() {
         savedBookings.push(b);
       }
     } else {
-      const b = await apiPost("/api/bookings", makeObj(state.selectedRoom));
+      // v3.92 — firmówka jednopokojowa: gdy state.selectedRoom puste, weź pokój z selectedRooms
+      // albo z przypisania pracowników (assignedRoom). Naprawia bug roomId=null → Przychód 0.
+      const _roomId = state.selectedRoom
+        || (isCompany ? (selectedRooms[0] || (state.guests.find(g => g.assignedRoom)?.assignedRoom) || null) : state.selectedRoom);
+      const b = await apiPost("/api/bookings", makeObj(_roomId));
       savedBookings.push(b);
     }
     state.step = "success";
@@ -10052,6 +10122,16 @@ async function saveEditAPI() {
   }
   // v3.89 — edytowalna data startu stałego najemcy (cofanie wstecz). updated.from już = em.from (zsynchronizowane w handlerze).
   if (em.permanentStart !== undefined && updated.isPermanent) updated.permanentStart = em.permanentStart;
+  // v3.91 — płatność mieszana: zapisz rozbicie + amountPaid = suma rozbić (matematyka i tak liczy sumę)
+  if (updated.payment && updated.payment.method === "mixed") {
+    const splits = (Array.isArray(em.paymentSplits) ? em.paymentSplits : (b.payment?.splits || []))
+      .map(s => ({ method: s.method, amount: parseFloat(s.amount) || 0 }))
+      .filter(s => s.amount > 0);
+    updated.payment.splits = splits;
+    updated.payment.amountPaid = splits.reduce((a, s) => a + s.amount, 0);
+  } else if (updated.payment && updated.payment.splits) {
+    delete updated.payment.splits;   // metoda zmieniona z mieszanej → usuń rozbicie
+  }
   if (em.vatRate !== undefined) updated.vatRate = em.vatRate;  // v3.37 VAT
   // PaidMonths dla stałego najemcy indywidualnego
   if (em.paidMonths !== undefined) {

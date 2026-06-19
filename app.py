@@ -286,6 +286,12 @@ def create_booking(booking: dict, user=Depends(get_current_user)):
     # v3.89 — stały najemca jest wyjęty spod limitu 7 dni (legalne wsteczne ustalenie daty "od kiedy" mieszka).
     if user["role"] in ("worker", "worker_basic") and not booking.get("isPermanent") and (booking.get("from") or "") < _backdate_limit_iso():
         raise HTTPException(status_code=403, detail=f"Pracownik nie może dodawać rezerwacji starszych niż {EDIT_BACKLIMIT_DAYS} dni wstecz")
+    # v3.92 — firmówka z przypisaniem pracowników ale bez roomId → wywnioskuj pokój z assignedRoom
+    # (naprawia bug roomId=null → calcBookingTotal: if(!room) return 0 → Przychód 0 mimo wpłaty).
+    if booking.get("bookingType") == "company" and not booking.get("roomId"):
+        ar = next((g.get("assignedRoom") for g in (booking.get("guests") or []) if g.get("assignedRoom")), None)
+        if ar:
+            booking["roomId"] = ar
     bookings = load_bookings()
     if not booking.get("id"):
         booking["id"] = f"sb{int(datetime.now().timestamp()*1000)}"
